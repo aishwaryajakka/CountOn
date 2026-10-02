@@ -1,5 +1,6 @@
 """Verify real signatures and claims; auth overrides exist only inside tests."""
 from time import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -36,6 +37,51 @@ def test_valid_signature(verifier):
     verifier, key = verifier
     encoded, claims = token(verifier, key)
     assert str(verifier.verify(encoded).id) == claims['sub']
+
+
+@pytest.fixture
+def fixed_jwt_clock(monkeypatch):
+    timestamp = 2_000_000_000
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.fromtimestamp(timestamp, timezone.utc)
+    monkeypatch.setattr('jwt.api_jwt.datetime', FixedDatetime)
+    return timestamp
+
+
+@pytest.mark.parametrize('algorithm', ['ES256', 'HS256'])
+def test_one_second_issuer_clock_skew(verifier, monkeypatch, fixed_jwt_clock, algorithm):
+    verifier, key = verifier
+    _, claims = token(verifier, key, iat=fixed_jwt_clock+1, nbf=fixed_jwt_clock+1, exp=fixed_jwt_clock+300)
+    if algorithm == 'HS256':
+        key = 'fixture-secret-at-least-32-characters'
+        checked = []
+        def check(*args, **kwargs):
+            checked.append(True)
+            return SimpleNamespace(status_code=200, json=lambda: {'id': claims['sub']})
+        monkeypatch.setattr('app.core.auth.httpx.get', check)
+    encoded = jwt.encode(claims, key, algorithm=algorithm, headers={'kid': 'test-key'})
+    assert str(verifier.verify(encoded).id) == claims['sub']
+    if algorithm == 'HS256':
+        assert checked == [True]
+
+
+@pytest.mark.parametrize('algorithm', ['ES256', 'HS256'])
+@pytest.mark.parametrize('claim,offset', [('iat', 6), ('nbf', 6), ('exp', -6)])
+def test_clock_skew_window_is_bounded(verifier, monkeypatch, fixed_jwt_clock, algorithm, claim, offset):
+    verifier, key = verifier
+    changes = dict(iat=fixed_jwt_clock-1, exp=fixed_jwt_clock+300)
+    changes[claim] = fixed_jwt_clock+offset
+    _, claims = token(verifier, key, **changes)
+    if algorithm == 'HS256':
+        key = 'fixture-secret-at-least-32-characters'
+        def unexpected_auth_call(*args, **kwargs):
+            pytest.fail('Invalid time claims must fail before contacting Auth')
+        monkeypatch.setattr('app.core.auth.httpx.get', unexpected_auth_call)
+    encoded = jwt.encode(claims, key, algorithm=algorithm, headers={'kid': 'test-key'})
+    with pytest.raises(AuthenticationError):
+        verifier.verify(encoded)
 
 
 @pytest.mark.parametrize('changes', [

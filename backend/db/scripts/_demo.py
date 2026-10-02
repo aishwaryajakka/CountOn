@@ -6,6 +6,9 @@ from sqlalchemy import delete,func,select,text
 from sqlalchemy.orm import Session
 
 TAG='counton-demo-v1'
+DEMO_NAME='Ashley Mccormick'
+DEMO_EMAIL='demo@counton.app'
+# Preserve the historical UUID namespace anchor so existing local data keeps its owner.
 LOCAL_DEMO_ID=uuid5(NAMESPACE_URL,'https://counton.example/demo/maya-chen/v1')
 CONNECTIONS=[('google','email','Personal Gmail','personal-gmail',['mail.read']),
     ('google','calendar','Personal Calendar','personal-calendar',['calendar.read']),
@@ -33,10 +36,8 @@ OBSERVATIONS={
 
 
 def configured_owner(settings):
-    from dotenv import dotenv_values
-    from db.scripts._common import BACKEND_ROOT
-    value=os.getenv('COUNTON_DEMO_USER_ID') or dotenv_values(BACKEND_ROOT/'.env.local').get('COUNTON_DEMO_USER_ID')
-    if value:return UUID(value)
+    value=getattr(settings,'counton_demo_user_id',os.getenv('COUNTON_DEMO_USER_ID'))
+    if value:return UUID(str(value))
     if settings.database_target=='supabase':
         print('Set COUNTON_DEMO_USER_ID to an existing, dedicated Supabase Auth user UUID without an unrelated CountOn profile.')
         raise RuntimeError('Dedicated Auth identity required')
@@ -49,21 +50,13 @@ def lock(db,owner):
 
 
 def seed(db,owner):
-    from app.db.models import Profile,Expectation,Evidence,Evaluation,Notification,IntegrationConnection
+    from app.db.models import Expectation,Evidence,Evaluation,Notification,IntegrationConnection
     from app.schemas.expectation import ExpectationCreate
     from app.schemas.evidence import EvidenceCreate
     from app.schemas.integration import IntegrationCreate
     from app.services import expectation_service,evidence_service,evaluation_service,integration_service
-    from app.repositories.audit import record
-    lock(db,owner)
-    profile=db.get(Profile,owner)
-    if profile is not None and profile.demo_tag != TAG:
-        raise RuntimeError('Refusing to alter an unrelated profile')
-    if profile is None:
-        profile=Profile(id=owner,display_name='Maya Chen',timezone='America/Chicago',demo_tag=TAG)
-        db.add(profile);db.flush()  # real auth.users FK is enforced on Supabase
-        record(db,owner,'profile',owner,'profile.created',metadata={'demo':True,'demo_tag':TAG})
-        db.commit()
+    from db.scripts._demo_identity import ensure_demo_profile
+    ensure_demo_profile(db,owner)
     for provider,kind,name,key,scopes in CONNECTIONS:
         items=list(db.scalars(select(IntegrationConnection).where(IntegrationConnection.user_id==owner,
             IntegrationConnection.external_account_id==f'demo:{key}',IntegrationConnection.connection_metadata['demo_tag'].astext==TAG)))

@@ -4,8 +4,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -41,6 +42,15 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_jwks_url: str | None = None
     supabase_publishable_key: str | None = Field(default=None, repr=False)
+    supabase_secret_key: SecretStr | None = Field(default=None, repr=False)
+    counton_demo_user_id: UUID | None = None
+    counton_demo_email: str = "demo@counton.app"
+    counton_demo_password: SecretStr | None = Field(default=None, repr=False)
+
+    @field_validator("counton_demo_user_id", mode="before")
+    @classmethod
+    def empty_demo_uuid(cls, value):
+        return None if value == "" else value
 
     @model_validator(mode="after")
     def validate_selected_database(self) -> "Settings":

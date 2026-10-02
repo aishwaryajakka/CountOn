@@ -1,4 +1,4 @@
-"""Seed/reuse tagged Maya Chen mock data for the selected database."""
+"""Seed/reuse tagged Ashley Mccormick mock data for the selected database."""
 from _common import run_cli
 from _demo import run,seed
 

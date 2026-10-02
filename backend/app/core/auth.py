@@ -15,6 +15,9 @@ from jwt import PyJWKClient
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AuthenticationError
 
+# Supabase-issued tokens can be a second ahead of the local clock. Keep the
+# allowance narrow; signature and all required claim checks still apply.
+JWT_CLOCK_SKEW_SECONDS = 5
 
 @dataclass(frozen=True)
 class AuthenticatedUser:
@@ -42,11 +45,12 @@ class TokenVerifier:
                     raise AuthenticationError()
                 key = self.jwks.get_signing_key_from_jwt(token)
                 claims = jwt.decode(token, key.key, algorithms=[algorithm], audience=self.audience,
-                                    issuer=self.issuer, options=options)
+                                    issuer=self.issuer, options=options, leeway=JWT_CLOCK_SKEW_SECONDS)
             elif algorithm == "HS256" and self.publishable_key:
                 # This preliminary decode checks claims, not trust. Only a
                 # successful Auth-server check below can authenticate this path.
                 claims = jwt.decode(token, algorithms=["HS256"], audience=self.audience, issuer=self.issuer,
+                                    leeway=JWT_CLOCK_SKEW_SECONDS,
                                     options=dict(options, verify_signature=False, verify_exp=True,
                                                  verify_iat=True, verify_nbf=True, verify_aud=True, verify_iss=True))
                 response = httpx.get(self.issuer + "/user", headers={

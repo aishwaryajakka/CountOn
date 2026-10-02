@@ -154,18 +154,47 @@ Audit events retain the existing `resource_id`, with the application alias
 action, request ID and created time. Owner/time indexes support inspection.
 Audit writes are backend-controlled; owner reads are RLS-scoped.
 
+The canonical demo profile is **Ashley Mccormick**, **demo@counton.app**,
+with timezone **America/Chicago**. Configure in ignored backend `.env.local`:
+
+```env
+COUNTON_DEMO_EMAIL=demo@counton.app
+COUNTON_DEMO_USER_ID=
+COUNTON_DEMO_PASSWORD=
+```
+
+Obtain the password through the team's secure shared channel; it has no source
+code default. Never put it in public frontend variables, commands or tracked files.
+
 ```sh
+DATABASE_TARGET=local python db/scripts/setup_demo_user.py
 DATABASE_TARGET=local python db/scripts/seed_demo_data.py
 DATABASE_TARGET=local python db/scripts/clear_demo_data.py
+DATABASE_TARGET=supabase python db/scripts/setup_demo_user.py
+# Save the printed Auth UUID as COUNTON_DEMO_USER_ID in backend/.env.local.
 DATABASE_TARGET=supabase python db/scripts/seed_demo_data.py
 DATABASE_TARGET=supabase python db/scripts/clear_demo_data.py
 ```
 
-The stable tag is `counton-demo-v1`. Local uses a deterministic demo UUID by
-default; configure `COUNTON_DEMO_USER_ID` to override. Supabase requires an
-existing dedicated Auth UUID with no unrelated CountOn profile. Store the UUID
-in backend `.env.local` or the process environment. Demo scripts never create or
-delete Auth users. All six connections are explicitly mocked, without credentials.
+`setup_demo_user.py` runs independently from the dataset. Local uses the unchanged
+stable UUID `741dc8cd-6d44-5e2f-bdc9-ce8b6d3df1e1` unless explicitly overridden;
+it never contacts Auth. Supabase uses backend `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` to [look up users with the paginated Auth Admin API](https://supabase.com/docs/reference/javascript/auth-admin-listusers)
+and [create a confirmed user](https://supabase.com/docs/reference/python/auth-admin-createuser)
+only when missing. No confirmation email is sent. Existing accounts and passwords
+are reused unchanged. A configured UUID must match the email lookup, otherwise
+setup fails without replacing the account. Clear a stale UUID before creating a
+missing account. Setup prints the UUID and readiness, never credentials, and does
+not rewrite environment files. It creates/reuses the profile, updates canonical
+name/timezone, and can adopt an existing profile only after verifying its Auth
+email; unrelated application rows are preserved. Local setup refuses an untagged
+profile belonging to an arbitrary configured UUID.
+
+The stable tag is `counton-demo-v1`. Supabase seed/clear requires the real demo
+Auth UUID in `COUNTON_DEMO_USER_ID`; no SQL is used to fabricate Auth state.
+Demo account and application dataset have separate lifecycles: setup once,
+seed → demo → clear → seed. Cleanup never deletes the Auth account. All six
+connections are explicitly mocked, without OAuth credentials.
 
 An outer database transaction surrounds the services' savepoint commits and an
 advisory transaction lock serializes seeds for the same identity. Matching demo
@@ -210,3 +239,11 @@ seed rollback, owned CRUD, notification policy and source/event idempotency.
 Both targets reused the 6/5/10/5/1 demo counts on repeat seed and were cleared.
 Live integration/notification routes and eight-table RLS checks passed; all
 three temporary Auth users and their application artifacts were removed.
+
+Canonical demo identity verified on 2026-10-02: Ashley Mccormick /
+`demo@counton.app`; local stable and explicitly configured UUIDs passed, real
+Supabase sign-in passed, and repeat seeds preserved 6/5/10/5/1 counts with all
+five expected results. Cleanup removed tagged data and retained the Auth account.
+The supplied credential remains only in ignored backend configuration; repository
+secret scanning passed. The complete backend suite passed **237 tests** with one
+existing Starlette/HTTPX deprecation warning. No frontend or evaluator changes.
