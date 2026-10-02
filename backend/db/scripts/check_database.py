@@ -5,6 +5,8 @@ from _common import run_cli
 
 def main() -> int:
     from sqlalchemy import text
+    from app.core.config import get_settings
+    print(f"Database target: {get_settings().database_target}")
     from app.db.session import engine
 
     try:

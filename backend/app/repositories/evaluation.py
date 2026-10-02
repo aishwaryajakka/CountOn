@@ -17,10 +17,11 @@ def create_evaluation(db: Session, expectation_id: UUID, evaluation_output: Eval
     return evaluation
 
 
-def list_evaluations_for_expectation(db: Session, expectation_id: UUID) -> list[Evaluation]:
+def list_evaluations_for_expectation(db: Session, expectation_id: UUID, limit: int = 100, offset: int = 0) -> list[Evaluation]:
     statement = select(Evaluation).where(Evaluation.expectation_id == expectation_id).order_by(
         Evaluation.created_at.desc(), Evaluation.id.desc(),
     )
+    statement = statement.limit(limit).offset(offset)
     return list(db.scalars(statement))
 
 

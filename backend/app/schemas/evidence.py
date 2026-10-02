@@ -10,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
 class EvidenceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, str_strip_whitespace=True)
 
+    external_event_id: str | None = Field(default=None,min_length=1,max_length=255)
     source: str = Field(min_length=1, max_length=100)
     metric: str | None = Field(default=None, min_length=1, max_length=100)
     value: dict[str, JsonValue]
@@ -24,6 +25,7 @@ class EvidenceResponse(BaseModel):
 
     id: UUID
     expectation_id: UUID
+    external_event_id: str | None
     source: str
     metric: str | None
     value: dict[str, Any]

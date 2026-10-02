@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 class Evaluation(Base):
     __tablename__ = "evaluations"
+    __table_args__ = (UniqueConstraint("id", "expectation_id", name="uq_evaluation_expectation"),)
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     expectation_id: Mapped[UUID] = mapped_column(

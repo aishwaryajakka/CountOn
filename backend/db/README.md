@@ -1,113 +1,212 @@
-# Database developer tools
+# Database workflows
 
-`backend/app/db/` contains application persistence code: SQLAlchemy models,
-metadata, engine, and sessions. This `backend/db/` directory contains developer
-inspection SQL, verification scripts, and documentation. Nothing here replaces
-Alembic or creates application tables.
+`backend/app/db/` is application persistence. `backend/db/` holds developer
+checks, acceptance tools and read-only inspection SQL. Alembic is the schema
+source of truth; do not replace it with SQL table creation or `create_all()`.
 
-Run the commands below from `backend`, with `.venv` active. Every tool loads the
-same settings and engine as FastAPI, using `backend/.env.local`. Exported
-environment variables take precedence; unset an old `DATABASE_URL` when switching
-this file. Tools work from other working directories when invoked by full path.
-They never print the connection URL, password, or exception traceback.
+## Schema
+
+```text
+Supabase auth.users → profiles (Auth FK on Supabase only)
+profiles
+   ├── expectations → evidence / evaluations / notifications / monitoring_jobs
+   ├── integration_connections
+   └── audit_events
+```
+
+Expectation ownership is required and indexed. Child data cascades on parent
+deletion. Job ownership uses a composite FK to the expectation/owner pair;
+notifications use a composite FK to the evaluation/expectation pair. Evidence header idempotency keys are unique within an expectation; optional
+provider `external_event_id` is unique within expectation/source when non-null.
+NULL permits ordinary unkeyed observations. A provider ID is deliberately not
+unique across unrelated accounts/expectations. Audit parent references become NULL on expectation deletion;
+profile deletion removes that owner's audit history.
+
+Monitoring jobs have `id`, `expectation_id`, `user_id`, `status`, `next_run_at`,
+`last_run_at`, `attempt_count`, `last_error`, and timestamps. Valid states are
+pending/running/paused/completed/failed/cancelled. Attempts cannot be negative;
+a partial unique index permits one pending/running/paused job per expectation.
+The status/due-time index supports future workers. `last_error` is reserved for
+safe error codes. Workers, leases, executions and external scheduling are absent.
+
+## Migrations
+
+| Revision | Change |
+| --- | --- |
+| `1bbc27e27689` | Original deterministic tables; unchanged |
+| `2e0a91d54c31` | Portable profiles and mandatory ownership |
+| `3a874e01bb52` | Supabase Auth FK, RLS and grants |
+| `4bc128091ea7` | Operational tables, idempotency and ownership constraints |
+| `5d201f68ac90` | Connected accounts, expanded notifications/audits, provider IDs and demo tag |
+
+The ownership migration locks expectations and aborts if legacy rows require
+backfill; it never invents identities or deletes those rows. The operational
+migration is additive and does not retroactively invent jobs for older claims.
+Supabase-specific SQL detects actual `auth.users`/`auth.uid()` independently of
+the selector. Local migrations do not fabricate Auth tables or roles.
+
+Upgrade both targets with `alembic upgrade head`. Run `alembic check` to compare
+schema/metadata. Use disposable local databases for downgrade/re-upgrade tests;
+downgrades remove operational/profile history. Never downgrade important Supabase
+data. Plan backups, migration lock windows and restores before production changes.
+
+## RLS
+
+All eight application tables have RLS on Supabase. `PUBLIC`/`anon` have no table
+grants. Authenticated clients can access only their own rows:
+
+| Table | Client permissions |
+| --- | --- |
+| profiles | SELECT, INSERT, UPDATE |
+| expectations | SELECT, INSERT, UPDATE, DELETE |
+| evidence | SELECT, INSERT |
+| evaluations, notifications, monitoring_jobs, audit_events, integration_connections | SELECT |
+
+Child policies check parent ownership. Backend-only writes produce evaluations,
+notifications, jobs, audit events and integration writes. Read-only integration
+client grants ensure metadata validation and audits cannot be bypassed through
+PostgREST. FastAPI provides authenticated account CRUD and notification status
+updates. No `USING (true)` policy is used. Privileged
+PostgreSQL owner/service-role connections may bypass RLS: FastAPI therefore also
+checks ownership. See [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security).
+
+## Database checks
+
+From `backend/` with the virtual environment active:
+
+```sh
+python db/scripts/check_database.py
+python db/scripts/check_schema.py
+alembic check
+```
+
+Checks report target, connectivity, required tables and current revision without
+printing URLs/passwords. `/ready` checks connectivity, migration head and table
+presence; it exposes no internal failure details. Connection, pool and statement
+timeouts are configured in backend settings.
 
 ## Local workflow
 
-Start PostgreSQL from the project root:
+Store `LOCAL_DATABASE_URL` and the selector in gitignored `backend/.env.local`.
+From the project root:
 
 ```sh
 docker compose up -d
 cd backend
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-alembic upgrade head
-python db/scripts/check_database.py
-python db/scripts/check_schema.py
-python db/scripts/local_acceptance.py
+DATABASE_TARGET=local alembic upgrade head
+DATABASE_TARGET=local python db/scripts/local_acceptance.py
+TEST_DATABASE_URL='postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton_test' pytest
 ```
 
-Expected output includes four table PASS lines, revision `1bbc27e27689`, and:
-
-```text
-PASS MISMATCH
-PASS MATCH
-PASS UNKNOWN
-LOCAL ACCEPTANCE PASSED
-```
-
-The acceptance runner uses existing services, including commits, then reads the
-result and status with a fresh session. It tags its expectations with a unique
-per-run UUID in `user_id`. Cleanup selects only that UUID and calls the existing
-delete service; PostgreSQL cascades the associated evidence and evaluations.
-Cleanup runs on both success and failure. A disconnected database can prevent
-cleanup; the script exits non-zero rather than claiming success. No unrelated
-rows are deleted, and no table is truncated.
-
-`check_database.py` is read-only and reports database name, database user, and
-PostgreSQL version. `check_schema.py` is read-only and checks the four required
-public tables and that the applied revision matches the repository's Alembic head.
-Missing tables, stale revisions, connection failures, or failed acceptance return
-a non-zero exit code. Acceptance scripts modify only their own temporary rows.
+The test URL must use loopback PostgreSQL and a separate database ending in
+`_test`. Integration transactions roll back; concurrency tests explicitly clean
+their unique profile. Migration tests create/drop a new disposable database.
 
 ## Supabase workflow
 
-1. Complete local checks first.
-2. In the existing Supabase project's **Connect** dialog, copy a PostgreSQL
-   connection string and supply its database password locally.
-3. Replace only `DATABASE_URL` in `backend/.env.local`. Use the
-   `postgresql+psycopg://` scheme. Percent-encode reserved password characters and
-   use TLS (`sslmode=require`, or stronger certificate verification if configured).
-4. Restart FastAPI after switching; settings are cached and the engine is created
-   once per process.
-5. Run:
+Store `SUPABASE_DATABASE_URL` from Supabase's Connect dialog with TLS enabled.
+Configure the project's Auth URL/JWKS/public key in the backend; keep any admin
+secret key backend-only. Use process overrides without rewriting the file:
 
 ```sh
-python db/scripts/check_database.py
-alembic upgrade head
-python db/scripts/check_schema.py
-python db/scripts/supabase_acceptance.py
-uvicorn app.main:app --reload
+DATABASE_TARGET=supabase alembic upgrade head
+DATABASE_TARGET=supabase python db/scripts/check_schema.py
+DATABASE_TARGET=supabase python db/scripts/supabase_acceptance.py
+DATABASE_TARGET=supabase python db/scripts/operational_acceptance.py
+DATABASE_TARGET=supabase python db/scripts/api_smoke.py
+LOG_LEVEL=WARNING DATABASE_TARGET=supabase python db/scripts/supabase_identity_check.py
 ```
 
-Use the direct connection for Alembic when reachable. For an IPv4-only workstation,
-a session-pooler connection on port 5432 is the alternative. Copy its actual host
-and project-specific username from Connect. Avoid the transaction pooler on port
-6543 for this unchanged persistent backend; it has different prepared-statement
-and session behavior. See [Supabase's connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres).
+Token-based tools prompt with hidden input or read `COUNTON_ACCESS_TOKEN` from
+the environment. The operational flow authenticates, upserts a profile, creates
+a claim, retries keyed evidence, evaluates, verifies notification/audit/job
+persistence and ownership, then removes only identified test artifacts.
 
-The local and Supabase acceptance entry points share one implementation; only
-`DATABASE_URL` and the final output label differ. Expected final output is
-`SUPABASE ACCEPTANCE PASSED`. A frontend publishable key is not a database password
-and cannot authenticate SQLAlchemy or Alembic.
+The identity tool requires both databases migrated, a live Supabase FastAPI
+server on localhost:8000, and backend `SUPABASE_SECRET_KEY`. It creates three
+confirmed temporary Auth users without sending email, uses real access tokens
+for both targets, tests cross-user isolation/RLS, and deletes only those users
+and matching local test profiles. Cleanup failure reports FAIL. Inspect only
+users with `app_metadata.counton_verification` if manual recovery is needed.
 
-Schema deployment is **`alembic upgrade head`**, not `supabase db push`, SQL-editor
-CREATE TABLE commands, or `Base.metadata.create_all()`. This applies the same core
-migration without importing local rows. Do not use `alembic stamp` to hide missing
-tables. Never run a downgrade against Supabase data that you need to keep. Validate
-downgrade/re-upgrade on a disposable local database only.
+Acceptance cleanup removes its own tagged records and generated audit events;
+ordinary application deletion retains redacted audit history. Existing profiles
+are retained by token-based acceptance, except identities explicitly provisioned
+and owned by the administrative verification tool.
+
+## Application contracts and demo data
+
+`integration_connections` stores owner, provider/type, optional external account
+ID/display name, status, scopes, safe JSONB metadata, sync time and timestamps.
+There is no one-account-per-provider uniqueness rule. Owner/filter indexes support
+bounded API queries. Live OAuth and encrypted credentials are not implemented;
+raw access/refresh tokens are rejected by the metadata API contract.
+
+Notifications now have a required profile/expectation owner pair, type/channel,
+message, metadata, sent time and pending/read/sent/failed/dismissed states. Existing
+rows receive their actual parent owner in migration; no identity is invented.
+The notification service persists MISMATCH notifications atomically and audits
+creation; clients may mark records read/dismissed through FastAPI. Delivery is absent.
+
+Audit events retain the existing `resource_id`, with the application alias
+`entity_id`, plus `entity_type`, safe metadata, owner, optional expectation link,
+action, request ID and created time. Owner/time indexes support inspection.
+Audit writes are backend-controlled; owner reads are RLS-scoped.
+
+```sh
+DATABASE_TARGET=local python db/scripts/seed_demo_data.py
+DATABASE_TARGET=local python db/scripts/clear_demo_data.py
+DATABASE_TARGET=supabase python db/scripts/seed_demo_data.py
+DATABASE_TARGET=supabase python db/scripts/clear_demo_data.py
+```
+
+The stable tag is `counton-demo-v1`. Local uses a deterministic demo UUID by
+default; configure `COUNTON_DEMO_USER_ID` to override. Supabase requires an
+existing dedicated Auth UUID with no unrelated CountOn profile. Store the UUID
+in backend `.env.local` or the process environment. Demo scripts never create or
+delete Auth users. All six connections are explicitly mocked, without credentials.
+
+An outer database transaction surrounds the services' savepoint commits and an
+advisory transaction lock serializes seeds for the same identity. Matching demo
+rows/events/evaluations are reused; existing data is never overwritten. Cleanup
+requires the demo owner and tags, removes only tagged audit events and cascades
+children. Untagged rows/history are retained, including those owned by the same
+profile; the profile is deleted only when no untagged data remains.
+
+Expected seed summary: 6 connections, 5 expectations, 10 evidence rows,
+5 evaluations, 1 notification. Bill MISMATCH; delivery and confirmed appointment
+MATCH; conflicting calendars and after-hours temporal expectations UNKNOWN.
+An untagged profile or conflicting existing evidence causes refusal and rollback.
 
 ## Inspection SQL
 
-All files in `sql/` are read-only. Run them in a local PostgreSQL client or the
-Supabase SQL editor connected to the intended project:
+All files in `db/sql/` are read-only:
 
 | File | Purpose |
 | --- | --- |
-| `inspect_tables.sql` | Public table names/types |
-| `inspect_expectations.sql` | Expectations and status |
-| `inspect_evidence.sql` | Evidence ordered by observed_at, newest first |
-| `inspect_evaluations.sql` | Evaluation history |
-| `inspect_constraints.sql` | Foreign keys, targets, and ON DELETE rules |
-| `inspect_indexes.sql` | Public indexes and definitions |
-| `sanity_report.sql` | Per-expectation evidence/evaluation counts without join multiplication |
+| inspect_tables.sql | Public tables |
+| inspect_profiles.sql | Profile metadata/demo tag |
+| inspect_integrations.sql | Metadata-only connected accounts |
+| inspect_expectations.sql | Claim state and owner |
+| inspect_evidence.sql | Observations ordered by observation time |
+| inspect_evaluations.sql | Deterministic history |
+| inspect_monitoring_jobs.sql | Job state and due time |
+| inspect_notifications.sql | In-app mismatch records |
+| inspect_audit_events.sql | Redacted actions/request IDs |
+| inspect_constraints.sql | Foreign keys/delete rules |
+| inspect_indexes.sql | Indexes |
+| sanity_report.sql | Per-expectation evidence/evaluation counts |
 
-Do not pass a password-bearing URL on a command line or paste it into logs/chat.
-The SQL files intentionally contain no database connection configuration.
+Verification on 2026-10-02: local/Supabase upgrade and clean `alembic check`,
+disposable-local downgrade/re-upgrade, **227 tests**, real authenticated flows,
+duplicate evidence retries, operational persistence, cross-user/RLS regression
+and tagged cleanup all passed. Eight Supabase tables retain RLS; temporary Auth
+users were confirmed absent. Native PostgreSQL 17 was used locally.
 
-## Migration review
-
-`alembic/versions/1bbc27e27689_create_core_counton_tables.py` creates expectations,
-evidence, and evaluations; four PostgreSQL enum types; UUID, JSONB and ARRAY
-columns; and the required indexes. Both child expectation foreign keys have
-ON DELETE CASCADE. Downgrade drops children before expectations, then removes
-the enum types. The migration is unchanged by this database-tooling task.
+Connected-account validation on 2026-10-02: revision `5d201f68ac90` applied
+to both targets; schemas match metadata. **227 tests passed**, including atomic
+seed rollback, owned CRUD, notification policy and source/event idempotency.
+Both targets reused the 6/5/10/5/1 demo counts on repeat seed and were cleared.
+Live integration/notification routes and eight-table RLS checks passed; all
+three temporary Auth users and their application artifacts were removed.

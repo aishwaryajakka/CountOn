@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ExpectationNotFoundError, InvalidExpectationError
 from app.db.models import Expectation, ExpectationStatus, ExpectationType
 from app.repositories import expectation as repository
+from app.repositories.profile import ensure_profile
+from app.repositories import operations
 from app.schemas.expectation import ExpectationCreate, ExpectationUpdate
 
 logger = logging.getLogger(__name__)
@@ -24,10 +26,13 @@ def validate_expectation(values: dict[str, Any]) -> None:
             raise InvalidExpectationError("Numeric expectations require a baseline or target_value")
 
 
-def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID | None = None) -> Expectation:
+def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None) -> Expectation:
     validate_expectation(payload.model_dump())
     try:
-        expectation = repository.create_expectation(db, payload, user_id)
+        ensure_profile(db, user_id)
+        expectation = repository.create_expectation(db, payload, user_id, compiler_metadata)
+        operations.ensure_job(db, expectation)
+        operations.audit(db, expectation, "expectation.created")
         db.commit()
     except Exception:
         db.rollback()
@@ -37,21 +42,21 @@ def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID | 
     return expectation
 
 
-def get_expectation(db: Session, expectation_id: UUID) -> Expectation:
-    expectation = repository.get_expectation(db, expectation_id)
+def get_expectation(db: Session, expectation_id: UUID, user_id: UUID) -> Expectation:
+    expectation = repository.get_expectation(db, expectation_id, user_id)
     if expectation is None:
         raise ExpectationNotFoundError(expectation_id)
     return expectation
 
 
 def list_expectations(
-    db: Session, status: ExpectationStatus | None = None, limit: int = 100, offset: int = 0,
+    db: Session, user_id: UUID, status: ExpectationStatus | None = None, limit: int = 100, offset: int = 0, type: ExpectationType | None = None,
 ) -> list[Expectation]:
-    return repository.list_expectations(db, status, limit, offset)
+    return repository.list_expectations(db, user_id, status, limit, offset, type)
 
 
-def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUpdate) -> Expectation:
-    expectation = get_expectation(db, expectation_id)
+def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUpdate, user_id: UUID) -> Expectation:
+    expectation = get_expectation(db, expectation_id, user_id)
     changes = payload.model_dump(exclude_unset=True)
     for name in ("claim", "evidence_sources", "materiality_threshold", "status"):
         if name in changes and changes[name] is None:
@@ -60,6 +65,7 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
     validate_expectation(values | changes)
     try:
         repository.update_expectation(db, expectation, changes)
+        operations.audit(db, expectation, "expectation.updated")
         db.commit()
     except Exception:
         db.rollback()
@@ -68,9 +74,11 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
     return expectation
 
 
-def delete_expectation(db: Session, expectation_id: UUID) -> None:
-    expectation = get_expectation(db, expectation_id)
+def delete_expectation(db: Session, expectation_id: UUID, user_id: UUID) -> None:
+    expectation = get_expectation(db, expectation_id, user_id)
     try:
+        operations.audit(db, expectation, "expectation.deleted")
+        db.flush()
         repository.delete_expectation(db, expectation)
         db.commit()
     except Exception:

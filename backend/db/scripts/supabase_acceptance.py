@@ -1,10 +1,12 @@
-"""Use the same core logic after DATABASE_URL is switched to Supabase."""
+"""Use the same core logic when DATABASE_TARGET selects Supabase."""
 
-from _common import run_cli
+from _common import require_target, run_cli
 from _acceptance import run_acceptance
 
 
 def main() -> int:
+    if not require_target("supabase"):
+        return 1
     return run_acceptance("SUPABASE")
 
 

@@ -86,7 +86,7 @@ def test_evaluation_rolls_back_if_status_write_fails(client, db, numeric_payload
         raise RuntimeError("Injected status update failure")
     monkeypatch.setattr(expectation_repository, "update_expectation", fail_status_update)
     with pytest.raises(RuntimeError, match="Injected status update failure"):
-        evaluation_service.evaluate_expectation(db, parent_id)
+        evaluation_service.evaluate_expectation(db, parent_id, UUID("10000000-0000-4000-8000-000000000001"))
     assert client.get(path + "/evaluations").json() == []
     assert client.get(path).json()["status"] == "monitoring"
 
@@ -97,7 +97,7 @@ def test_database_errors_do_not_leak_sql(client, monkeypatch):
     monkeypatch.setattr(expectation_repository, "get_expectation", fail_read)
     response = client.get(f"/api/v1/expectations/{uuid4()}")
     assert response.status_code == 500
-    assert response.json() == {"detail": "Database operation failed"}
+    assert response.json()["error"] == {"code":"DATABASE_ERROR", "message":"Database operation failed", "request_id":response.headers["x-request-id"]}
 
 
 @pytest.mark.parametrize("suffix,method", [

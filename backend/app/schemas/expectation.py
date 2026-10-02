@@ -41,7 +41,7 @@ class ExpectationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    user_id: UUID | None
+    user_id: UUID
     claim: str
     type: ExpectationType
     metric: str | None

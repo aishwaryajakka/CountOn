@@ -7,6 +7,7 @@ is rolled back; service commits release savepoints rather than test isolation.
 
 import os
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -16,7 +17,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, get_current_user
+from app.core.auth import AuthenticatedUser
+from app.repositories.profile import ensure_profile
 from app.core.config import get_settings
 from app.main import app
 
@@ -30,8 +33,9 @@ def postgres_engine():
     application_url = make_url(get_settings().database_url)
     # Require a different database name even when host aliases differ.
     same_database = url.database == application_url.database
-    if url.drivername != "postgresql+psycopg" or not (url.database or "").endswith("_test") or same_database:
-        pytest.fail("TEST_DATABASE_URL must use postgresql+psycopg and a separate database ending in _test")
+    if (url.drivername != "postgresql+psycopg" or url.host not in ("localhost", "127.0.0.1", "::1")
+            or not (url.database or "").endswith("_test") or same_database):
+        pytest.fail("TEST_DATABASE_URL must use postgresql+psycopg, loopback PostgreSQL, and a separate database ending in _test")
     engine = create_engine(url, pool_pre_ping=True)
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     try:
@@ -59,16 +63,27 @@ def db(postgres_engine):
 
 
 @pytest.fixture
-def client(db):
+def users(db):
+    identities = [AuthenticatedUser(UUID('10000000-0000-4000-8000-000000000001')),
+                  AuthenticatedUser(UUID('10000000-0000-4000-8000-000000000002'))]
+    for user in identities:
+        ensure_profile(db, user.id)
+    return identities
+
+
+@pytest.fixture
+def client(db, users):
     def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: users[0]
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture

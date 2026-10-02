@@ -1,10 +1,12 @@
 """Run the deterministic acceptance scenarios on the configured local database."""
 
-from _common import run_cli
+from _common import require_target, run_cli
 from _acceptance import run_acceptance
 
 
 def main() -> int:
+    if not require_target("local"):
+        return 1
     return run_acceptance("LOCAL")
 
 

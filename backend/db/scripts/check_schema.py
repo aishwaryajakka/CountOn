@@ -9,7 +9,7 @@ def main() -> int:
     from sqlalchemy import inspect, text
     from app.db.session import engine
 
-    required = ("alembic_version", "expectations", "evidence", "evaluations")
+    required = ("alembic_version", "profiles", "expectations", "evidence", "evaluations", "monitoring_jobs", "notifications", "audit_events", "integration_connections")
     try:
         with engine.connect() as connection:
             tables = set(inspect(connection).get_table_names(schema="public"))

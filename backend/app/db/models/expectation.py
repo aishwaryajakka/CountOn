@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, Float, Numeric, String, Text, func, text
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, UniqueConstraint, Numeric, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,9 +44,10 @@ class ComparisonType(StrEnum):
 
 class Expectation(Base):
     __tablename__ = "expectations"
+    __table_args__ = (UniqueConstraint("id", "user_id", name="uq_expectation_owner"),)
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), index=True)
     claim: Mapped[str] = mapped_column(Text)
     type: Mapped[ExpectationType] = mapped_column(Enum(ExpectationType, name="expectation_type"))
     metric: Mapped[str | None] = mapped_column(String(100))

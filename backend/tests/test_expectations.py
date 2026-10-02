@@ -17,7 +17,7 @@ def test_expectation_lifecycle(client, db, numeric_payload, bill_payload):
     expectation_id = created["id"]
     path = f"/api/v1/expectations/{expectation_id}"
     assert created["status"] == "monitoring"
-    assert created["user_id"] is None
+    assert created["user_id"] == "10000000-0000-4000-8000-000000000001"
     assert created["compiler_metadata"] == {}
     assert created["baseline"] == 142.10
     assert client.get(path).json() == created
@@ -51,7 +51,7 @@ def test_invalid_numeric_create(client, numeric_payload, field):
     numeric_payload.pop(field)
     response = client.post("/api/v1/expectations", json=numeric_payload)
     assert response.status_code == 422
-    assert response.json()["detail"]
+    assert response.json()["error"]["message"]
     assert client.get("/api/v1/expectations").json() == []
 
 

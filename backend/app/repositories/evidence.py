@@ -16,8 +16,18 @@ def create_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate) 
     return evidence
 
 
-def list_evidence_for_expectation(db: Session, expectation_id: UUID) -> list[Evidence]:
+def list_evidence_for_expectation(db: Session, expectation_id: UUID, limit: int = 100, offset: int = 0) -> list[Evidence]:
     statement = select(Evidence).where(Evidence.expectation_id == expectation_id).order_by(
         Evidence.observed_at, Evidence.created_at, Evidence.id,
     )
+    statement = statement.limit(limit).offset(offset)
+    return list(db.scalars(statement))
+
+
+def latest_relevant_evidence(db: Session, expectation_id: UUID, metric: str | None) -> list[Evidence]:
+    """Bound evaluator input without truncating before metric selection."""
+    statement=select(Evidence).where(Evidence.expectation_id==expectation_id)
+    if metric is not None:
+        statement=statement.where(Evidence.metric==metric)
+    statement=statement.order_by(Evidence.observed_at.desc(),Evidence.created_at.desc(),Evidence.id.desc()).limit(1)
     return list(db.scalars(statement))

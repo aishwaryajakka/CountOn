@@ -24,3 +24,6 @@ def test_openapi_and_swagger_expose_the_vertical_flow() -> None:
     assert paths["/api/v1/expectations/{expectation_id}/evidence"]["post"]["responses"]["201"]
     assert paths["/api/v1/expectations/{expectation_id}/evaluate"]["post"]["responses"]["200"]
     assert paths["/api/v1/expectations/{expectation_id}/evaluations"]["get"]["responses"]["200"]
+
+    validation_schema = paths["/api/v1/expectations"]["post"]["responses"]["422"]["content"]["application/json"]["schema"]
+    assert validation_schema["$ref"] == "#/components/schemas/ErrorEnvelope"
