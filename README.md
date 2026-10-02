@@ -1,243 +1,308 @@
 # CountOn
 
-The deterministic backend implements:
-**Expectation → Evidence → Evaluation → MATCH / UNKNOWN / MISMATCH**.
-PostgreSQL persists both the result and expectation status in one transaction.
-The same FastAPI/SQLAlchemy backend runs locally and against Supabase PostgreSQL.
+CountOn stores everyday expectations, ingests evidence and evaluates claims as
+`MATCH`, `MISMATCH` or `UNKNOWN`. For a bill expected below $142.10, an observed
+$162 produces `MISMATCH`; $130 produces `MATCH`; unrelated evidence produces
+`UNKNOWN`. Evaluators remain deterministic.
 
-API routes → services → repositories → SQLAlchemy/PostgreSQL. Pure evaluators own
-deterministic comparison logic. Future adapters normalize into the shared Evidence
-contract. Numeric evaluation compares observations; it does not infer causes.
+## Architecture
 
-## Environment files
+```text
+Client → FastAPI → JWT authentication → Services → Repositories → SQLAlchemy → PostgreSQL
+```
 
-Backend configuration belongs only in **`backend/.env.local`**. Create that file
-if it is missing. For local Compose, save these values:
+Application persistence lives in `backend/app/db/`. Developer SQL and verification
+scripts live in `backend/db/`. Alembic owns schema creation.
 
-```dotenv
+## Database target
+
+Backend configuration comes from the gitignored `backend/.env.local`:
+
+```env
 APP_NAME=CountOn
 ENVIRONMENT=development
-DATABASE_URL=postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton
+DATABASE_TARGET=supabase
+LOCAL_DATABASE_URL=postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton
+SUPABASE_DATABASE_URL=postgresql+psycopg://USERNAME:PASSWORD@HOST:5432/postgres?sslmode=require
+SUPABASE_URL=https://PROJECT.supabase.co
+SUPABASE_JWKS_URL=https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY
 LOG_LEVEL=INFO
+ALLOWED_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=300
+RATE_LIMIT_WRITES=100
+RATE_LIMIT_WINDOW_SECONDS=60
 ```
 
-These credentials are local-development values. Settings require `DATABASE_URL`
-and load `.env.local` relative to the backend package, independent of the shell's
-working directory. Environment variables override file values. Restart the API
-after changes because settings and the engine are cached per process. Do not use
-`.env` or `.env.example` for configuration.
+`settings.database_url` resolves only the explicitly selected target. Use a process
+override such as `DATABASE_TARGET=local alembic upgrade head` to switch a command
+without rewriting the file. Restart FastAPI after changing configuration.
 
-Frontend Supabase variables belong only in **`frontend/.env.local`**:
+Frontend configuration belongs in `frontend/.env.local`, containing only
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+Database credentials and `SUPABASE_SECRET_KEY` stay backend-only; the latter is
+needed only by the optional administrative verification script.
 
-```dotenv
-NEXT_PUBLIC_SUPABASE_URL=<project-url>
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
+## Authentication
+
+Supabase Auth owns credentials. A verified user UUID maps to an idempotently
+created `profiles` row. All expectation, evidence, evaluation and notification
+routes require `Authorization: Bearer <Supabase access token>`. Clients cannot
+assign ownership in JSON. Services scope every parent lookup by owner, returning
+404 for missing or other users' resources.
+
+Sign in through Supabase Auth with the public URL/publishable key. In
+`http://localhost:8000/docs`, choose **Authorize** and enter the session's access
+token. API keys and refresh tokens do not authenticate CountOn API calls.
+
+JWT verification checks signature, expiry, issuer, audience and authenticated
+role. ES256/RS256 uses the project's JWKS; legacy HS256 additionally requires a
+successful Auth-server check. Public keys cache for up to ten minutes; asymmetric
+tokens remain valid until expiry. See [Supabase JWT guidance](https://supabase.com/docs/guides/auth/jwts).
+
+## Core schema
+
+| Table | Purpose |
+| --- | --- |
+| profiles | Auth UUID plus optional display name/timezone |
+| expectations | Required owner, claim, comparison and lifecycle status |
+| evidence | Observations, ordered by observation time; optional idempotency key |
+| evaluations | Persisted deterministic results |
+| notifications | Owned in-app mismatch records with message/status; no delivery |
+| monitoring_jobs | Persistent scheduling contract; one active job per expectation |
+| audit_events | Redacted entity/actions, metadata and request IDs |
+| integration_connections | Owned provider account metadata; no credential storage |
+
+Jobs are created with expectations; no worker executes them yet. Evidence and
+notifications derive ownership through expectations. Hard deletion removes an
+expectation's evidence, evaluations, notifications and jobs. Audit events retain
+resource UUIDs with their parent reference cleared; deleting the profile removes
+its audit records. No external integrations or legal retention policy currently
+require a soft-delete lifecycle.
+
+## Connected Accounts
+
+CountOn models Google and Microsoft email/calendar accounts, Ring cameras, Bee
+wearables, utility and delivery connections. Multiple accounts of the same
+provider/type are allowed. These are **metadata-only contracts**; OAuth, live
+provider APIs and encrypted credential storage are future work. Responses expose
+`credential_state=not_configured`. `connected` describes metadata state and does
+not prove a working provider authorization.
+
+Authenticated `/api/v1/integrations` supports list/create and read/patch/delete
+by ID. Lists filter by `provider`, `connection_type`, `status` and use bounded
+pagination. Metadata accepts only mock/demo/account-kind fields; token fields
+are rejected. Tokens must eventually live in a dedicated encrypted credential
+store, never JSONB metadata. In the future account-linking design, Alexa identifies
+the linked CountOn user; CountOn owns the selected provider accounts. Alexa does
+not supply arbitrary Gmail/Outlook content or act as their source of truth.
+
+## Notifications
+
+The evaluation service delegates notification persistence to a notification
+service. `MISMATCH` creates one in-app record per evaluation; `MATCH` and `UNKNOWN`
+are silent. No email/SMS/push delivery occurs. `/api/v1/notifications` lists owned
+records; `GET` and `PATCH /{id}` support reading and changing status to `read` or
+`dismissed`. Sent/failed states are reserved for future delivery code.
+
+## Audit / Request IDs
+
+Backend-controlled audits record profiles, expectations, evidence, evaluations,
+notifications and account changes in the same transaction as the write. Entity
+IDs, actions and safe metadata are stored, without credentials or source payloads.
+Existing action names `evidence.ingested` and `expectation.evaluated` are preserved.
+`X-Request-ID` accepts UUIDs or is generated, appears in errors and JSON logs, and
+correlates HTTP-originated audit records. CLI demo writes have no HTTP request ID.
+Audit tables have no client write grants; there is no public audit-write endpoint.
+
+## Demo Account
+
+The tagged Ashley Mccormick demo has six mocked connections, five expectations, ten
+evidence rows, five evaluations and one notification. Utility billing produces
+MISMATCH; delivery confirmation and a normalized appointment-confirmed boolean
+produce MATCH. Dentist calendar disagreement and the after-hours calendar scenario
+remain UNKNOWN because temporal semantics are intentionally unsupported.
+The package/plumber examples assert normalized confirmation; they do not infer
+calendar semantics from raw provider content.
+
+The dedicated account is **Ashley Mccormick**, **demo@counton.app**, in
+**America/Chicago**. The demo password is intentionally not stored in Git.
+For team access, obtain it through the team's secure shared channel.
+
+### How to Seed Demo Data
+
+From `backend`, with the virtual environment active:
+
+```sh
+DATABASE_TARGET=local python db/scripts/setup_demo_user.py
+DATABASE_TARGET=local python db/scripts/seed_demo_data.py
 ```
 
-Never put DATABASE_URL or a database password in the frontend or NEXT_PUBLIC_*
-variables. Both `.env.local` files are ignored by Git; backend environment files
-are excluded from Docker builds. Do not print, commit, or paste database credentials
-into chat. The frontend keys do not supply a PostgreSQL connection credential.
+Local uses the existing stable UUID unless `COUNTON_DEMO_USER_ID` is configured;
+setup and seeding require no Supabase Auth access. For Supabase, configure the
+backend-only Auth Admin key and demo password in ignored `backend/.env.local`, then:
 
-## Local PostgreSQL first
+```sh
+DATABASE_TARGET=supabase python db/scripts/setup_demo_user.py
+```
 
-Prerequisites: Python 3.12+, Docker with Docker Compose, and port 5432 available.
-From the existing project root:
+Setup finds the account by email or creates it using the Auth Admin API. It
+reuses existing accounts without resetting passwords. Save the printed UUID as
+`COUNTON_DEMO_USER_ID` in that same ignored file, then run:
+
+```sh
+DATABASE_TARGET=supabase python db/scripts/seed_demo_data.py
+```
+
+Setup ensures Ashley's profile; seeding reuses tagged rows without overwriting
+them. An outer transaction and advisory lock prevent partial or concurrent
+duplicate seeds. All connections are mocked. See [demo setup details](backend/db/README.md#application-contracts-and-demo-data).
+
+### How to Clear Demo Data
+
+```sh
+DATABASE_TARGET=local python db/scripts/clear_demo_data.py
+DATABASE_TARGET=supabase python db/scripts/clear_demo_data.py
+```
+
+Use the same configured demo UUID. Cleanup requires both owner and demo markers,
+removes tagged audit artifacts and uses parent cascades. An empty tagged profile
+is removed; a profile with untagged expectations/accounts/audit history is retained.
+Supabase Auth users are never deleted by the demo scripts. No TRUNCATE or broad
+team-data deletion occurs. Successful verification leaves the demo cleared.
+
+## How to run
+
+From the repository root, start local PostgreSQL if using the local target:
 
 ```sh
 docker compose up -d
 cd backend
-# If a virtual environment is not already present:
-python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-alembic upgrade head
-python db/scripts/check_database.py
-python db/scripts/check_schema.py
-python db/scripts/local_acceptance.py
-uvicorn app.main:app --reload
+DATABASE_TARGET=local alembic upgrade head
+DATABASE_TARGET=local uvicorn app.main:app --reload
 ```
 
-Reuse the existing `.venv` when present; any Python 3.12+ interpreter works.
-Docker Compose starts PostgreSQL 17 only. A native PostgreSQL 17 installation is
-also supported when Docker is unavailable, provided it has the database/user in
-`backend/.env.local` and is reachable at the configured host/port.
+For Supabase, use `DATABASE_TARGET=supabase` for migration and server commands.
+`/health` reports process liveness. `/ready` checks database access, required tables
+and the current migration head, returning a safe 503 when unavailable.
 
-- Health: http://localhost:8000/health
-- Swagger: http://localhost:8000/docs
-- OpenAPI: http://localhost:8000/openapi.json
+API errors use `{"error":{"code":"...","message":"...","request_id":"..."}}`
+and preserve HTTP status codes. Responses include `X-Request-ID`; an incoming
+UUID is accepted or a new UUID is generated. Lists use `limit` (1–100, default
+100) and `offset`; expectations filter by `status`/`type`, notifications by
+`status`. Evidence ingestion accepts an optional `external_event_id` in JSON or `Idempotency-Key` in headers: identical retries return
+the original record, conflicting payloads return 409. Provider events are unique
+within `(expectation_id, source, external_event_id)`, preventing cross-account
+collisions while allowing one event to support separate expectations. Unkeyed
+manual evidence remains supported. Each explicit evaluation
+creates history and a mismatch notification when appropriate.
 
-Health returns `{"status":"ok","service":"counton-api"}` with HTTP 200.
-Database tools and read-only SQL are grouped under [backend/db](backend/db/README.md).
-Application persistence remains under `backend/app/db/`.
+## How to test
 
-## Manual Swagger acceptance
-
-In Swagger, create three separate expectations using
-`POST /api/v1/expectations` (expect HTTP 201):
-
-```json
-{
-  "claim": "My next electricity bill will be lower",
-  "type": "numeric_comparison",
-  "metric": "total_cost",
-  "comparison": "less_than",
-  "baseline": 142.1,
-  "evidence_sources": ["utility_bill"],
-  "materiality_threshold": 0.05
-}
-```
-
-For the first ID, call `POST /api/v1/expectations/{id}/evidence`
-(expect HTTP 201):
-
-```json
-{
-  "source": "utility_bill",
-  "metric": "total_cost",
-  "value": {"amount": 162},
-  "unit": "USD",
-  "observed_at": "2026-10-01T20:00:00Z",
-  "confidence": 1.0,
-  "raw_data": {}
-}
-```
-
-Call `POST /api/v1/expectations/{id}/evaluate` (HTTP 200). Expect MISMATCH;
-`GET /api/v1/expectations/{id}` should show contradicted status.
-For the second ID, use the same evidence with `{"amount": 130}`. Expect MATCH
-and fulfilled. For the third ID, add only this evidence:
-
-```json
-{
-  "source": "utility_usage",
-  "metric": "energy_usage_change",
-  "value": {"percentage": -18},
-  "unit": "percent",
-  "observed_at": "2026-10-01T20:00:00Z",
-  "confidence": 1.0,
-  "raw_data": {}
-}
-```
-
-Evaluate the third ID: expect UNKNOWN and monitoring, with
-`no_relevant_evidence` for total_cost. Read evaluation history through
-`GET /api/v1/expectations/{id}/evaluations`. Delete your three manual examples
-with `DELETE /api/v1/expectations/{id}` (204) when finished. Scripted acceptance
-performs these scenarios through services and automatically cleans its own rows.
-
-## Switch the same backend to Supabase
-
-After local acceptance passes, use the existing project's **Connect** dialog to
-get its PostgreSQL connection string. Supply the database password, percent-encode
-reserved characters, change the scheme to `postgresql+psycopg://`, and use TLS.
-Save the completed string as DATABASE_URL in `backend/.env.local`, without printing
-it. Keep APP_NAME, ENVIRONMENT and LOG_LEVEL as appropriate.
-
-Use a direct connection for migrations when reachable; a session-pooler connection
-on port 5432 is the fallback for an IPv4-only workstation. Copy the host/username
-from Connect. The transaction pooler on port 6543 is not the intended connection
-for this unchanged backend. [Supabase connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres).
-
-From `backend`, with the environment active and any old exported DATABASE_URL unset:
+Use a separate loopback PostgreSQL database ending in `_test`:
 
 ```sh
-python db/scripts/check_database.py
-alembic upgrade head
-python db/scripts/check_schema.py
-python db/scripts/supabase_acceptance.py
-uvicorn app.main:app --reload
+TEST_DATABASE_URL='postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton_test' pytest
+DATABASE_TARGET=local python db/scripts/local_acceptance.py
+DATABASE_TARGET=supabase python db/scripts/check_schema.py
+DATABASE_TARGET=supabase python db/scripts/supabase_acceptance.py
+python db/scripts/operational_acceptance.py
 ```
 
-Expected acceptance output: PASS MISMATCH, PASS MATCH, PASS UNKNOWN, then
-SUPABASE ACCEPTANCE PASSED. Restart an existing API process after switching.
-Re-run the Swagger flow against the restarted backend if desired.
+Create `counton_test` once with your local PostgreSQL tools. Without
+`TEST_DATABASE_URL`, integration tests skip. Migration-cycle tests require
+CREATEDB and operate only on a newly created disposable local database.
 
-Alembic is the only source of schema creation; the existing revision
-`1bbc27e27689` creates the three tables, enums, indexes, and cascading foreign keys.
-Do not replace it with SQL-editor CREATE TABLE statements or `supabase db push`.
-Applying the migration does not copy local data to Supabase. Test downgrade only
-on disposable local databases; it deletes the core schema and its data.
+Authenticated acceptance scripts prompt for a real token with hidden input, or
+read `COUNTON_ACCESS_TOKEN` from the process environment. Never put credentials
+in command arguments or chat. `supabase_identity_check.py` optionally provisions
+three temporary confirmed Auth users without email delivery, tests both database
+targets and RLS, and removes only those users and their test artifacts. Run it
+with both databases migrated and FastAPI serving Supabase on port 8000.
 
-## Tests
+## Supabase deployment
 
-From the project root, with local Compose running, create a separate test database
-once, then run the complete suite:
+Store the PostgreSQL URL from **Supabase → Connect** in the backend file, then run:
 
 ```sh
-docker compose exec postgres createdb -U counton counton_test
+DATABASE_TARGET=supabase alembic upgrade head
+DATABASE_TARGET=supabase python db/scripts/check_schema.py
+DATABASE_TARGET=supabase alembic check
+```
+
+Production configuration requires `ENVIRONMENT=production`, Supabase Auth
+configuration, a TLS database URL, explicit HTTPS `ALLOWED_ORIGINS`, and enabled
+rate limiting. Wildcard origins are rejected. Deploy with a supervised ASGI
+server without `--reload`, HTTPS ingress and correctly configured proxy handling.
+
+Supabase RLS/grants deny anonymous table access and isolate owners. The backend's
+privileged database role can bypass RLS, so backend ownership checks remain
+mandatory. See [database workflows and policies](backend/db/README.md).
+
+## Current capabilities
+
+Operational safeguards include database connection/pool/statement timeouts,
+explicit CORS, safe error envelopes, atomic audit writes, bounded lists and an
+in-memory rate limiter (300 requests/100 writes per client address per minute by
+default). The `RateLimiter` interface accepts a shared implementation; the current
+limiter is per process and **does not protect multiple workers or replicas with a
+shared budget**. Health/readiness and CORS preflights are exempt.
+
+Metrics hooks count requests, latency totals, 5xx responses, evaluation results,
+evidence ingestion and notification creation. The default sink is in-memory;
+configure a durable exporter and alerting for deployment. Logs contain route
+patterns, status, duration and request IDs, without headers or request bodies.
+
+The shared HTTP client has separate connect/read timeouts and bounded exponential
+backoff for GET/HEAD transport failures and 502/503/504 only. It never retries
+writes, authentication failures or validation failures. No external integrations
+use it yet. See [HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/).
+
+Known gaps: shared rate-limit storage and trusted ingress policy, metrics export,
+backup/restore operations, an explicit audit retention policy, and future worker
+claim/lease/retry and notification delivery logic. Bedrock, MCP, Ring, Bee,
+EventBridge and external notification delivery remain unimplemented. Temporal
+and event evaluation still returns `UNKNOWN`.
+
+Verified on 2026-10-02: **227 tests passed**, local and Supabase operational
+acceptance passed with real Auth tokens, and all eight application tables with Supabase RLS
+were exercised. Both schemas match metadata at revision `5d201f68ac90`; temporary
+users and test artifacts were removed. One non-failing Starlette/HTTPX
+deprecation warning remains. Local checks used native PostgreSQL 17 because
+Docker is unavailable on this machine.
+
+Canonical demo identity verified on 2026-10-02: Ashley Mccormick /
+`demo@counton.app`; local stable and explicitly configured UUIDs passed, real
+Supabase sign-in passed, and repeat seeds preserved 6/5/10/5/1 counts with all
+five expected results. Cleanup removed tagged data and retained the Auth account.
+The supplied credential remains only in ignored backend configuration; repository
+secret scanning passed. The complete backend suite passed **237 tests** with one
+existing Starlette/HTTPX deprecation warning. No frontend or evaluator changes.
+
+## Run the CountOn frontend
+
+The existing frontend directory now contains Next.js, React and TypeScript. It
+uses Supabase Auth and calls FastAPI for all application data.
+
+Backend terminal:
+
+```sh
 cd backend
 source .venv/bin/activate
-export TEST_DATABASE_URL='postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton_test'
-pytest
+uvicorn app.main:app --reload
 ```
 
-Without TEST_DATABASE_URL, unit/health tests run and PostgreSQL integration tests
-explicitly skip. Test databases must use postgresql+psycopg, end in `_test`, and
-have a different name from the application database. Tests apply Alembic only to
-that test database. API tests roll back each test's data; acceptance cleanup tests
-create and delete their own committed rows. No SQLite substitution is used.
-The existing baseline is 117 tests; new tests cover `.env.local`, late-arriving
-evidence, sanitized tool failures, and acceptance cleanup success/failure.
-Starlette currently emits a non-failing HTTPX TestClient deprecation warning.
-
-## API routes and semantics
-
-All routes have the `/api/v1` prefix:
-
-| Methods | Path | Behavior |
-| --- | --- | --- |
-| POST, GET | `/expectations` | Create (201), or list with status/limit/offset |
-| GET, PATCH, DELETE | `/expectations/{id}` | Read, update supplied fields, delete (204) |
-| POST, GET | `/expectations/{id}/evidence` | Add (201), list by observed_at ascending |
-| POST | `/expectations/{id}/evaluate` | Evaluate and persist (200) |
-| GET | `/expectations/{id}/evaluations` | History, newest first |
-| GET | `/expectations/{id}/evaluations/latest` | Latest result; 404 if none |
-
-Missing expectations return 404; invalid input returns 422; database errors return
-a generic 500. Numeric expectations require metric, comparison, and baseline or
-target_value. target_value takes precedence, including zero. Latest evidence for
-the exact metric means greatest observed_at, then created_at and UUID for ties;
-a late-arriving older observation does not override a newer observation.
-
-Numeric strings, booleans, NaN and infinity are rejected. Equality uses inclusive
-relative tolerance; directional failures strictly below tolerance return MATCH.
-Zero targets use absolute tolerance in the metric's units. Boolean expectations
-assert True and accept actual booleans only. Temporal/event evaluation remains
-UNKNOWN. UNKNOWN preserves status; resolved/cancelled statuses stay unchanged.
-Units/sources are assumed normalized. Changes do not automatically re-evaluate.
-
-## Current scope
-
-Not implemented: Bedrock, MCP, Alexa+, Ring/Bee integrations, EventBridge,
-scheduling, authentication, dashboard, frontend features, notifications, or causal
-investigation. Compiler/investigator and adapter packages remain placeholders.
-The API has no user access control and is intended for development. Frontend
-publishable keys are not used to access the core tables by this backend.
-
-## Backend container
-
-Environment files are excluded from the build. From the project root:
+Frontend terminal:
 
 ```sh
-docker build -t counton-api ./backend
-docker run --rm -p 8000:8000 --env-file backend/.env.local counton-api
+cd frontend
+npm install
+npm run dev
 ```
 
-For a container talking to native PostgreSQL through Docker Desktop, change the
-local DATABASE_URL host to `host.docker.internal` in backend/.env.local first.
-For Supabase, use its configured endpoint. Apply migrations before starting the
-container; application startup never creates tables.
-
-## Verification recorded on 2026-10-01
-
-Local PostgreSQL verification passed: connection, current Alembic revision,
-MISMATCH/MATCH/UNKNOWN acceptance, all seven inspection SQL files, the live API
-flow on port 8000, and 124 tests. Downgrade/enum cleanup/re-upgrade and metadata
-consistency passed on a separate disposable local database. The existing core
-migration and deterministic evaluators were left unchanged.
-
-Docker is unavailable in the current workstation environment, so these checks
-used PostgreSQL 17 directly. Supabase migration and remote acceptance are pending:
-the configured DATABASE_URL still points to local PostgreSQL. The Supabase URL
-and API keys do not provide the required PostgreSQL database password.
+Configure the public API/Supabase values in ignored `frontend/.env.local`, then
+open **http://localhost:3000**. Teammate setup, routes, demo seeding, limitations
+and validation commands are in [frontend/README.md](frontend/README.md).
