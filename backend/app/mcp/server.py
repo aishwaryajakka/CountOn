@@ -9,7 +9,11 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import ValidationError
 
 from app.core.logging import configure_logging
-from app.mcp.http import RequestContextMiddleware
+from app.mcp.http import RequestContextMiddleware, BearerAuthMiddleware
+from app.core.config import get_settings
+from mcp.server.transport_security import TransportSecuritySettings
+from starlette.middleware.cors import CORSMiddleware
+from urllib.parse import urlsplit
 from app.db.session import SessionLocal
 from app.mcp.auth import current_user
 from app.mcp.tools import register_tools, SessionFactory, UserResolver
@@ -56,9 +60,20 @@ def create_server(
     return server
 
 
-def create_app(server=None):
+def create_app(server=None, *, settings=None):
+    settings = settings or get_settings()
+    if settings.environment == "production" and not settings.mcp_public_url:
+        raise ValueError("MCP_PUBLIC_URL is required to start production MCP")
     server = server or create_server()
-    app = server.streamable_http_app(stateless_http=True, json_response=True)
+    security = None
+    if settings.mcp_public_url or settings.mcp_allowed_origins:
+        hosts = ([urlsplit(settings.mcp_public_url).netloc] if settings.mcp_public_url
+                 else ["127.0.0.1:*", "localhost:*", "[::1]:*"])
+        security = TransportSecuritySettings(allowed_hosts=hosts,
+            allowed_origins=settings.mcp_allowed_origins)
+    app = server.streamable_http_app(stateless_http=True, json_response=True,
+        transport_security=security)
+    app.debug = False
     sdk_lifespan = app.router.lifespan_context
 
     @asynccontextmanager
@@ -68,6 +83,13 @@ def create_app(server=None):
             yield
 
     app.router.lifespan_context = lifespan
+    app.add_middleware(BearerAuthMiddleware)
+    if settings.mcp_allowed_origins:
+        app.add_middleware(CORSMiddleware, allow_origins=settings.mcp_allowed_origins,
+            allow_methods=["GET", "POST", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "Last-Event-ID", "Mcp-Method",
+                "Mcp-Name", "Mcp-Protocol-Version", "Mcp-Session-Id"],
+            expose_headers=["X-Request-ID", "Mcp-Session-Id"])
     app.add_middleware(RequestContextMiddleware)
     return app
 

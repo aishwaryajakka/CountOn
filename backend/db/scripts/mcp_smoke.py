@@ -60,6 +60,38 @@ async def call(url, token, name, request):
             return await client.call_tool(name, {'request': request})
 
 
+CORE_TOOLS = {'capture_expectation', 'get_expectation', 'list_expectations'}
+
+
+async def discover(url, token):
+    async with httpx2.AsyncClient(headers={'Authorization': f'Bearer {token}'}, timeout=20) as http:
+        async with Client(streamable_http_client(url, http_client=http), cache=None) as client:
+            result = await client.list_tools()
+            names = {tool.name for tool in result.tools}
+            if names != CORE_TOOLS or len(result.tools) != len(CORE_TOOLS):
+                import re
+                safe = lambda name: name if re.fullmatch(r'[A-Za-z0-9_]{1,80}', name) else '<invalid name>'
+                missing = sorted(CORE_TOOLS - names)
+                unexpected = sorted(safe(name) for name in names - CORE_TOOLS)
+                raise SmokeFailure(f'Tool discovery mismatch: missing={missing}, unexpected={unexpected}')
+            import json
+            for tool in result.tools:
+                json.dumps(tool.input_schema, allow_nan=False)
+                json.dumps(tool.output_schema, allow_nan=False)
+    print('PASS MCP initialization and exact core tool discovery')
+
+
+async def unauthorized_http(url, token, stage):
+    headers = {'Authorization': f'Bearer {token}'} if token else {}
+    async with httpx.AsyncClient(timeout=20, follow_redirects=False) as http:
+        response = await http.post(url, headers=headers, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}})
+    if (response.status_code != 401 or 'www-authenticate' in response.headers
+            or response.json().get('error', {}).get('code') != 'UNAUTHORIZED'):
+        raise SmokeFailure(f'{stage} did not return a clean HTTP 401')
+    print(f'PASS {stage}')
+
+
 def success(result, stage):
     if result.is_error or result.structured_content is None:
         raise SmokeFailure(f'{stage} failed')
@@ -86,8 +118,10 @@ async def smoke(mcp_url, api_url, token):
                     raise SmokeFailure('Service health/readiness failed')
         print('PASS service health/readiness')
         try:
-            expected_error(await call(mcp_url, None, 'list_expectations', {}), 'UNAUTHORIZED', 'missing auth')
-            expected_error(await call(mcp_url, 'smoke-invalid-token', 'list_expectations', {}), 'UNAUTHORIZED', 'invalid token')
+            await unauthorized_http(mcp_url, None, 'missing auth')
+            await unauthorized_http(mcp_url, 'smoke-invalid-token', 'invalid token')
+            await discover(mcp_url, token)
+            success(await call(mcp_url, token, 'list_expectations', {'limit': 100}), 'initial list over HTTP')
             expected_error(await call(mcp_url, token, 'get_expectation',
                 {'expectation_id': '00000000-0000-0000-0000-000000000000'}), 'NOT_FOUND', 'nonexistent expectation')
             expected_error(await call(mcp_url, token, 'capture_expectation',
@@ -140,6 +174,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mcp-url', type=loopback_url, default='http://127.0.0.1:8003/mcp')
     parser.add_argument('--api-url', type=loopback_url, default='http://127.0.0.1:8000')
+    parser.add_argument('--discovery-only', action='store_true', help='Initialize and check tools without creating data')
     parser.add_argument('--demo-login', action='store_true', help='Development/test only: obtain a real token using existing demo credentials')
     args = parser.parse_args()
     if not args.mcp_url.endswith('/mcp'):
@@ -147,7 +182,11 @@ def main():
     # Client library logs must never print authentication/provider responses.
     logging.disable(logging.CRITICAL)
     try:
-        asyncio.run(smoke(args.mcp_url, args.api_url, token_for_smoke(args.demo_login)))
+        token = token_for_smoke(args.demo_login)
+        if args.discovery_only:
+            asyncio.run(discover(args.mcp_url, token))
+        else:
+            asyncio.run(smoke(args.mcp_url, args.api_url, token))
         return 0
     except SmokeFailure as error:
         print(f'FAIL {error}')

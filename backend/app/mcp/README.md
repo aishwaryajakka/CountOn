@@ -9,7 +9,7 @@ From `backend`, start with:
 
 ```bash
 source .venv/bin/activate
-DATABASE_TARGET=local uvicorn app.mcp.server:app --host 127.0.0.1 --port 8003
+DATABASE_TARGET=local python -m app.mcp
 ```
 
 This uses existing services, repositories, and JWT verification. Only

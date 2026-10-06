@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     supabase_jwks_url: str | None = None
     supabase_publishable_key: str | None = Field(default=None, repr=False)
     supabase_secret_key: SecretStr | None = Field(default=None, repr=False)
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = Field(default=8003, ge=1, le=65535)
+    mcp_public_url: str | None = None
+    mcp_allowed_origins: list[str] = Field(default_factory=list)
     counton_demo_user_id: UUID | None = None
     counton_demo_email: str = "demo@counton.app"
     counton_demo_password: SecretStr | None = Field(default=None, repr=False)
@@ -86,6 +90,55 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires SSLMODE=require or certificate verification in SUPABASE_DATABASE_URL")
             if not self.rate_limit_enabled:
                 raise ValueError("Production rate limiting must be enabled")
+        return self
+
+    @field_validator("mcp_host")
+    @classmethod
+    def validate_mcp_host(cls, value):
+        import ipaddress
+        import re
+        try:
+            ipaddress.ip_address(value)
+        except ValueError:
+            if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", value):
+                raise ValueError("MCP_HOST must be a bind IP address or hostname")
+        return value
+
+    @model_validator(mode="after")
+    def validate_mcp_configuration(self):
+        if self.mcp_public_url:
+            url = urlsplit(self.mcp_public_url)
+            try:
+                port = url.port
+            except ValueError:
+                raise ValueError("MCP_PUBLIC_URL has an invalid port") from None
+            if (not url.hostname or url.username or url.password or url.query or url.fragment
+                    or url.path != "/mcp" or url.scheme not in ("http", "https")
+                    or port == 0 or "*" in url.netloc):
+                raise ValueError("MCP_PUBLIC_URL must be a credential-free canonical HTTP(S) URL ending in /mcp")
+            self.validate_mcp_host(url.hostname)
+            if any(char.isspace() for char in self.mcp_public_url) or '?' in self.mcp_public_url or '#' in self.mcp_public_url:
+                raise ValueError("MCP_PUBLIC_URL must be canonical without whitespace, query or fragment")
+            local = url.hostname in ("localhost", "127.0.0.1", "::1")
+            if url.scheme != "https" and not local:
+                raise ValueError("Remote MCP_PUBLIC_URL requires HTTPS")
+            if self.environment == "production" and (url.scheme != "https" or local):
+                raise ValueError("Production MCP_PUBLIC_URL requires a remote HTTPS host")
+        for value in self.mcp_allowed_origins:
+            origin = urlsplit(value)
+            try:
+                port = origin.port
+            except ValueError:
+                raise ValueError("MCP_ALLOWED_ORIGINS contains an invalid port") from None
+            if (origin.scheme not in ("http", "https") or not origin.hostname or origin.path
+                    or origin.username or origin.password or origin.query or origin.fragment
+                    or "*" in origin.netloc or port == 0):
+                raise ValueError("MCP_ALLOWED_ORIGINS must contain explicit HTTP(S) origins")
+            self.validate_mcp_host(origin.hostname)
+            if any(char.isspace() for char in value) or '?' in value or '#' in value:
+                raise ValueError("MCP_ALLOWED_ORIGINS must contain canonical origins")
+            if self.environment == "production" and (origin.scheme != "https" or origin.hostname in ("localhost", "127.0.0.1", "::1")):
+                raise ValueError("Production MCP_ALLOWED_ORIGINS requires remote HTTPS origins")
         return self
 
     @property

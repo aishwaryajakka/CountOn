@@ -88,7 +88,7 @@ def test_http_health_readiness_request_ids_and_failure(monkeypatch):
         assert client.get('/ready').status_code == 200
 
 
-def test_tool_log_fields_and_no_input_values(caplog):
+def test_tool_log_fields_and_no_input_values(caplog, monkeypatch):
     from app.core.auth import AuthenticatedUser
     from uuid import UUID
     from starlette.testclient import TestClient
@@ -97,6 +97,7 @@ def test_tool_log_fields_and_no_input_values(caplog):
     def factory():
         raise RuntimeError('secret-sentinel database URL password')
         yield
+    monkeypatch.setattr(auth, 'authenticated_user_from_header', lambda header: user)
     app = create_app(create_server(session_factory=factory, user_resolver=lambda ctx: user))
     with caplog.at_level(logging.INFO), TestClient(app, base_url='http://127.0.0.1:8003') as client:
         response = client.post('/mcp', headers={'Accept': 'application/json, text/event-stream',

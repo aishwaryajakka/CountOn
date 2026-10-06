@@ -26,7 +26,7 @@ In another terminal, from the repository root:
 ```bash
 cd backend
 source .venv/bin/activate
-DATABASE_TARGET=local uvicorn app.mcp.server:app --host 127.0.0.1 --port 8003
+DATABASE_TARGET=local python -m app.mcp
 ```
 
 MCP endpoint: **http://127.0.0.1:8003/mcp**. FastAPI:
@@ -41,9 +41,11 @@ CountOn reuses its existing JWT signature/issuer/audience/expiry verification.
 Identity comes from injected HTTP context; `user_id`, `owner_id`, and
 `profile_id` are never accepted as tool inputs. Repository ownership filters
 apply unchanged. Missing and cross-user IDs return the same not-found error.
-Initialization, schema discovery, and health paths expose no private rows and
-are public. Tool failures are MCP `isError: true` results, usually carried by
-HTTP 200; clients must check `isError`, not just the HTTP status.
+Every `/mcp` HTTP request, including initialization and discovery, now requires
+bearer authentication. Missing/invalid credentials return HTTP 401 without
+`WWW-Authenticate`, matching Amazon's current MCP discovery checklist. Health
+and readiness remain public. After authentication, tool failures are MCP
+`isError: true` results carried by HTTP 200; check both HTTP status and `isError`.
 
 There is no development auth bypass. The smoke client's optional
 `--demo-login` obtains a **real** token from configured demo credentials and is
@@ -145,7 +147,8 @@ credentials with `--demo-login`. If FastAPI uses port 8004, pass
 The smoke uses the real SDK network client, verifies all three tools and the
 same row through FastAPI, exercises four error paths, and removes only its exact
 unique smoke-tagged rows. Normal audit records remain. Cleanup failure exits
-nonzero. Only loopback URLs without credentials/query/fragment are allowed.
+nonzero. The local script accepts only loopback URLs without credentials/query/fragment.
+The separate remote script accepts HTTPS endpoints, as documented below.
 
 Run `python -m pytest` from backend with the existing dedicated local
 `TEST_DATABASE_URL` ending in `_test`. Without it DB tests skip. Network tests
@@ -192,7 +195,7 @@ is only a placeholder. No new service or false functionality is provided.
 
 ## Known Limitations
 
-Local service behavior is verified. Remote TLS/hosting, OAuth resource metadata
+Local service behavior is verified. Actual public deployment, OAuth resource metadata
 and client login/discovery, Alexa+ account linking/tool onboarding, capture
 idempotency, conversation orchestration, and the compiler implementation are
 unfinished. No Bedrock, Ring/Bee, schema, or evaluator changes are included.
@@ -205,3 +208,121 @@ endpoint with an explicit Host/Origin allowlist. Validate schema discovery and
 read tools for two linked users before enabling capture. Integrate Person 2's
 compiler with explicit clarification handling and the same authenticated
 identity; reconcile ambiguous writes rather than retrying blindly.
+
+
+## Remote Deployment
+
+Configuration uses the existing `Settings` and ignored `backend/.env.local`.
+No `MCP_ENVIRONMENT` is introduced: use existing `ENVIRONMENT`.
+
+| Variable | Use |
+| --- | --- |
+| `MCP_HOST` | Internal bind interface; defaults to `127.0.0.1`, use `0.0.0.0` in a container |
+| `MCP_PORT` | Internal port, 1–65535; default `8003` |
+| `MCP_PUBLIC_URL` | Canonical external resource URL, exactly `https://<host>/mcp`; required to start production MCP |
+| `MCP_ALLOWED_ORIGINS` | JSON list of explicit browser origins; default `[]`, no browser CORS enabled; production entries must be remote HTTPS |
+| `ENVIRONMENT` | `development`, `test`, or `production`; inherited from CountOn |
+| `DATABASE_TARGET` / `SUPABASE_DATABASE_URL` | Production uses `supabase` and existing SSL-required PostgreSQL configuration |
+| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Existing project issuer/JWKS and Auth configuration |
+| `ALLOWED_ORIGINS` | Existing global production configuration requires explicit HTTPS API/frontend origins; separate from optional MCP browser origins |
+
+Configure real values through deployment environment/secrets, not Git.
+`MCP_PUBLIC_URL` is public metadata, not a token. Production validation rejects
+insecure/loopback public URLs, wildcard origins, and credential-bearing URLs.
+The public URL's authority supplies the SDK's exact Host allowlist; no localhost
+exception is added for the public MCP route. Origin-less server clients work;
+if a browser sends Origin, it must match `MCP_ALLOWED_ORIGINS`.
+
+Local start from backend: `DATABASE_TARGET=local python -m app.mcp`.
+Production start, with required settings already provisioned:
+
+```bash
+ENVIRONMENT=production DATABASE_TARGET=supabase MCP_HOST=0.0.0.0 python -m app.mcp
+```
+
+Routes remain `/mcp`, `/health`, `/ready`. Debug is off. TLS belongs at the load
+balancer/reverse proxy/platform; no Python certificate handling is added.
+Preserve the canonical Host and Authorization headers, forward the `/mcp` path
+without rewriting it, and permit MCP POST/GET/DELETE and content types. Keep the
+internal port private; set edge timeouts/body limits and rate controls for your
+platform. Forwarded headers are not trusted by this startup command. Configure
+browser origins only when a browser client is actually required.
+
+The existing backend Docker image can run MCP by overriding its command to
+`python -m app.mcp` and setting `MCP_HOST=0.0.0.0`, with port publishing at your
+edge. Its existing `.dockerignore` excludes `.env*`; inject environment at
+runtime. The default image command remains FastAPI; there is no new
+infrastructure stack. Image build and public deployment are not part of this pass.
+
+Every authenticated request uses the existing JWT verifier; no fallback is
+added. Auth outcomes (`authenticated`, `unauthorized`, `unavailable`) are logged
+with request ID, safe user ID, and duration. Verified request identity is passed
+to tools, avoiding duplicate JWT verification. Do not log OAuth secrets, raw
+claims, bearer headers, or provider payloads.
+
+### Remote smoke and discovery
+
+From backend, set `MCP_PUBLIC_URL` and optionally `COUNTON_API_URL` in the
+process environment. Supply `COUNTON_TEST_ACCESS_TOKEN` securely in that
+environment, or use the hidden token prompt. Do not put tokens in CLI flags.
+
+```bash
+python db/scripts/mcp_remote_smoke.py --discovery-only
+python db/scripts/mcp_remote_smoke.py
+```
+
+Endpoint overrides: `--mcp-url https://<host>/mcp` and
+`--api-url https://<api-host>`. HTTPS certificate verification remains enabled.
+Discovery initializes the current SDK client and reports missing/unexpected
+tools against exactly the three core names. Without an API URL the second
+command is a **read-only probe**, and explicitly reports capture/get/cross-check
+and cleanup as NOT RUN. No orphan test rows are created.
+
+With a matching API URL, it runs list → tagged capture → list/get → FastAPI
+cross-check and owner-scoped exact-tag cleanup, including missing/invalid auth
+and malformed input checks. Both services must use the same database and
+accept the same user token. Cleanup failures exit nonzero; normal audit history
+is retained. No second user identity or token exchange is fabricated.
+
+Public-host initialization, discovery, Host/Origin rejection, and signed JWT
+behavior are tested without live Alexa+. Local network smoke remains available
+with `mcp_smoke.py`; its `--discovery-only` mode is non-mutating. A real public
+HTTPS smoke cannot be reported as passed until a deployed URL/token is supplied.
+
+### Account-linking boundary and current gap
+
+Intended identity flow: Alexa+ user → CountOn account link → existing
+Supabase user session → accepted JWT → MCP HTTP request → verified CountOn
+user → existing ownership-filtered services. Alexa-supplied profile/user IDs
+are never identities. Future OAuth tokens must satisfy current issuer/audience/
+role validation or use an explicitly designed, validated session exchange.
+
+Amazon's [MCP quickstart](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart.html)
+requires remote Streamable HTTP, HTTP 401 without a challenge header, protected
+resource metadata, authorization-server metadata with S256, authorization-code
+PKCE, and canonical `resource` handling. This pass supplies remote host config
+and the 401 bearer boundary. It does **not** publish fake PRM/OAuth endpoints.
+The resource hook is `MCP_PUBLIC_URL`; the identity hook is existing
+`auth.authenticated_user_from_header` and the trusted HTTP request state.
+
+Authorization/consent/code/token/refresh endpoints, static Alexa client
+registration, approved redirects, PRM contents, scopes, and real account linking
+are **NOT IMPLEMENTED**. Supabase sign-in alone does not prove these OAuth
+requirements are met. There is no Alexa add-on ID or client configuration in
+this repository. The deployment is therefore **not connected to Alexa+**.
+
+Next action: provision the HTTPS endpoint and compatible OAuth authorization
+server, then register the Alexa client and all provided redirects. Once metadata
+is genuinely available, follow Amazon's
+[account-linking guide](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-account-linking.html)
+and run `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <id>`.
+Enter any client secret through its masked prompt. Configure only with actual
+issued IDs; test two linked users before enabling customer writes.
+
+Validation on 2026-10-06: **309 backend tests passed**, dependency and syntax
+checks passed, real-token local smoke (including exact-tag cleanup) passed, and
+separate authenticated discovery passed. Configured public Host/Origin behavior
+was verified in tests. Live remote HTTPS smoke and Alexa+ linking were **NOT
+RUN**: no deployed public endpoint or actual OAuth client configuration was
+provided. No backend lint/type check is configured. Tools, service/repository
+logic, evaluators, and migrations were not changed by this pass.

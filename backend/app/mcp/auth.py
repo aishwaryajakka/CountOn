@@ -18,5 +18,9 @@ def authenticated_user_from_header(authorization: str | None) -> AuthenticatedUs
 
 def current_user(context: Context) -> AuthenticatedUser:
     """Verify transport credentials for every call; no identity from arguments."""
+    request = context.request_context.request
+    verified = getattr(getattr(request, "state", None), "counton_user", None)
+    if isinstance(verified, AuthenticatedUser):
+        return verified
     headers = context.headers
     return authenticated_user_from_header(headers.get("authorization") if headers else None)
