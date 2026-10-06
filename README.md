@@ -306,3 +306,9 @@ npm run dev
 Configure the public API/Supabase values in ignored `frontend/.env.local`, then
 open **http://localhost:3000**. Teammate setup, routes, demo seeding, limitations
 and validation commands are in [frontend/README.md](frontend/README.md).
+
+## MCP integration
+
+See the [MCP handoff guide](docs/mcp.md) for local Streamable HTTP startup,
+JWT authentication, tool contracts, network smoke tests, the Person 2 compiler
+interface, and Alexa+ integration next steps.
