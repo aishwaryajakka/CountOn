@@ -1,0 +1,7 @@
+{
+  "event_id": "ring_001",
+  "kind": "package_detected",
+  "timestamp": "2026-10-06T14:32:00+05:30",
+  "confidence": 0.92,
+  "device": "front_door"
+}
