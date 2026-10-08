@@ -26,14 +26,17 @@ def validate_expectation(values: dict[str, Any]) -> None:
             raise InvalidExpectationError("Numeric expectations require a baseline or target_value")
 
 
-def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None) -> Expectation:
+def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None, commit: bool = True) -> Expectation:
     validate_expectation(payload.model_dump())
     try:
         ensure_profile(db, user_id)
         expectation = repository.create_expectation(db, payload, user_id, compiler_metadata)
         operations.ensure_job(db, expectation)
         operations.audit(db, expectation, "expectation.created")
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
     except Exception:
         db.rollback()
         raise

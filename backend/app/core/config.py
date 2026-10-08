@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class Settings(BaseSettings):
@@ -25,6 +26,19 @@ class Settings(BaseSettings):
     local_database_url: str | None = Field(default=None, repr=False)
     supabase_database_url: str | None = Field(default=None, repr=False)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    bedrock_enabled: bool = False
+    aws_region: str = Field(default="us-east-2", min_length=1)
+    bedrock_model_id: str = Field(default="openai.gpt-oss-120b-1:0", min_length=1)
+    bedrock_max_tokens: int = Field(default=1000, ge=1, le=65536)
+    bedrock_temperature: float = Field(default=0.1, ge=0, le=1)
+    bedrock_request_timeout_seconds: int = Field(default=30, gt=0, le=120)
+    bedrock_max_retries: int = Field(default=2, ge=0, le=5)
+    bedrock_native_structured_output: bool = False
+    investigator_max_evidence: int = Field(default=6, ge=1, le=12)
+    investigator_max_prompt_bytes: int = Field(default=12000, ge=2048, le=64000)
+    counton_clarification_signing_key: SecretStr | None = Field(default=None, repr=False)
+    clarification_max_turns: int = Field(default=6, ge=1, le=12)
+    clarification_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
     rate_limit_enabled: bool = True
     rate_limit_backend: Literal["memory"] = "memory"
@@ -64,7 +78,7 @@ class Settings(BaseSettings):
             raise ValueError(f"{name} is required for DATABASE_TARGET={self.database_target}")
         try:
             url = make_url(selected)
-        except Exception:
+        except (ArgumentError, ValueError):
             raise ValueError(f"{name} is not a valid PostgreSQL URL") from None
         if url.drivername != "postgresql+psycopg" or not url.host or not url.database:
             raise ValueError(f"{name} must use postgresql+psycopg:// with a host and database")

@@ -1,3 +1,7 @@
+> Current implementation: [Bedrock integration](../../docs/bedrock-integration.md).
+> Capture now compiles through MCP/Bedrock and then captures separately. Earlier
+> regex-only demo notes below are historical; they do not describe production capture.
+
 # CountOn Alexa+ MCP Demo
 
 `/alexa` is an authenticated CountOn hackathon conversation, not Amazon's
@@ -11,49 +15,36 @@ The transport is unchanged. The connection badge requires successful real
 initialization, discovery, and availability of the three required tools.
 Successful calls expose only safe protocol metadata in expandable traces.
 
-## Deterministic routing
+## Constrained conversational routing
 
-`lib/alexa-router.ts` is a separate, replaceable routing/compilation seam:
+`lib/alexa-router.ts` selects intent only; it never compiles an expectation or
+creates evidence. List/get use existing MCP tools and real owned records. Capture
+uses trusted Next.js orchestration, the existing compiler and clarification, then
+`capture_expectation` only after COMPILED. Calendar reasoning uses a trusted
+backend clock, never an invented browser deadline.
 
-- List phrases call `list_expectations` with `{request:{limit:50,offset:0}}`.
-- Detail phrases list first, match actual claim/metric values, and get the
-  matched real UUID. No match produces an honest response. Multiple matches
-  require clarification; the demo never chooses an arbitrary ID.
-- Grocery capture accepts explicit USD amounts for this week in the supported
-  phrase family. Unsupported currencies, extra conditions and unrecognized
-  capture requests need clarification. Inputs are checked against the existing
-  capture contract before submission.
+“Why did my electricity expectation fail?” and “Why was my bill higher?” list
+owned records and match actual claims/metrics. Multiple matches ask for a more
+specific claim and retain those candidates for the reply. No match is reported
+honestly. “Why did it fail?” / “Why didn't this match?” refer only to the most
+recent explicitly viewed/captured expectation; without one, CountOn asks which
+expectation. Search covers the first 50 records and discloses that limit.
 
-For “I'm counting on my grocery bill staying under $120 this week”, the generated
-tool arguments are exactly:
+`explain_expectation_mismatch` loads the latest deterministic evaluation. MATCH
+says it matched, UNKNOWN says CountOn is still watching, and no evaluation says
+it is waiting. None invokes the investigator. Only confirmed MISMATCH loads
+bounded relevant evidence and runs the existing grounded investigator. Bad
+citations, unavailable Bedrock or missing evidence return safe fallbacks.
 
-```json
-{
-  "request": {
-    "claim": "I'm counting on my grocery bill staying under $120 this week",
-    "type": "numeric_comparison",
-    "metric": "total_cost",
-    "comparison": "less_than",
-    "target_value": 120,
-    "deadline": "<Sunday 23:59:59.999 in the device timezone, serialized as UTC ISO with Z>",
-    "evidence_sources": [],
-    "materiality_threshold": 0
-  }
-}
-```
+Speech uses only the server's concise `message`. Structured provenance contains
+`expectation_id`, `evaluation_id`, bounded real `evidence_ids`, `bedrock_used`, and
+`fallback_used`; IDs/raw metadata are not spoken. Possible rate contribution is
+not proof that a rate change outweighed usage: observations do not establish a
+net effect, causality or matching billing periods. No external market facts,
+evidence or evaluation state are invented.
 
-The deadline is generated from the current browser clock; it is never a fixed
-date. Zero tolerance honors “under” as a strict cap. No baseline, provider,
-evidence, or evaluation is invented. The UI explicitly identifies USD and the
-device timezone. Capture success links the actual returned ID to the normal
-expectation detail page.
-
-The inspected compiler service/API are placeholders; `app/mcp/compiler.py`
-declares a future interface only. Bedrock was not reused and no LLM dependency
-was added. The demo displays only MCP's current compact fields: claim, type,
-status, metric, and creation date. It does not infer evaluation or evidence
-details. Lists/searches are limited to the first 50 expectations and disclose
-that limit when reached. The transcript is in memory and resets on page reload.
+Transcript/context reset on reload or user change. This is a CountOn web
+simulator, not a completed Alexa/Echo integration.
 
 ## Voice and accessibility
 
@@ -112,3 +103,60 @@ into that origin independently. The script creates one row via MCP and uses
 FastAPI only for an independent persistence cross-check and deletion of that
 exact test-created row, never as the simulator tool path. No tokens or passwords
 are printed or saved to artifacts.
+
+## Conversational expectation capture
+
+The browser sends one message (and an opaque continuation handle) to the authenticated
+Next.js `/api/mcp` `converse` action. The route calls the existing Python MCP
+`compile_expectation` or `continue_expectation_compilation` over Streamable HTTP.
+Those tools delegate to the existing compiler and `ClarificationEngine`; no browser
+parser, second clarification format, or full transcript is supplied to Bedrock.
+Only a COMPILED result causes one nested `capture_expectation` call. The resulting
+expectation uses ordinary CountOn services and is visible through the dashboard API.
+
+Example: “I'm counting on my bill being lower” → subject question → “My electricity
+bill” → comparison question → “My last bill was $142.10” → timing question → “When my
+next bill arrives” → saved confirmation. That last phrase is a grounded
+**evidence-arrival condition in the claim**, not an invented calendar deadline or
+an automatic scheduling feature. Calendar dates still use the existing temporal
+reasoning. Conversational numeric captures also ask for missing timing.
+
+Corrections, cancellation, unrelated answers, new topics, expiration and turn
+limits use the existing engine. “Actually make that $150” changes the relevant
+amount only. List/detail queries can be made without discarding active clarification.
+Refreshing starts a new browser conversation; signing out/changing users clears it.
+The transcript shows questions/replies and safe Bedrock/MCP labels, never prompts,
+model drafts, capture tickets or bearer tokens.
+
+### Deployment and replay safety
+
+Apply the new Alembic migration before deploying the updated MCP server:
+
+```sh
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Keep `BEDROCK_ENABLED=true` and the existing AWS model/region configuration on the
+trusted backend. Production requires a dedicated `COUNTON_CLARIFICATION_SIGNING_KEY`
+(at least 32 random bytes) on that backend, never a `NEXT_PUBLIC_*` variable.
+`COUNTON_MCP_URL` remains a server-only Vercel variable. No AWS credentials move to
+Vercel or the browser. The DB role needs access to `compilation_sessions`; that
+ledger has RLS enabled with no browser policies (use the existing trusted DB role).
+
+The ledger stores the existing canonical `ClarificationState`, owner and latest
+handle digest. Each continuation consumes its previous handle. Completed,
+cancelled, failed, replaced and expired conversations cannot reuse an old active
+handle. Compiled capture verifies the exact trusted payload and atomically commits
+its expectation ID with normal expectation creation. Replayed capture returns the
+same owned expectation, including across workers/restarts; it never creates another
+row. Initial requests have a stable compilation ID for request replay protection.
+A deleted captured expectation is not silently recreated.
+
+Clarification TTL and max-turn settings remain authoritative. The turn limit now
+defaults to six to allow corrections alongside the three subject/baseline/timing
+answers. Existing `CLARIFICATION_MAX_TURNS` overrides still apply; use six on the
+backend for this demo. Expired ledger records are
+inert; no automatic retention job is added in this pass. Any future cleanup must
+retain records until after their signed state expires.

@@ -113,7 +113,7 @@ def test_remote_host_initialization_discovery_and_origin_policy(verifier, monkey
         payload = {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}}
         response = client.post('/mcp', headers=headers, json=payload)
         tools = response.json()['result']['tools']
-        assert {tool['name'] for tool in tools} == CORE_TOOLS
+        assert {tool['name'] for tool in tools} >= CORE_TOOLS
         for tool in tools:
             assert tool['inputSchema']['required'] == ['request']
             assert 'user_id' not in str(tool['inputSchema'])

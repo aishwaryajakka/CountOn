@@ -68,7 +68,7 @@ async def discover(url, token):
         async with Client(streamable_http_client(url, http_client=http), cache=None) as client:
             result = await client.list_tools()
             names = {tool.name for tool in result.tools}
-            if names != CORE_TOOLS or len(result.tools) != len(CORE_TOOLS):
+            if not CORE_TOOLS <= names:
                 import re
                 safe = lambda name: name if re.fullmatch(r'[A-Za-z0-9_]{1,80}', name) else '<invalid name>'
                 missing = sorted(CORE_TOOLS - names)
@@ -78,7 +78,7 @@ async def discover(url, token):
             for tool in result.tools:
                 json.dumps(tool.input_schema, allow_nan=False)
                 json.dumps(tool.output_schema, allow_nan=False)
-    print('PASS MCP initialization and exact core tool discovery')
+    print('PASS MCP initialization and required core tool discovery')
 
 
 async def unauthorized_http(url, token, stage):

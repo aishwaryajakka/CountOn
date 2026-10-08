@@ -12,10 +12,13 @@ The skill supplies instructions, not credentials or a connection implementation.
 | `list_expectations` | Optional `limit` (1–100, default 50), `offset` (>=0, default 0), `status`, `type` | `expectations` array, `limit`, `offset` |
 | `get_expectation` | `expectation_id`: real UUID from user or owned list result | Compact expectation |
 | `capture_expectation` | Existing `ExpectationCreate` fields below | Saved compact expectation |
+| `compile_expectation` | `text` (1–2000), IANA `timezone`, optional `locale` | Compilation result; never saves |
+| `continue_expectation_compilation` | Actual signed `state`, `answer` (1–2000) | Question, compilation, cancellation or safe failure |
+| `explain_expectation_mismatch` | Actual owned `expectation_id` | Real evaluation result, grounded explanation or no-evaluation/non-mismatch message |
 
 Compact fields are `id`, `claim`, `type`, `status`, `metric`, `created_at`.
-Current tools do not expose baseline, target, evidence, evaluation results or
-causal reasoning. Page length is not a total count unless all pages were read.
+Core tools remain compact. Compilation returns structured expectations; explanation
+returns real evaluations and grounded factors. No generic evidence mutation tool exists. Page length is not a total count unless all pages were read.
 Hosts may namespace names; choose the matching discovered CountOn tool.
 
 Capture accepts nonempty `claim`, `type`, and optional `metric`, `comparison`,
@@ -62,29 +65,11 @@ or evaluations.
 
 “I'm counting on my grocery bill staying under $120 this week.”
 
-Established context for this example: USD, local date 2026-10-08, timezone
-`America/Chicago`, week ending Sunday. The existing grocery demo uses metric
-`total_cost`. “Under” is strict: `less_than`, zero tolerance. No source was given.
-Call `capture_expectation` with:
-
-```json
-{
-  "request": {
-    "claim": "I'm counting on my grocery bill staying under $120 this week",
-    "type": "numeric_comparison",
-    "metric": "total_cost",
-    "comparison": "less_than",
-    "target_value": 120,
-    "deadline": "2026-10-12T04:59:59.999Z",
-    "evidence_sources": [],
-    "materiality_threshold": 0
-  }
-}
-```
-
-Recompute the deadline for the real reference time and established timezone/week
-boundary. Do not copy the example date. If currency, timezone, week boundary or
-intended metric is unknown, clarify rather than assume this example's context.
+Establish timezone/locale and call `compile_expectation` with this actual text.
+Use clarification/continuation if requested; otherwise pass the returned structured
+expectation unchanged to `capture_expectation`. Do not manually create a static
+capture object or change the compiler's configured materiality threshold. The
+compiler resolves the real reference time server-side; never copy an example date.
 On success: “Got it. I saved that expectation in CountOn.” Link the returned ID
 to the host-configured frontend's `/expectations/{id}`. Do not claim evidence,
 evaluation, automatic ingestion or a notification was created.
@@ -95,10 +80,35 @@ evaluation, automatic ingestion or a notification was created.
 or previous bill? What period should CountOn track?” Wait for missing facts;
 do not infer `total_cost`, baseline or provider from other examples.
 
-“Why did it fail?” → Read the identifiable stored record. If marked contradicted,
-report that status and disclose that current tools do not expose evidence or
-evaluation reasoning. Offer its CountOn detail page; do not guess a cause.
+“Why did it fail?” → List/match the owned record, then call
+`explain_expectation_mismatch`. Report only its actual result and grounded factors;
+retain uncertainty and fallback caveats. Do not guess a cause.
 
 Missing/rejected auth → host sign-in. Unavailable server → disclose connection
 failure. Validation error → clarify inputs without raw upstream errors. An
 inaccessible UUID is not permission to enumerate another user's records.
+
+
+## Intelligence examples
+
+Compile using the user's actual text and established calendar context:
+```json
+{"request":{"text":"I'm counting on my grocery bill staying under $120 this week","timezone":"America/Chicago","locale":"en-US"}}
+```
+Compilation result: `status` compiled/clarification/cancelled/expired/unsupported/error,
+`message`, nullable `expectation`/opaque `state`/`code`, `bedrock_used`,
+`prompt_version`, `clarification_turn`. Only a compiled expectation goes to capture.
+Continuation:
+```json
+{"request":{"state":"<actual returned signed state>","answer":"My electricity bill"}}
+```
+Explanation:
+```json
+{"request":{"expectation_id":"<actual owned expectation UUID>"}}
+```
+Explanation response: `result` MATCH/UNKNOWN/MISMATCH/null, `evaluation_id`,
+`message`, nullable `code`/`explanation`, `bedrock_used`. Explanation contains
+immutable expected/observed, factors, caveats, confidence note and references.
+NO_EVALUATION and NOT_MISMATCH never invoke investigation. NO_EVIDENCE and
+INVESTIGATION_UNAVAILABLE accompany deterministic summaries when appropriate.
+These limitations are not permission to create evidence or reevaluate.

@@ -5,7 +5,8 @@
 Alexa+ client → MCP/orchestration → existing CountOn services → repositories →
 PostgreSQL/Supabase. The standalone server uses official Python MCP SDK 2.x,
 stateless **Streamable HTTP** and JSON responses. It does not replace FastAPI,
-compile natural language, or change deterministic evaluation.
+replace the compiler or change deterministic evaluation. Existing intelligence
+tools delegate interpretation/clarification/explanation to the canonical AI services.
 
 ## Run Locally
 
@@ -153,30 +154,24 @@ The separate remote script accepts HTTPS endpoints, as documented below.
 Run `python -m pytest` from backend with the existing dedicated local
 `TEST_DATABASE_URL` ending in `_test`. Without it DB tests skip. Network tests
 reuse signed JWT fixtures and savepoint-isolated PostgreSQL, requiring no live
-Supabase, Alexa+, or Bedrock. No backend lint/type tool is configured;
+Supabase, Alexa+, or Bedrock. Scoped Ruff and strict mypy checks cover the AI/MCP modules;
 `python -m pip check` verifies dependencies.
 
-## Person 2 Compiler Integration
+## Compiler and explanation integration
 
-`backend/app/mcp/compiler.py` defines a **Protocol only**:
+`backend/app/mcp/compiler.py` delegates to the production compiler service and
+retains `StructuredExpectation = ExpectationCreate`. Trusted context comes from
+verified authentication plus the backend clock; no tool payload chooses an owner.
+`compile_expectation` and `continue_expectation_compilation` reuse the existing
+stateful engine. Only COMPILED proceeds to `capture_expectation`. Compilation
+never evaluates; incomplete expectations are never saved.
 
-```python
-compile_expectation(text: str, context: CompilationContext) -> StructuredExpectation
-```
-
-`StructuredExpectation` aliases the actual `ExpectationCreate`, and
-`CompilationContext` carries a trusted authenticated user, timezone-aware
-reference time, and verified IANA timezone. The orchestrator supplies context;
-never accept it as an ownership assertion from Alexa/tool arguments. No tokens
-or raw provider payloads belong in compiler context or output.
-
-Future flow: utterance → orchestration → Person 2's compiler → validate
-`ExpectationCreate` → `capture_expectation` under the same verified identity.
-The compiler must not persist, evaluate, choose an owner, or invoke capture
-itself. Missing baseline/metric/comparison/timezone facts require clarification;
-do not guess values. Clarification/error handling and the eventual sync/async
-adapter belong to the integration pass. No compiler implementation, Bedrock
-client, or compile tool is registered here.
+`explain_expectation_mismatch` accepts an owned expectation UUID, loads the latest
+deterministic evaluation and investigates only MISMATCH. MATCH/UNKNOWN/no evaluation
+skip the investigator. It returns concise speech plus expectation/evaluation IDs,
+selected evidence IDs, `bedrock_used` and `fallback_used`. No arbitrary external
+facts, raw provider payloads or credentials are exposed. All six tools retain
+exactly one top-level `request` argument; transport remains Streamable HTTP.
 
 ## Future Tools (not registered)
 
@@ -184,14 +179,14 @@ client, or compile tool is registered here.
 | --- | --- | --- | --- | --- |
 | `add_evidence` | Attach normalized evidence | expectation UUID, actual `EvidenceCreate`, optional idempotency key | Evidence ID, expectation ID, source, metric, value, unit, observed_at, confidence | `evidence_service.add_evidence` |
 | `evaluate_expectation` | Run deterministic evaluation | expectation UUID | Evaluation ID, result MATCH/UNKNOWN/MISMATCH, expected, observed, confidence, reasoning, created_at | `evaluation_service.evaluate_expectation` |
-| `explain_contradiction` | Explain persisted contradiction facts | expectation UUID | Persisted result, expected/observed and reasoning; no invented explanation | `evaluation_service.get_latest_evaluation`; no implemented investigator service exists |
+| `explain_contradiction` | Unregistered alias; do not add a duplicate | — | Use existing `explain_expectation_mismatch` | Existing grounded investigator via owned evaluation/evidence reads |
 | `update_expectation` | Update allowed fields | expectation UUID, actual `ExpectationUpdate` | Compact updated expectation | `expectation_service.update_expectation` |
 | `resolve_expectation` | Mark resolved without deletion | expectation UUID | Compact expectation with status resolved | `expectation_service.update_expectation` with `ExpectationUpdate(status="resolved")` |
 
 All future calls must reuse verified identity and existing ownership checks.
-Explanations should report the persisted deterministic reasoning; Person 2's
-future investigator may enrich it later, but the current investigator module
-is only a placeholder. No new service or false functionality is provided.
+The grounded investigator is implemented and exposed through the existing
+`explain_expectation_mismatch` tool; no future alias should duplicate it. The
+deterministic evaluator remains the only authority for outcomes.
 
 ## Known Limitations
 
@@ -326,3 +321,15 @@ was verified in tests. Live remote HTTPS smoke and Alexa+ linking were **NOT
 RUN**: no deployed public endpoint or actual OAuth client configuration was
 provided. No backend lint/type check is configured. Tools, service/repository
 logic, evaluators, and migrations were not changed by this pass.
+
+
+## Bedrock intelligence integration
+
+The three core contracts are preserved. Additional authenticated, typed tools are
+`compile_expectation`, `continue_expectation_compilation`, and
+`explain_expectation_mismatch`. Compilation/clarification never save; `/alexa`
+invokes capture separately. The high-level explanation tool owns evaluation/evidence
+reads and never evaluates or mutates. See [the current integration handoff](bedrock-integration.md)
+for schemas, signed user-bound continuation state, deployment configuration, smoke
+commands and known live-validation limits. Older three-tool acceptance notes below
+or above describe that earlier deployment; discover the actual tools before use.

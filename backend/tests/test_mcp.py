@@ -32,14 +32,15 @@ def test_package_imports():
 async def test_registered_names_descriptions_and_schemas():
     async with Client(create_server(), raise_exceptions=True) as client:
         result = await client.list_tools()
-        assert {tool.name: tool.description for tool in result.tools} == DESCRIPTIONS
+        assert {tool.name: tool.description for tool in result.tools if tool.name in DESCRIPTIONS} == DESCRIPTIONS
+        assert {tool.name for tool in result.tools} >= set(DESCRIPTIONS) | {"compile_expectation", "continue_expectation_compilation", "explain_expectation_mismatch"}
         for tool in result.tools:
             schema = tool.input_schema
             assert "request" in schema["properties"]
             assert "user_id" not in str(schema)
             assert tool.output_schema is not None
-            assert tool.annotations.read_only_hint == (tool.name != "capture_expectation")
-            assert tool.annotations.idempotent_hint == (tool.name != "capture_expectation")
+            assert tool.annotations.read_only_hint == (tool.name in {"get_expectation", "list_expectations", "explain_expectation_mismatch"})
+            assert tool.annotations.idempotent_hint == (tool.name in ("get_expectation", "list_expectations"))
             assert tool.annotations.destructive_hint is False
 
 
@@ -70,7 +71,7 @@ def test_streamable_http_initializes_without_database_or_evaluation(monkeypatch)
             "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
         })
         assert response.status_code == 200
-        assert {tool["name"] for tool in response.json()["result"]["tools"]} == set(DESCRIPTIONS)
+        assert {tool["name"] for tool in response.json()["result"]["tools"]} >= set(DESCRIPTIONS)
         inputs = {
             "capture_expectation": {"claim": "My bill will be lower", "type": "numeric_comparison",
                                     "metric": "total_cost", "comparison": "less_than", "baseline": 142.1},

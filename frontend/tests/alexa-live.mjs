@@ -29,15 +29,6 @@ async function login(origin) {
   await page.getByRole('button', { name: 'Sign in to CountOn' }).click();
   await page.waitForURL('**/dashboard');
 }
-// Tag only the test write at the browser boundary; the product parser is unchanged.
-await page.route('**/api/mcp', async route => {
-  const request = route.request();
-  const body = request.postDataJSON();
-  if (body?.action === 'call_tool' && body.tool === 'capture_expectation') {
-    body.arguments.request.claim = taggedClaim;
-    await route.continue({ postData: JSON.stringify(body) });
-  } else await route.continue();
-});
 try {
   await page.goto(site + '/alexa'); await page.waitForURL('**/login');
   await login(site);
@@ -55,7 +46,9 @@ try {
   await page.getByText('MCP → get_expectation', { exact: true }).click();
   await mkdir('test-results/alexa', { recursive: true });
   await page.screenshot({ path: 'test-results/alexa/desktop.png', fullPage: true });
-  await page.getByRole('button', { name: claim }).click();
+  await page.getByLabel('Message CountOn').fill(taggedClaim);
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('MCP → compile_expectation', { exact: true })).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText('Saved to CountOn', { exact: true })).toBeVisible();
   await expect(page.getByText('MCP → capture_expectation', { exact: true })).toBeVisible();
   const href = await page.getByRole('link', { name: 'View in CountOn' }).getAttribute('href');
@@ -77,7 +70,7 @@ try {
   if (persisted.status !== 200) throw new Error('API persistence cross-check failed');
   const stored = await persisted.json();
   if (stored.claim !== taggedClaim || stored.target_value !== 120 || stored.comparison !== 'less_than') throw new Error('Stored capture contract mismatch');
-  console.log('PASS login, real discovery, list, list/get detail, capture, handoff, refresh, persistence, mobile layout and MCP-only browser path');
+  console.log('PASS login, real discovery, list, list/get detail, Bedrock compile then capture, handoff, refresh, persistence, mobile layout and MCP-only browser path');
 } catch {
   process.exitCode = 1;
   console.error('Alexa live acceptance failed; private records and credentials omitted.');

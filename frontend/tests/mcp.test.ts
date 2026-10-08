@@ -8,7 +8,7 @@ vi.mock('@modelcontextprotocol/client', async importOriginal => {
 import { POST } from '@/app/api/mcp/route';
 import { requestMcp } from '@/lib/mcp/client';
 const token = 'private-test-token';
-const toolList = ['capture_expectation', 'get_expectation', 'list_expectations'].map(name => ({ name, description: name, inputSchema: { type: 'object' } }));
+const toolList = ['capture_expectation', 'get_expectation', 'list_expectations', 'compile_expectation', 'continue_expectation_compilation', 'explain_expectation_mismatch'].map(name => ({ name, description: name, inputSchema: { type: 'object' } }));
 const request = (body: unknown, authorization: string | null = `Bearer ${token}`) => new Request('http://localhost/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorization ? { Authorization: authorization } : {}) }, body: JSON.stringify(body) });
 describe('MCP route and browser helper', () => {
   beforeEach(() => {
@@ -75,7 +75,7 @@ describe('MCP route and browser helper', () => {
     expect(body.error.code).toBe('MCP_PROTOCOL_ERROR'); expect(body.meta.initialized).toBe(false);
     expect(JSON.stringify(body)).not.toMatch(/private|postgresql/); expect(sdk.close).toHaveBeenCalledOnce();
   });
-  it.each([['UNAUTHORIZED', 'AUTH_EXPIRED'], ['INVALID_ARGUMENTS', 'TOOL_VALIDATION_ERROR'], ['INVALID_EXPECTATION', 'TOOL_VALIDATION_ERROR'], ['NOT_FOUND', 'TOOL_EXECUTION_ERROR'], ['DATABASE_ERROR', 'TOOL_EXECUTION_ERROR']])('normalizes %s tool errors', async (upstream, expected) => {
+  it.each([['UNAUTHORIZED', 'AUTH_EXPIRED'], ['INVALID_ARGUMENTS', 'TOOL_VALIDATION_ERROR'], ['INVALID_EXPECTATION', 'TOOL_VALIDATION_ERROR'], ['NOT_FOUND', 'NO_EXPECTATION'], ['DATABASE_ERROR', 'TOOL_EXECUTION_ERROR']])('normalizes %s tool errors', async (upstream, expected) => {
     sdk.callTool.mockResolvedValue({ isError: true, content: [{ type: 'text', text: `${upstream}: private ${token}` }] });
     const response = await POST(request({ action: 'call_tool', tool: 'list_expectations', arguments: { request: {} } }));
     const body = await response.json(); expect(body.error.code).toBe(expected); expect(JSON.stringify(body)).not.toContain(token);
@@ -103,4 +103,57 @@ describe('MCP route and browser helper', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: { code: 'MCP_UNAVAILABLE', message: `private ${token}` } }, { status: 503 })));
     await expect(requestMcp(token, { action: 'list_tools' })).rejects.toMatchObject({ code: 'MCP_UNAVAILABLE', message: 'CountOn tools are temporarily unavailable. Try again later.' });
   });
+
+  it('forwards compiler and continuation over real SDK-shaped nested requests, and logs no secrets', async () => {
+    const logger = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      sdk.callTool.mockResolvedValue({ content: [], structuredContent: { status: 'clarification', message: 'Which bill?', expectation: null, state: 'signed-private-state', code: 'CLARIFICATION_REQUIRED', bedrock_used: true, prompt_version: 'v2', clarification_turn: 0 } });
+      const response = await POST(request({ action: 'call_tool', tool: 'compile_expectation', arguments: { request: { text: 'My bill lower', timezone: 'UTC', locale: 'en-US' } } }));
+      expect(response.status).toBe(200);
+      expect(sdk.callTool.mock.calls[0][0]).toEqual({ name: 'compile_expectation', arguments: { request: { text: 'My bill lower', timezone: 'UTC', locale: 'en-US' } } });
+      const body = await response.json();
+      expect(body.result.structuredContent.state).toBe('signed-private-state');
+      expect(body.meta.requestId).toBeTruthy();
+      const continuation = await POST(request({ action: 'call_tool', tool: 'continue_expectation_compilation', arguments: { request: { state: 'signed-private-state', answer: 'Electricity bill' } } }));
+      expect(continuation.status).toBe(200);
+      expect(JSON.stringify(logger.mock.calls)).not.toMatch(/private-test-token|signed-private-state|My bill lower|Authorization/);
+      expect(JSON.stringify(body)).not.toContain(token);
+    } finally { logger.mockRestore(); }
+  });
+  it('rejects unrecognized compiler output fields instead of forwarding a leaked credential', async () => {
+    sdk.callTool.mockResolvedValue({ content: [], structuredContent: { status: 'error', message: 'No interpretation', state: null, expectation: null, code: 'BEDROCK_UNAVAILABLE', bedrock_used: false, prompt_version: 'v2', clarification_turn: 0, jwt: token } });
+    const response = await POST(request({ action: 'call_tool', tool: 'compile_expectation', arguments: { request: { text: 'My bill lower', timezone: 'UTC' } } }));
+    const body = await response.json();
+    expect(body.error.code).toBe('MCP_PROTOCOL_ERROR');
+    expect(JSON.stringify(body)).not.toContain(token);
+  });
+});
+
+it('trusted conversation compiles then captures once with nested arguments and hides ticket', async () => {
+  vi.stubEnv('COUNTON_MCP_URL', 'https://mcp.test/mcp');
+  sdk.connect.mockResolvedValue(undefined); sdk.close.mockResolvedValue(undefined);
+  sdk.listTools.mockResolvedValue({ tools: toolList });
+  const expectation = { claim: 'My grocery bill under $120 this week', type: 'numeric_comparison', metric: 'total_cost', comparison: 'less_than', target_value: 120 };
+  sdk.callTool.mockReset().mockResolvedValueOnce({ content: [], structuredContent: { status: 'compiled', message: 'Ready', expectation, state: null, capture_state: 'private-capture-ticket', bedrock_used: true, prompt_version: 'v2', clarification_turn: 0 } }).mockResolvedValueOnce({ content: [], structuredContent: { id: '12345678-1234-4234-8234-123456789abc', claim: expectation.claim } });
+  const result = await POST(request({ action: 'converse', text: "I'm counting on my grocery bill under $120 this week", state: null, turn_id: '12345678-1234-4234-8234-123456789abc', timezone: 'America/Chicago', locale: 'en-US' }));
+  const body = await result.json();
+  expect(result.status).toBe(200);
+  expect(sdk.callTool.mock.calls.map(([call]) => call.name)).toEqual(['compile_expectation', 'capture_expectation']);
+  expect(sdk.callTool.mock.calls[1][0].arguments).toEqual({ request: { ...expectation, compilation_state: 'private-capture-ticket' } });
+  expect(JSON.stringify(body)).not.toContain('private-capture-ticket');
+  expect(JSON.stringify(body)).not.toContain(token);
+  expect(body.result.structuredContent.state).toBeNull();
+  vi.unstubAllEnvs();
+});
+
+it.each(['clarification', 'cancelled', 'expired', 'unsupported', 'error'])('never captures conversation outcome %s', async status => {
+  vi.stubEnv('COUNTON_MCP_URL', 'https://mcp.test/mcp');
+  sdk.connect.mockResolvedValue(undefined); sdk.close.mockResolvedValue(undefined);
+  sdk.listTools.mockResolvedValue({ tools: toolList });
+  sdk.callTool.mockReset().mockResolvedValue({ content: [], structuredContent: { status, message: 'One safe question or response', expectation: null, state: status === 'clarification' ? 'signed-state' : null, bedrock_used: false, prompt_version: 'v2', clarification_turn: 1 } });
+  const result = await POST(request({ action: 'converse', text: 'Never mind', state: 'previous-signed-state', turn_id: '12345678-1234-4234-8234-123456789abc', timezone: 'America/Chicago', locale: 'en-US' }));
+  expect(result.status).toBe(200);
+  expect(sdk.callTool).toHaveBeenCalledOnce();
+  expect(sdk.callTool.mock.calls[0][0]).toMatchObject({ name: 'continue_expectation_compilation', arguments: { request: { state: 'previous-signed-state', answer: 'Never mind' } } });
+  vi.unstubAllEnvs();
 });

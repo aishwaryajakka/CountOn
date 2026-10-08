@@ -13,3 +13,4 @@ __all__ = [
 from app.db.models.operations import AuditEvent, MonitoringJob, Notification
 
 from app.db.models.integration import IntegrationConnection
+from app.db.models.compilation_session import CompilationSession

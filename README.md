@@ -352,3 +352,89 @@ and validation commands are in [frontend/README.md](frontend/README.md).
 See the [MCP handoff guide](docs/mcp.md) for local Streamable HTTP startup,
 JWT authentication, tool contracts, network smoke tests, the Person 2 compiler
 interface, and Alexa+ integration next steps.
+
+## Optional Bedrock intelligence foundation
+
+The shared synchronous Converse client is feature-flagged off by default. It
+strictly validates structured output and never writes business data or decides
+evaluation state. MCP, Alexa simulation and deterministic services remain the
+working execution path. See [configuration, privacy, IAM and testing](backend/app/ai/README.md).
+The expectation compiler now returns a grounded existing `ExpectationCreate`,
+clarification, or unsupported result through a pure application service. It does
+not capture or evaluate. A bounded multi-turn clarification service now preserves
+established facts, supports explicit corrections/cancellation and expires stale
+state; see [the trusted-session integration contract](backend/app/ai/clarification.md).
+The mismatch investigator now explains an already-recorded MISMATCH through a
+pure service, with bounded evidence, validated references/numbers and safe
+fallbacks. It never reevaluates or writes business data. See
+[the investigator handoff](backend/app/ai/investigation.md). The MCP conversational integration is documented in
+[the current integration handoff](docs/bedrock-integration.md).
+
+
+## Alexa+ Bedrock intelligence track
+
+The authenticated `/alexa` conversation now uses the existing Streamable HTTP MCP
+server for compiler/clarification/explanation as well as list/get/capture. Bedrock
+interprets a natural-language expectation, then a separate MCP capture saves it
+through existing services. The normal dashboard reads the same database. Only
+deterministic evaluation decides MATCH/UNKNOWN/MISMATCH; AI explanations remain
+grounded in its recorded values and owned evidence, with safe fallbacks.
+
+See [integration, environment, IAM, test commands and judge demos](docs/bedrock-integration.md).
+The three core tool contracts remain unchanged. Production requires the new MCP
+and frontend code, explicit Bedrock/model configuration, backend-only AWS credentials
+and a shared private clarification signing key. This pass does not claim deployment
+or live AI acceptance. The existing Agent Skill documents the actual six-tool flow.
+
+
+## Backend Bedrock configuration
+
+The existing settings class reads ignored `backend/.env.local` and runtime environment
+overrides. [bedrock.env.sample](backend/bedrock.env.sample) contains credential-free
+configuration defaults: Bedrock disabled, region `us-east-2`, model
+`openai.gpt-oss-120b-1:0`, 1000 tokens, temperature 0.1, 30-second timeout and two
+retries. Copy its settings into the existing backend environment file; preserve
+other database/auth settings. The sample is documentation, not a second loader.
+
+On the trusted backend/Lightsail service, set:
+
+```text
+BEDROCK_ENABLED=true
+AWS_REGION=us-east-2
+BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0
+```
+
+Provide AWS credentials securely at runtime through the normal SDK credential
+provider chain/environment. Never commit credentials or send them to
+frontend/Vercel. Configuration alone does not call Bedrock.
+
+
+### Safe Bedrock connectivity check
+
+Run from the repository root:
+
+```sh
+backend/.venv/bin/python -m pip install -r backend/requirements.txt
+BEDROCK_ENABLED=true backend/.venv/bin/python backend/db/scripts/bedrock_smoke.py --live
+```
+
+The enable flag above applies only to this process. The script reads existing
+backend settings, invokes the configured model with a harmless JSON request and
+validates `{"status":"ok","purpose":"counton"}`. It prints only the model identifier,
+success/failure and safe AWS/SDK error codes, never response bodies or credentials.
+Without `--live` it skips inference; disabled settings fail without invoking AWS.
+The `boto3[crt]` extra supports the standard AWS login credential provider.
+If the check reports `LoginRefreshRequired`, refresh the existing session with
+`aws login`, then rerun the smoke command. See the
+[AWS CLI login documentation](https://docs.aws.amazon.com/cli/latest/reference/login/).
+No database, MCP, frontend or evaluator operations are performed.
+
+### Conversational Alexa+ demo
+
+`/alexa` now sends messages to trusted Next.js orchestration, which uses the existing
+stateful compiler/clarification MCP tools and captures only complete expectations.
+The same CountOn persistence backs the normal dashboard. Apply `alembic upgrade head`
+on the backend before rolling out this version: `compilation_sessions` provides
+user-bound continuation and durable capture replay protection. Keep the existing
+production clarification signing key and Bedrock configuration backend-only.
+See [conversational flow and deployment notes](frontend/docs/alexa-demo.md#conversational-expectation-capture).
