@@ -5,6 +5,10 @@ CountOn stores everyday expectations, ingests evidence and evaluates claims as
 $162 produces `MISMATCH`; $130 produces `MATCH`; unrelated evidence produces
 `UNKNOWN`. Evaluators remain deterministic.
 
+The [CountOn Agent Skill](docs/agent-skill.md) teaches compatible agent hosts the
+existing MCP workflows while separating expectations from evidence/evaluation.
+It complements the Alexa+ web demo; transport remains Streamable HTTP.
+
 ## Architecture
 
 ```text

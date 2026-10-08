@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Clock3, Home, Link2, ListChecks, LogOut, Menu, Settings, X } from 'lucide-react';
+import { Bell, Clock3, Home, Link2, ListChecks, LogOut, Menu, MessageCircle, Settings, X } from 'lucide-react';
 import { useAuth, useIdentity } from './auth-provider';
 import { getSupabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
@@ -14,7 +14,7 @@ const loadBoard = (signal: AbortSignal) => api.board(signal);
 type BoardState = ReturnType<typeof useResource<Awaited<ReturnType<typeof loadBoard>>>>;
 const BoardContext = createContext<BoardState | null>(null);
 export function useBoard() { const state = useContext(BoardContext); if (!state) throw new Error('Workspace provider required'); return state; }
-const navigation = [{ href: '/dashboard', label: 'Home', icon: Home }, { href: '/expectations', label: 'Expectations', icon: ListChecks }, { href: '/integrations', label: 'Connected Accounts', icon: Link2 }, { href: '/notifications', label: 'Notifications', icon: Bell }, { href: '/activity', label: 'Activity', icon: Clock3 }];
+const navigation = [{ href: '/dashboard', label: 'Home', icon: Home }, { href: '/expectations', label: 'Expectations', icon: ListChecks }, { href: '/alexa', label: 'Alexa+ MCP Demo', icon: MessageCircle }, { href: '/integrations', label: 'Connected Accounts', icon: Link2 }, { href: '/notifications', label: 'Notifications', icon: Bell }, { href: '/activity', label: 'Activity', icon: Clock3 }];
 export function Avatar() {
   const { name, email } = useIdentity();
   return email?.toLowerCase() === 'demo@counton.app' ? <Image src="/ashley-reference.png" width={38} height={38} sizes="38px" alt="Ashley’s demo portrait" className="avatar" /> : <span className="avatar initials" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>;

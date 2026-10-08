@@ -32,6 +32,11 @@ URLs should use HTTPS. The base URL is the API origin, without `/api/v1`.
 
 ## Vercel production
 
+The server-side MCP integration and manual verification procedure are documented
+in [docs/mcp-client.md](docs/mcp-client.md). Set `COUNTON_MCP_URL` in Vercel
+Production before deploying that route. This is separate from the dashboard's
+public FastAPI configuration below.
+
 Production: **https://counton-frontend.vercel.app**. Deploy the `frontend`
 directory as a Next.js project; use `npm run build` and the default Next.js
 output settings. No `vercel.json` is required.
@@ -133,6 +138,7 @@ The supplied portrait is used only for this demo account; other users get initia
 | --- | --- |
 | `/` | Redirects to `/dashboard` |
 | `/login` | Email/password sign-in |
+| `/alexa` | Authenticated Alexa+ hackathon conversation using real MCP discovery/list/get/capture; see [demo guide](docs/alexa-demo.md) |
 | `/dashboard` | Actual expectations, latest results, evidence context and dynamic counts |
 | `/expectations` | Cards and filters by presentation status |
 | `/expectations/new` | Conversational claim → explicit manual criteria → confirmation → API create |
