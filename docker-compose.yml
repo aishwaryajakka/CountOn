@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: counton-postgres
+    environment:
+      POSTGRES_DB: counton
+      POSTGRES_USER: counton
+      POSTGRES_PASSWORD: counton_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - counton_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U counton -d counton"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  counton_pgdata:
