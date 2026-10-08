@@ -1,7 +1,3 @@
-> Current implementation: [Bedrock integration](../../docs/bedrock-integration.md).
-> Capture now compiles through MCP/Bedrock and then captures separately. Earlier
-> regex-only demo notes below are historical; they do not describe production capture.
-
 # CountOn Alexa+ MCP Demo
 
 `/alexa` is an authenticated CountOn hackathon conversation, not Amazon's
@@ -10,9 +6,10 @@ the current user's first name. A sidebar link opens the standalone conversation;
 it does not mount the dashboard's FastAPI-backed board provider.
 
 Every tool operation uses `requestMcp(session.access_token, action)` →
-`POST /api/mcp` → official MCP Streamable HTTP client → deployed CountOn MCP.
+`POST /api/mcp` → official MCP Streamable HTTP client → configured CountOn MCP (local or deployed).
 The transport is unchanged. The connection badge requires successful real
-initialization, discovery, and availability of the three required tools.
+initialization, discovery, and availability of the three core tools. That badge alone does not certify all six
+tools or Bedrock readiness; discover the intelligence tools and test them separately.
 Successful calls expose only safe protocol metadata in expandable traces.
 
 ## Constrained conversational routing
@@ -85,13 +82,10 @@ Manual judge flow:
 6. Click “View in CountOn”, verify the row, then refresh to verify persistence.
 7. Expand “How this works” and optionally enable read-aloud.
 
-On 2026-10-08, lint/typecheck/build and 89 standard tests passed. The optional
-read-only MCP integration test remains gated by its explicit endpoint/token
-variables. Chromium also verified normal Supabase login, live connection, list,
-detail, capture, returned-ID handoff to the deployed normal CountOn UI, refresh,
-persisted payload, and 390px layout. No direct FastAPI requests occurred on
-`/alexa`. The one test-created row was deleted by its exact captured ID afterward.
-Desktop/mobile screenshots are in ignored `test-results/alexa/`.
+Run lint/typecheck/tests/build against the current checkout. The optional read-only
+MCP test is gated by explicit endpoint/token variables. Live browser acceptance
+must be repeated after rolling out the compiler, ledger and conversational changes;
+previous core-tool demos do not certify them. No live rollout is asserted here.
 
 To repeat the opt-in browser acceptance, explicitly set `COUNTON_ALEXA_BASE_URL`,
 `COUNTON_E2E_API_BASE_URL`, `COUNTON_E2E_EMAIL`, and `COUNTON_E2E_PASSWORD` in the
@@ -130,7 +124,7 @@ model drafts, capture tickets or bearer tokens.
 
 ### Deployment and replay safety
 
-Apply the new Alembic migration before deploying the updated MCP server:
+Apply the existing compilation-session Alembic migration before deploying the updated MCP server:
 
 ```sh
 cd backend
@@ -154,7 +148,7 @@ same owned expectation, including across workers/restarts; it never creates anot
 row. Initial requests have a stable compilation ID for request replay protection.
 A deleted captured expectation is not silently recreated.
 
-Clarification TTL and max-turn settings remain authoritative. The turn limit now
+Clarification TTL and max-turn settings remain authoritative. The turn limit
 defaults to six to allow corrections alongside the three subject/baseline/timing
 answers. Existing `CLARIFICATION_MAX_TURNS` overrides still apply; use six on the
 backend for this demo. Expired ledger records are

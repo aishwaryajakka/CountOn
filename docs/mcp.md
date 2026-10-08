@@ -2,9 +2,12 @@
 
 ## Architecture
 
-Alexa+ client → MCP/orchestration → existing CountOn services → repositories →
-PostgreSQL/Supabase. The standalone server uses official Python MCP SDK 2.x,
-stateless **Streamable HTTP** and JSON responses. It does not replace FastAPI,
+CountOn `/alexa` web simulator or compatible agent host → authenticated
+MCP/orchestration → existing CountOn services → repositories → PostgreSQL/Supabase.
+The standalone server uses official Python MCP SDK 2.x,
+**Streamable HTTP** with stateless transport and JSON responses. Application
+clarification/capture lifecycle state is persisted separately in `compilation_sessions`.
+It does not replace FastAPI,
 replace the compiler or change deterministic evaluation. Existing intelligence
 tools delegate interpretation/clarification/explanation to the canonical AI services.
 
@@ -55,7 +58,7 @@ Alexa account-linking implementation.
 
 ## Tools
 
-Exactly these three tools are registered. All arguments use one `request`
+Six tools are registered in the current implementation. All arguments use one `request`
 object; extra fields and outer arguments are rejected.
 
 | Tool | Description | Input | Output |
@@ -63,10 +66,15 @@ object; extra fields and outer arguments are rejected.
 | `capture_expectation` | Stores a structured expectation the current user wants CountOn to monitor. | Actual `ExpectationCreate` | Compact expectation |
 | `get_expectation` | Returns one expectation and its current status. | `expectation_id`: UUID | Compact expectation |
 | `list_expectations` | Lists the current user's expectations. | Optional `status`, `type`, `limit` (1–100, default 50), `offset` (≥0) | `expectations`, `limit`, `offset` |
+| `compile_expectation` | Interprets an expectation and asks for missing facts. | `text`, IANA `timezone`, optional `locale`, `conversational`, `compilation_id` | Typed compilation status, message, structured expectation or signed state/capture ticket |
+| `continue_expectation_compilation` | Continues, corrects or cancels an active draft. | Actual returned `state`, user `answer` | Next compilation result; no expectation saved |
+| `explain_expectation_mismatch` | Explains the latest recorded result using grounded evidence. | `expectation_id`: UUID | Result/message, explanation or fallback, internal provenance |
 
 Capture accepts `claim`, `type`, optional `metric`, `comparison`, `baseline`,
 `target_value`, timezone-aware `deadline`, `evidence_sources`, and
-`materiality_threshold` (0–1, default 0.05). Numeric expectations require metric,
+`materiality_threshold` (0–1, default 0.05). An optional `compilation_state`
+carries the actual compiler capture ticket for verified replay-safe capture.
+Numeric expectations require metric,
 comparison, and baseline or target_value through existing service validation.
 The claim is a field of this structured object; a bare utterance is not input.
 Use the discovered SDK schemas for exact enums and constraints.
@@ -74,12 +82,16 @@ Use the discovered SDK schemas for exact enums and constraints.
 A compact expectation contains only `id`, `claim`, `type`, `status`, `metric`,
 `created_at`. UUIDs and timestamps are strings in JSON. List pagination has no
 separate total count. Tool annotations mark get/list read-only and idempotent;
-capture creates a row and is **not idempotent**. Do not automatically retry a
-capture after an ambiguous timeout: reconcile using list/get first.
+capture creates a row. A direct structured capture without `compilation_state` is
+**not idempotent**; reconcile ambiguous responses with list/get before retrying.
+Compiler-backed capture verifies the returned payload/ticket and atomically records
+the expectation ID; replay returns that same owned row. Continuations consume their
+latest signed handle. See [lifecycle and replay protection](bedrock-integration.md#conversation-and-failure-behavior).
 
 Safe error codes: `INVALID_ARGUMENTS`, `INVALID_EXPECTATION`, `UNAUTHORIZED`,
 `NOT_FOUND`, `DATABASE_ERROR`, `SERVICE_ERROR`. SDK text may prepend a tool name;
-check `isError` and the safe code. SQL, traces, tokens, URLs and rejected values
+check `isError` and the safe code. Intelligence tools also return typed compiler/clarification/fallback
+codes as described in [the integration guide](bedrock-integration.md). SQL, traces, tokens, URLs and rejected values
 are omitted. Completion logs contain request/tool/user/status/duration only.
 
 ## Example Calls
@@ -190,20 +202,22 @@ deterministic evaluator remains the only authority for outcomes.
 
 ## Known Limitations
 
-Local service behavior is verified. Actual public deployment, OAuth resource metadata
-and client login/discovery, Alexa+ account linking/tool onboarding, capture
-idempotency, conversation orchestration, and the compiler implementation are
-unfinished. No Bedrock, Ring/Bee, schema, or evaluator changes are included.
+Compilation, clarification, explanation and `/alexa` orchestration are implemented
+locally. Deployment addresses do not prove that the latest code/model access is
+live; initialize and discover all six tools, then run intelligence acceptance.
+Real Alexa+/Echo onboarding/account linking and compatible OAuth resource metadata
+remain incomplete. Ring/Bee/provider ingestion, workers and external notification
+delivery are absent. Direct structured capture has no generic idempotency key;
+compiler-backed capture has durable replay protection. Bedrock is opt-in.
 
 ## Next Steps for Alexa+
 
-Confirm the actual client's MCP transport and authorization requirements,
-configure account linking and token acquisition/refresh, then deploy a HTTPS
-endpoint with an explicit Host/Origin allowlist. Validate schema discovery and
-read tools for two linked users before enabling capture. Integrate Person 2's
-compiler with explicit clarification handling and the same authenticated
-identity; reconcile ambiguous writes rather than retrying blindly.
-
+Roll out the current migrations/MCP/frontend and validate live Bedrock access.
+Confirm the actual client's transport and authorization requirements, configure
+account linking/token acquisition and refresh, then validate discovery and owned
+reads for two linked users before enabling writes. The compiler and clarification
+already exist; reuse their tools and lifecycle ledger rather than adding another
+compiler. See [the account-linking boundary](#account-linking-boundary-and-current-gap).
 
 ## Remote Deployment
 
@@ -247,7 +261,8 @@ The existing backend Docker image can run MCP by overriding its command to
 `python -m app.mcp` and setting `MCP_HOST=0.0.0.0`, with port publishing at your
 edge. Its existing `.dockerignore` excludes `.env*`; inject environment at
 runtime. The default image command remains FastAPI; there is no new
-infrastructure stack. Image build and public deployment are not part of this pass.
+infrastructure stack. Validate the actual deployed image separately; local source tests do not certify
+public service readiness.
 
 Every authenticated request uses the existing JWT verifier; no fallback is
 added. Auth outcomes (`authenticated`, `unauthorized`, `unavailable`) are logged
@@ -268,8 +283,9 @@ python db/scripts/mcp_remote_smoke.py
 
 Endpoint overrides: `--mcp-url https://<host>/mcp` and
 `--api-url https://<api-host>`. HTTPS certificate verification remains enabled.
-Discovery initializes the current SDK client and reports missing/unexpected
-tools against exactly the three core names. Without an API URL the second
+Discovery initializes the current SDK client and checks the required core tools
+as a subset; intelligence tools may also be present. Use `intelligence_smoke.py`
+to verify the six-tool surface. Without an API URL the second
 command is a **read-only probe**, and explicitly reports capture/get/cross-check
 and cleanup as NOT RUN. No orphan test rows are created.
 
@@ -281,8 +297,8 @@ is retained. No second user identity or token exchange is fabricated.
 
 Public-host initialization, discovery, Host/Origin rejection, and signed JWT
 behavior are tested without live Alexa+. Local network smoke remains available
-with `mcp_smoke.py`; its `--discovery-only` mode is non-mutating. A real public
-HTTPS smoke cannot be reported as passed until a deployed URL/token is supplied.
+with `mcp_smoke.py`; its `--discovery-only` mode is non-mutating. Run a real public HTTPS smoke with a securely supplied current token before
+claiming live acceptance for a deployment.
 
 ### Account-linking boundary and current gap
 
@@ -295,7 +311,7 @@ role validation or use an explicitly designed, validated session exchange.
 Amazon's [MCP quickstart](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart.html)
 requires remote Streamable HTTP, HTTP 401 without a challenge header, protected
 resource metadata, authorization-server metadata with S256, authorization-code
-PKCE, and canonical `resource` handling. This pass supplies remote host config
+PKCE, and canonical `resource` handling. The implementation supplies remote host config
 and the 401 bearer boundary. It does **not** publish fake PRM/OAuth endpoints.
 The resource hook is `MCP_PUBLIC_URL`; the identity hook is existing
 `auth.authenticated_user_from_header` and the trusted HTTP request state.
@@ -304,24 +320,15 @@ Authorization/consent/code/token/refresh endpoints, static Alexa client
 registration, approved redirects, PRM contents, scopes, and real account linking
 are **NOT IMPLEMENTED**. Supabase sign-in alone does not prove these OAuth
 requirements are met. There is no Alexa add-on ID or client configuration in
-this repository. The deployment is therefore **not connected to Alexa+**.
+this repository. This repository does not establish a completed real Alexa+/Echo connection.
 
-Next action: provision the HTTPS endpoint and compatible OAuth authorization
-server, then register the Alexa client and all provided redirects. Once metadata
+Next action: verify the deployed HTTPS endpoint and provision a compatible OAuth
+authorization server, then register the Alexa client and all provided redirects. Once metadata
 is genuinely available, follow Amazon's
 [account-linking guide](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-account-linking.html)
 and run `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <id>`.
 Enter any client secret through its masked prompt. Configure only with actual
 issued IDs; test two linked users before enabling customer writes.
-
-Validation on 2026-10-06: **309 backend tests passed**, dependency and syntax
-checks passed, real-token local smoke (including exact-tag cleanup) passed, and
-separate authenticated discovery passed. Configured public Host/Origin behavior
-was verified in tests. Live remote HTTPS smoke and Alexa+ linking were **NOT
-RUN**: no deployed public endpoint or actual OAuth client configuration was
-provided. No backend lint/type check is configured. Tools, service/repository
-logic, evaluators, and migrations were not changed by this pass.
-
 
 ## Bedrock intelligence integration
 
@@ -331,5 +338,5 @@ The three core contracts are preserved. Additional authenticated, typed tools ar
 invokes capture separately. The high-level explanation tool owns evaluation/evidence
 reads and never evaluates or mutates. See [the current integration handoff](bedrock-integration.md)
 for schemas, signed user-bound continuation state, deployment configuration, smoke
-commands and known live-validation limits. Older three-tool acceptance notes below
-or above describe that earlier deployment; discover the actual tools before use.
+commands and live-validation limits. Discover all six tools before using intelligence
+against a deployment; the core smoke alone does not establish intelligence readiness.

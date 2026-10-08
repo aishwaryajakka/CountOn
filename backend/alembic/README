@@ -1,2 +1,4 @@
 Alembic migrations for CountOn. Run alembic upgrade head from backend.
-Core schema revision: 1bbc27e27689. Downgrades remove domain data and enum types.
+Original core revision: 1bbc27e27689. Current head: 6e302a79bd01, including
+owned domain tables and durable compilation_sessions. See ../db/README.md.
+Downgrades remove data and types; use only disposable test databases.

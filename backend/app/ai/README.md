@@ -108,7 +108,7 @@ Retries/repair can incur extra inference charges. No writes occur in this layer.
 Stable exceptions: `BedrockError`, `BedrockUnavailableError`,
 `BedrockThrottledError`, `BedrockTimeoutError`, `BedrockResponseError`,
 `BedrockValidationError`, `BedrockDisabledError`. Messages never contain AWS
-payloads. Future route adapters must map them to safe responses, without exposing
+payloads. Transport adapters map them to safe responses, without exposing
 tracebacks or rendering model text as trusted markup.
 
 ## Privacy and telemetry
@@ -216,8 +216,8 @@ utterance, with matching literal quotes. Mentioning a provider does not prove it
 is connected. No source/connection/evidence is inferred. Materiality is assigned
 from `ExpectationCreate`'s actual default **0.05** outside the model. The compiler
 retains strict comparison enums; the existing evaluator's tolerance behavior
-still applies. This differs from the narrow frontend demo's explicit zero
-tolerance. Requests for custom tolerance or recurring schedules return
+still applies. `/alexa` preserves the compiler-produced default rather than
+overriding it with the former browser demo's zero tolerance. Requests for custom tolerance or recurring schedules return
 unsupported instead of silently dropping those requirements.
 
 The current schema has no currency field. For `total_cost`, explicit USD/US dollars
@@ -230,7 +230,7 @@ If locale is omitted by the legacy adapter, ambiguous dollars need clarification
 All dates derive from the explicit caller instant converted to its IANA timezone:
 
 - `today`/`tomorrow`: that local day's end, 23:59:59.999.
-- `this week`: Sunday 23:59:59.999, matching the existing frontend convention.
+- `this week`: Sunday 23:59:59.999, using the compiler's grounded calendar convention.
 - Weekday: upcoming occurrence (including today if its deadline is still future).
 - `next Tuesday` (or another weekday): next strictly future occurrence.
 - `by/at/before 5 PM tomorrow`: explicit local clock time on the resolved date.
@@ -303,9 +303,8 @@ The compiler logs a safe result event (`compiled/clarification/unsupported/error
 and duration/version. The underlying Bedrock event carries model, validation,
 retry/repair count and usage under the same request correlation. No raw utterance,
 proof quotes, model text, headers or tokens are logged. Tests use mocked Converse
-responses through the actual strict parsing/repair path. Live model interpretation
-quality and IAM/model access must be evaluated separately before enabling this
-service in a user-facing orchestrator.
+responses through the actual strict parsing/repair path. Live model interpretation quality and IAM/model access must be evaluated
+separately when enabling a deployment; the local orchestrator is implemented.
 
 
 ## Grounded Why? integration

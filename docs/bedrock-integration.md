@@ -38,7 +38,8 @@ layers are reused; orchestration and transport contracts are the added layer.
 
 ## MCP surface
 
-Endpoint: `https://counton-mcp.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com/mcp`.
+Configured remote endpoint (verify deployed discovery before use):
+`https://counton-mcp.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com/mcp`.
 Locally: `http://127.0.0.1:8003/mcp` by default. Every user-specific call uses the
 existing Supabase bearer verifier and exactly `{"request": {...}}`.
 
@@ -47,12 +48,12 @@ existing Supabase bearer verifier and exactly `{"request": {...}}`.
 | `list_expectations` | Existing pagination/status/type | Existing owned compact records; no Bedrock |
 | `get_expectation` | Owned `expectation_id` | Existing compact record; no Bedrock |
 | `capture_expectation` | Existing `ExpectationCreate` | Expectation mutation; same services/database; compiled ticket prevents replay |
-| `compile_expectation` | `text` 1–2000, IANA `timezone` (default UTC), optional locale | Interpretation plus lifecycle ledger; never saves an expectation |
+| `compile_expectation` | `text` 1–2000, IANA `timezone` (default UTC), optional locale, `conversational`, stable `compilation_id` | Interpretation plus lifecycle ledger; never saves an expectation |
 | `continue_expectation_compilation` | Actual signed `state`, `answer` 1–2000 | Clarifies/corrects/cancels; writes lifecycle state, never an expectation |
 | `explain_expectation_mismatch` | Owned `expectation_id` | Real latest evaluation, grounded explanation or deterministic fallback |
 
 Compilation returns `status` compiled/clarification/cancelled/expired/unsupported/error,
-`message`, nullable `expectation`/`state`/`code`, `bedrock_used`, `prompt_version`,
+`message`, nullable `expectation`/`state`/`capture_state`/`code`, `bedrock_used`, `prompt_version`,
 `clarification_turn`. Only `compiled` proceeds to a separate capture call.
 
 Explanation returns actual `result`, nullable `evaluation_id`/`explanation`/`code`,
@@ -82,9 +83,15 @@ it contains that user's private utterance/facts. Never log/echo the opaque state
 Production requires a shared signing secret on every MCP replica; development
 uses a process-local random key, invalidated on restart. TTL, turn limits and
 prompt-version checks reuse the clarification state machine. Rotate the key to
-invalidate existing state. State is not an authentication token or an anti-replay
-ledger; replay only interprets, never mutates. Capture retains its existing
-non-idempotent contract and is not automatically retried.
+invalidate existing handles. Signed state is not authentication.
+The `compilation_sessions` ledger holds canonical state, owner and latest token
+digest. Continuations consume their handle; terminal/replaced/expired sessions
+cannot be resumed. A stable `compilation_id` protects initial-request replay.
+Only a compiled ticket plus its exact expectation payload can use replay-safe
+capture: `capture_state` is supplied as `compilation_state`, and creation plus
+stored expectation ID commits atomically. Replay returns the same owned row;
+a deleted captured row is not recreated. Direct capture without a ticket remains
+non-idempotent and is not automatically retried. No second state format is used.
 
 Browser state stays in React memory: refresh/sign-out/user change starts a new
 conversation, while previously captured rows persist in the normal dashboard.
@@ -123,7 +130,7 @@ Do not put AWS credentials in Vercel or frontend public variables.
 | `BEDROCK_REQUEST_TIMEOUT_SECONDS` | `30` default |
 | `BEDROCK_MAX_RETRIES` | `2` default |
 | `BEDROCK_NATIVE_STRUCTURED_OUTPUT` | `false` default; opt in only with a supported model |
-| `CLARIFICATION_MAX_TURNS` | `3` default, supported 1–12 |
+| `CLARIFICATION_MAX_TURNS` | `6` default, supported 1–12 |
 | `CLARIFICATION_TTL_SECONDS` | `900` default |
 | `INVESTIGATOR_MAX_EVIDENCE` | `6` default, max 12 |
 | `INVESTIGATOR_MAX_PROMPT_BYTES` | `12000` default |
@@ -198,14 +205,14 @@ docker compose up -d
 cd backend
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload
+DATABASE_TARGET=local alembic upgrade head
+DATABASE_TARGET=local uvicorn app.main:app --reload
 ```
 Terminal 2:
 ```sh
 cd backend
 source .venv/bin/activate
-python -m app.mcp
+DATABASE_TARGET=local python -m app.mcp
 ```
 Terminal 3:
 ```sh
@@ -245,8 +252,9 @@ lost capture response. Cleanup failure exits nonzero for dedicated-account revie
 ## Exact production checks
 
 Redeploy the MCP backend image with the required backend environment/IAM settings,
-and redeploy the frontend to include the new allowlist/UX. No database migration
-is required. Then, from `backend` with a securely supplied real test token:
+and redeploy the frontend. Apply `alembic upgrade head` first: the existing
+`6e302a79bd01` migration adds `compilation_sessions` for durable continuation/capture
+replay protection. Then, from `backend` with a securely supplied real test token:
 
 ```sh
 python db/scripts/bedrock_smoke.py --live
@@ -303,37 +311,21 @@ stays quiet; no provider ingestion or notification delivery is claimed.
 
 ## Validation and blockers
 
-Implementation tests use real MCP and service/database paths with mocked inference.
-Live inference is separate. No code was deployed in this pass. Local settings keep
-Bedrock disabled; region/model defaults are now configured, while credentials and
-the production state signing key must be supplied privately. Production requires
-those settings, a valid credential provider, and MCP/frontend redeployment.
-No live Bedrock inference or live production compile/capture E2E is claimed.
-Read-only production MCP initialize/discovery/list succeeded using private demo
-Auth configuration; no production rows were created.
+Implementation tests exercise real MCP/service/database paths with mocked inference.
+They do not establish live model quality or production rollout. Run the commands
+above against the current checkout; the latest test results belong in validation
+reports rather than fixed historical counts here.
 
-Intentionally deferred: arbitrary intent classification, generic evidence/evaluate
-MCP tools, update/resolve tools, Ring/Bee, schedules, notification delivery, cache
-infrastructure, persisted conversation storage and auth architecture changes.
+The configured Lightsail/Vercel addresses are deployment targets. This cleanup
+does not inspect or redeploy them. Confirm all six discovered tools, the current
+migration, backend signing key, enabled Bedrock/model configuration and valid AWS
+runtime credentials, then run live compilation/clarification/capture/explanation
+acceptance before claiming production intelligence readiness.
 
-Verified on 2026-10-08:
-
-- Full backend: **556 passed**, including **227 AI tests**, MCP network/service
-  tests, compiler/clarification/explanation integration and safe tagged cleanup.
-- Frontend: **102 passed, 1 optional live test skipped**; lint, typecheck and
-  production build passed. Scoped backend Ruff and strict mypy passed.
-- Agent Skill validator, dependency consistency and whitespace checks passed.
-- Secret value scan found only the already-documented loopback development
-  database example in README/db docs; no production private configuration values
-  were found in tracked files. Both private env files are ignored.
-- Live core MCP initialize/discovery/authenticated listing passed; no rows created.
-- Live discovery confirmed the deployed server currently lacks
-  `compile_expectation`, `continue_expectation_compilation`, and
-  `explain_expectation_mismatch`. MCP redeployment is required.
-- Live Bedrock and production intelligence compile/capture/browser E2E: **not run**.
-  New smoke CLI without credentials exits BLOCKED; it never asks for an exposed
-  token or creates data. The production browser script passed syntax checking.
-
+Intentionally deferred: arbitrary intent classification, evidence/evaluate/update/
+resolve MCP tools, Ring/Bee/provider ingestion, workers, notification delivery,
+cache infrastructure and real Alexa/Echo account linking. Conversation state is
+already durable; automatic ledger retention/cleanup remains operational work.
 
 ## Natural Why? acceptance
 

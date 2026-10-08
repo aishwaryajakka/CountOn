@@ -38,19 +38,20 @@ flow CountOn has not implemented. Never paste tokens into skill files/chat.
 ## Complement to the simulator
 
 The skill guides compatible agents; `/alexa` provides deterministic browser
-conversation. Both use the existing tools:
+intent routing and trusted compiler/clarification orchestration. Both use the
+same six existing tools:
 
 | Intent | Mapping |
 | --- | --- |
 | List | `list_expectations` |
 | Detail | `list_expectations` → match → `get_expectation` |
-| Clear, complete save intent | Compile/validate → `capture_expectation` |
-| Ambiguous lower bill | Clarification, no write |
-| Explain failure | Stored record only; disclose absent reasoning tools |
+| Clear, complete save intent | `compile_expectation` → `capture_expectation` |
+| Ambiguous lower bill | `compile_expectation` → ask one question → `continue_expectation_compilation`; no expectation write until compiled |
+| Explain failure | List/match → `explain_expectation_mismatch`; only recorded MISMATCH enables investigation |
 
 Every tool argument is nested under exactly one `request` key. Real transport
-remains **Streamable HTTP**. This does not make `/alexa` load skills, enable
-Bedrock, register extra tools or certify MCP Apps compliance. See
+remains **Streamable HTTP**. This does not make `/alexa` load skills, configure runtime Bedrock access, register tools or certify MCP Apps compliance.
+Bedrock compiler/clarification/investigation already exist in the backend. See
 [MCP docs](mcp.md) and the [simulator guide](../frontend/docs/alexa-demo.md).
 
 ## Validation
@@ -62,20 +63,9 @@ skills-ref validate .agents/skills/counton
 skills-ref read-properties .agents/skills/counton
 ```
 
-For this pass the validator is installed in a temporary environment, without
-changing project dependencies. Format validation does not certify host discovery,
-authentication or agent decisions. JSON examples are additionally checked against
-actual Pydantic contracts and numeric service rules; relative links and directory
-name matching are checked. Relevant existing MCP/frontend tests provide regression
-checks. Validating this documentation requires no production mutations.
-
-Verified on 2026-10-08: `skills-ref` 0.1.0 (official repository commit
-`69ef37e9424c0a7ea9dd2293b559e43ec8176379`) and the installed skill-creator
-validator both passed. All three JSON examples passed Pydantic validation;
-the numeric capture also passed service rules. Naming, supported metadata and
-local documentation links passed structural checks.
-
-Regression results: 28 backend MCP tests passed, with 10 dedicated-database
-tests skipped without their opt-in configuration; 89 frontend tests passed,
-with the endpoint/token-gated live test skipped. These checks do not claim
-that a particular host has loaded or behaviorally evaluated the skill.
+Format validation does not certify host discovery, authentication or agent decisions.
+Examples should also be checked against discovered schemas and service rules.
+Relevant backend MCP and frontend tests cover the implementation independently.
+This cleanup does not install a validator or make production mutations; rerun the
+commands above when changing the skill artifact. Current test results belong in
+validation reports, rather than a fixed test count here.

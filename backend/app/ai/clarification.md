@@ -1,15 +1,11 @@
-> Current integration: MCP compilation/continuation uses signed user-bound state
-> and `/alexa` keeps it in memory. See [the integration handoff](../../../docs/bedrock-integration.md).
-> This document describes the state machine and its original pure-service boundary.
-
 # Multi-turn expectation clarification
 
-This is a pure, bounded application state machine on top of the existing compiler.
-It interprets but never saves, ingests evidence, evaluates, or calls MCP. Final
-capture remains a later authenticated orchestration step. `/alexa` currently uses
-React chat state and its working deterministic/MCP path; this pass does not change
-it or expose a new endpoint. No database migration, Redis, cache or auth system
-has been introduced.
+The core is a pure, bounded state machine on top of the existing compiler. It
+interprets but never saves an expectation, ingests evidence, evaluates, or calls
+MCP. The authenticated MCP compile/continue tools wrap it with a durable
+`compilation_sessions` lifecycle ledger. Trusted Next.js `/alexa` orchestration
+captures only final COMPILED output through the existing MCP capture tool.
+See [the transport/rollout contract](../../../docs/bedrock-integration.md).
 
 ## Application contract
 
@@ -34,9 +30,9 @@ default service-owned clients are closed after each request.
 
 Only `state.status == COMPILED` with a `CompiledExpectation` outcome makes a
 creation payload available. Even then **nothing has been saved**. Replaying a
-terminal session returns no new outcome and performs no model or MCP call. Later
-orchestration must prevent duplicate captures separately; compilation is not a
-persistence receipt.
+terminal session returns no new outcome and performs no model or MCP call.
+The MCP ledger provides duplicate-capture protection separately; compilation
+itself is not a persistence receipt.
 
 ## State and lifetime
 
@@ -62,7 +58,7 @@ Existing Settings loads `backend/.env.local` or deployment environment:
 
 | Variable | Default | Bounds |
 | --- | --- | --- |
-| `CLARIFICATION_MAX_TURNS` | `3` | 1–12 follow-up answers per session |
+| `CLARIFICATION_MAX_TURNS` | `6` | 1–12 follow-up answers per session |
 | `CLARIFICATION_TTL_SECONDS` | `900` | 60–3600 seconds |
 
 The initial utterance does not consume a follow-up turn. Compilation on the final
@@ -138,14 +134,22 @@ fields. Common credential-shaped content is rejected/redacted before storage or
 model calls; this is not a universal secret detector. Callers must never combine
 HTTP headers or authentication objects with conversation content.
 
-**State is not self-authenticating.** This pass returns it to the trusted
-application layer. Pydantic validation does not prevent tampering or authorize a
-user. Before a browser endpoint exists, the integration must hold state server-side
-bound to authenticated user + session ID, or sign and verify returned state with
-a proper private mechanism. Do not accept raw browser JSON as trusted state.
-No existing server session cache was available to reuse; no unsigned browser
-continuation endpoint or invented signing secret is added here. State contains
-private user conversation and must not be published or cross-user shared.
+**Canonical state is not self-authenticating.** Pydantic validation does not
+authorize a user. The existing MCP integration signs private state with a
+user-bound HMAC, verifies authentication and the ledger's current handle digest,
+and never accepts raw browser JSON as trusted state. The signing payload is
+integrity protected, not encrypted: treat it as private conversation data.
+Browser React memory retains only the returned active handle; refresh/user change
+clears that local conversation. No bearer token is stored in canonical state.
+
+`compilation_sessions` stores the same canonical state, owner, digest and capture
+receipt; it introduces no parallel state format. The existing Alembic migration
+`6e302a79bd01` enables RLS without browser policies. Only the trusted backend role
+uses it. Continuations consume their latest handle; cancelled, expired, replaced
+and completed handles cannot produce another capture. Compiled ticket/payload
+verification and normal creation commit atomically. Duplicate capture returns the
+same owned row, including across workers/restarts with a shared signing key.
+There is no automatic ledger retention job.
 
 ## Sequences
 
@@ -172,9 +176,13 @@ sequenceDiagram
     Service-->>User: COMPILED; baseline 142.10, not saved
 ```
 
-The three-answer example asks “Which bill?”, then “Last month's bill or a specific
-amount?”, then “What was last month's bill amount?”. It never supplies a made-up
-prior number.
+The `/alexa` conversational example asks “Which bill should I monitor?”, then
+“What should I compare it against?”, then “When should I check it?”. Answers
+“My electricity bill”, “My last bill was $142.10”, and “When my next bill arrives”
+complete the draft without inventing a prior amount or date. Bill-arrival wording
+is a condition in the claim, not a calendar deadline or implemented scheduler.
+The pure compiler may omit a deadline when none was requested; conversational
+numeric capture asks for missing timing through its existing policy.
 
 ### C. Correction
 
@@ -222,7 +230,8 @@ pytest tests/test_clarification.py tests/test_expectation_compiler.py tests/test
 
 Mocks exercise the real Converse adapter, strict parser/repair path, merges and
 state lifecycle. Live Bedrock model quality is not asserted by mocked tests.
-Before `/alexa` integration, implement the authenticated trusted session boundary,
-wire start/continue under active-session detection, handle explicit cancellation
-and replacement, and call real MCP capture only for a completed result under clear
-user intent. Do not claim compilation itself saved an expectation.
+`tests/test_mcp_intelligence.py` covers the implemented authenticated lifecycle,
+compile/continue/capture persistence and replay boundary. `/alexa` detects active
+state, continues corrections/cancellation/replacement and saves only complete
+expectations. Compilation alone never means an expectation was saved. These are
+local implementation/tests, not certification of live AWS or real Alexa/Echo.

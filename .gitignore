@@ -6,22 +6,29 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.coverage
+htmlcov/
 
 # Local env / secrets
 .env
 .env.*
+# Retain the frontend's broader local-env rule.
+frontend/.env*
+# Credential-free example/sample templates remain trackable.
 !.env.example
 !*.env.example
+!.env.sample
+!*.env.sample
 
 # Node / Next.js
 node_modules/
 .next/
+out/
 .vercel/
 *.tsbuildinfo
 
-# Test output
+# Test/build output
 coverage/
-htmlcov/
 test-results/
 playwright-report/
 .nyc_output/

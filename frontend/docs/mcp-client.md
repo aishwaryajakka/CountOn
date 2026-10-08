@@ -1,7 +1,7 @@
 # Frontend MCP client
 
 The browser calls the Node-runtime Next.js `POST /api/mcp` route. That route
-uses the official `@modelcontextprotocol/client` **2.3.1** SDK and
+uses the official `@modelcontextprotocol/client` **2.x** SDK (resolved version in `frontend/package-lock.json`) and
 `StreamableHTTPClientTransport` to initialize, discover tools, and call the
 existing Python MCP service. It does not call FastAPI expectation CRUD.
 Normal dashboard requests continue to use FastAPI.
@@ -49,8 +49,9 @@ shared user identity, or second JWT implementation is added. Python MCP continue
 to validate the token and enforce ownership. Connections are isolated per HTTP
 request and closed afterward. Calls are not automatically retried.
 
-The only permitted tools are `capture_expectation`, `get_expectation`, and
-`list_expectations`. Each call has **exactly one** tool argument, `request`:
+The route permits `capture_expectation`, `get_expectation`, `list_expectations`,
+`compile_expectation`, `continue_expectation_compilation`, and
+`explain_expectation_mismatch`. Each call has **exactly one** tool argument, `request`:
 
 ```json
 {"action":"call_tool","tool":"get_expectation","arguments":{"request":{"expectation_id":"<uuid>"}}}
@@ -60,12 +61,21 @@ The only permitted tools are `capture_expectation`, `get_expectation`, and
 {"action":"call_tool","tool":"capture_expectation","arguments":{"request":{"claim":"My next electricity bill will be lower","type":"numeric_comparison","metric":"total_cost","comparison":"less_than","baseline":142.1,"evidence_sources":["utility_bill"],"materiality_threshold":0.05}}}
 ```
 
+For conversation, `/alexa` sends `{action:"converse", text, state, turn_id,
+timezone, locale}` to this internal route. It calls compile/continue over MCP,
+then capture once only for COMPILED, including the returned `capture_state` as
+`compilation_state`. The route keeps compiled payloads/capture tickets server-side
+and returns only the safe turn result, nullable active state and saved compact row.
+The backend ledger enforces user binding, consumed handles and atomic capture
+replay protection. Direct structured capture without a ticket is not idempotent.
+Never retry a write blindly. All actual MCP calls still use nested `request`.
+
 Unknown tools, extra identity fields, flattened arguments and invalid inputs are
-rejected. The route bounds bodies to 32 KiB, bounds upstream work to 25 seconds,
+rejected. The route bounds bodies to 32 KiB, uses a 180-second MCP request budget,
 disables caching, and refuses upstream redirects to avoid forwarding bearer
 tokens to another destination. HTTPS is required in production; HTTP localhost
-is supported only outside production. An Alexa simulator UI is not present in
-this repository; its future handlers should use this helper, not `lib/api.ts`.
+is supported only outside production. The authenticated `/alexa` simulator uses this helper for tools; normal dashboard
+data uses `lib/api.ts`. See [the conversation guide](alexa-demo.md).
 
 ## Responses and failures
 
@@ -82,8 +92,14 @@ fields defined by the existing MCP server.
 Errors return `{ error: { code, message }, meta }`. Safe codes are
 `AUTH_REQUIRED`, `AUTH_EXPIRED`, `MCP_UNAVAILABLE`, `MCP_PROTOCOL_ERROR`,
 `TOOL_NOT_FOUND`, `TOOL_VALIDATION_ERROR`, `TOOL_EXECUTION_ERROR`, and `UNKNOWN`.
-Nonexistent or inaccessible expectation IDs map to `TOOL_EXECUTION_ERROR`.
-Messages are fixed and never include upstream stack traces or raw error content.
+Intelligence responses also carry safe compiler/clarification/Bedrock/fallback
+codes. Their typed responses, provenance and outcome gates are documented in
+[Bedrock integration](../../docs/bedrock-integration.md#mcp-surface).
+A tool's `NOT_FOUND` for nonexistent/inaccessible IDs maps to `NO_EXPECTATION`;
+other execution failures map to `TOOL_EXECUTION_ERROR`.
+Route error messages are fixed and omit stack traces/raw upstream errors.
+Successful intelligence responses use validated, user-facing compiler/explanation
+messages rather than raw model drafts.
 The browser helper exposes UI-friendly `McpClientError.code` and `.message`.
 Do not log tokens, request headers, or sensitive results in simulator UI code.
 
@@ -108,10 +124,12 @@ npx vitest run tests/mcp-live.test.ts
 
 The live test is read-only: it discovers tools, lists expectations, and fetches
 the first owned expectation if one exists. It never creates or deletes rows.
-Capture uses contract tests to avoid adding production demo data.
+Normal tests cover capture/continuation/Why contracts without production writes.
+The explicitly configured `tests/alexa-live.mjs` browser test creates a uniquely
+tagged capture, verifies shared persistence and cleans up only that exact row.
 
-To verify the actual browser → HTTP route path, sign in normally and, from a
-temporary component using the helper, call discovery, list, then get an ID from
+To verify the actual browser → HTTP route path, sign in normally and, from
+the existing `/alexa` page, call discovery, list, then get an ID from
 the list. Confirm `initialized` and `toolsDiscovered` are true. Alternatively,
 in DevTools on that signed-in page (keep the token local):
 
@@ -139,10 +157,7 @@ An unauthenticated POST should return `401/AUTH_REQUIRED`; a rejected token shou
 return `401/AUTH_EXPIRED`. Browser requests target `/api/mcp`, not the public
 FastAPI origin or MCP directly, so no browser-to-MCP CORS change is required.
 
-Verified on 2026-10-08: install, lint, typecheck, build, and 63 standard tests
-passed; the live test skips by default and passed separately with an explicitly
-configured ephemeral test session. Chromium verified the production local
-Next.js HTTP route against deployed MCP: initialization, all three discovered
-tools, listing five owned expectations, and fetching one by ID. Missing and
-invalid authentication returned the expected safe codes; tokens were absent
-from responses. No production rows were created or deleted.
+Run these commands against the current checkout; historical core-tool acceptance
+is not certification of the latest intelligence deployment. Require discovery of
+all six tools plus live compiler/clarification/explanation checks before declaring
+production intelligence ready. No real Alexa/Echo runtime integration is claimed.

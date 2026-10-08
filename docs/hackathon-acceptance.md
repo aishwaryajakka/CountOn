@@ -1,186 +1,180 @@
 # COUNTOn ALEXA+ HACKATHON ACCEPTANCE
 
-Verified 2026-10-08 against **https://counton-frontend.vercel.app/alexa** and
-the deployed Lightsail MCP/API services. The previously missing production
-MCP variable and frontend routes were fixed by configuring Vercel and deploying
-the existing frontend. No backend or MCP transport code was changed.
+This checklist describes the **current six-tool implementation** and repeatable
+acceptance. Earlier three-tool production demos do not certify the current
+compiler, clarification ledger or investigator deployment. No new live rollout
+or real Alexa/Echo integration is claimed by this cleanup. Current local command
+results are recorded in the cleanup report; production checks must be run separately.
 
-## Results
+## Acceptance scope
 
-| Category | Result | Evidence |
-| --- | --- | --- |
-| Streamable HTTP | PASS | Existing Python SDK transport; official TypeScript client; public HTTPS MCP protected by bearer auth. |
-| Authentication | PASS | Real Supabase sign-in, production missing/invalid bearer rejection, 35 auth tests. |
-| Initialize | PASS | Actual SDK handshake through production Next.js route and direct SDK probe. |
-| tools/list | PASS | Production discovery returned exactly the three required tools. |
-| tools/call | PASS | Actual production tool calls, not REST substitutes. |
-| list_expectations | PASS | Nested request; five existing owned records before temporary capture. |
-| get_expectation | PASS | Electricity claim matched from real list and fetched using its returned UUID. |
-| capture_expectation | PASS | Real production MCP capture with a uniquely tagged temporary claim. |
-| /alexa UI | PASS | Production sign-in gate, connection badge, transcript, traces, 390px layout; explicit non-Amazon-demo disclosure. |
-| Shared persistence | PASS | MCP-created row visible in normal FastAPI-backed detail UI after refresh; API confirmed target/comparison. |
-| Agent Skill | PASS | Official skills-ref validator passed; existing artifact accurately describes current tools and limits. |
-| Security | PASS | Source/local-ref history scan, ignored env files, public browser key, no admin credentials in Vercel frontend config, safe response/log checks. |
-| Frontend build | PASS | Lint, typecheck, 89 standard tests, production build, and Vercel build all ran successfully; live MCP test passed separately. |
-| Backend tests | PASS | All 38 relevant MCP tests passed with the existing isolated counton_test database; 35 auth tests also passed. |
-
-The full browser script created one uniquely tagged acceptance expectation,
-verified its exact returned ID and tag before cleanup, deleted only that row,
-and confirmed GET returned 404 afterward. It made no direct FastAPI requests
-while on `/alexa`. FastAPI was used only by the normal handoff UI and the test
-harness's independent persistence/cleanup checks.
-
-## Error coverage and limits
-
-| Error | Verification |
+| Category | Current implementation / verification |
 | --- | --- |
-| Expired Supabase session | Signed expiry validation in backend auth tests; simulator expiry UI tests. No wait for a real production session to expire. |
-| Missing auth | Production POST /api/mcp: 401 AUTH_REQUIRED; signed-out browser redirected to login. |
-| Invalid bearer token | Production POST /api/mcp: 401 AUTH_EXPIRED; public unauthenticated /mcp: 401. |
-| MCP unreachable | Existing transport rejection and simulator unavailable tests; production service was not intentionally disabled. |
-| Unknown tool | Production route: 404 TOOL_NOT_FOUND. |
-| Invalid/flattened input | Production route: 400 TOOL_VALIDATION_ERROR; numeric validation covered by existing tests. |
-| Nonexistent ID | Production MCP call: 422 TOOL_EXECUTION_ERROR. |
-| Empty list | Existing simulator test with an empty returned list; no production records deleted to manufacture this case. |
-| No detail match | Existing simulator test; no fabricated ID or get call. |
+| Streamable HTTP | Official Python MCP server and TypeScript client; test real initialize/discovery/calls, not REST substitutes. |
+| Authentication | Existing Supabase JWT verifier, owned services and auth-gated `/alexa`; test missing/invalid/expired bearer and cross-user access. |
+| Tools | Discover `capture_expectation`, `get_expectation`, `list_expectations`, `compile_expectation`, `continue_expectation_compilation`, `explain_expectation_mismatch`; all use exactly one nested `request`. |
+| List/get | Actual current-user records; no match is honest, multiple matches require clarification. Search currently covers the first 50 records. |
+| Capture | Compile/clarify first; persist only COMPILED through MCP capture, with its verified ticket and durable replay receipt. |
+| Clarification | Existing canonical state handles correction, cancellation, replacement, expiration and max turns; no incomplete expectation is saved. |
+| Why? | Latest owned evaluation gates investigation. MATCH, UNKNOWN and no evaluation skip it; MISMATCH uses bounded historical real evidence. |
+| Shared persistence | MCP-created row must appear via normal FastAPI-backed detail/dashboard and survive refresh. |
+| Agent Skill | Inspect `.agents/skills/counton/`; maps the actual six tools and evidence/outcome boundaries. |
+| Security | No browser AWS/database/admin secrets, token logging, raw prompts/output in UI or client-supplied ownership. |
+| Frontend | Run tests, lint, typecheck and production build against the current checkout. |
+| Backend | Run full isolated-PostgreSQL suite, including MCP/intelligence/auth tests; do not count skipped tests as live acceptance. |
 
-All production tool arguments are exactly `{ "request": {...} }`; flattened
-arguments appear only as intentional negative test cases. The simulator uses
-the user's current Supabase token solely through `/api/mcp` for tool access.
-No service-role key or second auth implementation was added. Current compact MCP
-responses expose stored status, not evidence/evaluation history or causal proof.
+`tests/test_mcp_intelligence.py` covers real MCP compile → clarification → capture
+→ PostgreSQL → deterministic MISMATCH → grounded explanation, followed by a newer
+MATCH that skips investigation. Inference is mocked: this tests integration and
+grounding, not live Bedrock quality. The evaluator remains the only outcome authority.
 
-## A. Remaining blockers
+## Error and safety checklist
 
-No blockers for the deployed browser hackathon demo. Actual Alexa+ device/account
-linking, Amazon certification and native MCP App UI integration are outside this
-acceptance; this is explicitly a CountOn web simulator. Bedrock, voice input and
-new evidence/explanation tools remain unimplemented and are not claimed.
-Automatic GitHub deployments still need the Vercel GitHub login connection;
-CLI production deployment is working. No user or secret configuration action
-is required for the tested canonical production URL.
+- Expired/missing/rejected auth: safe session/sign-in message, no tool write.
+- Unreachable MCP/protocol error: safe unavailable message, no fabricated result.
+- Unknown tool/flattened or malformed arguments: reject with safe typed errors.
+- Missing/inaccessible expectation: no record enumeration or fabricated UUID.
+- Empty/no matching list: honest response; multiple matches ask for specificity.
+- Compiler disabled/unavailable/invalid output: no guessed capture payload.
+- Cancelled/replaced/expired/consumed state: cannot replay to duplicate capture.
+- MATCH/UNKNOWN/no evaluation: no investigator/evidence explanation call.
+- No useful evidence, conflicting evidence, invalid citation or Bedrock failure:
+  deterministic summary/fallback, explicit uncertainty, no unsupported cause.
 
-## B. Exact Vercel Production variables
+Inspect safe traces only. Tokens must never be printed, returned or placed in
+artifacts. The browser forwards its current bearer to `/api/mcp`; the Node route
+forwards it to the real MCP server. No service-role key or parallel JWT verifier
+is part of this flow.
 
-All four are configured and privately verified. Retain the existing team's
-Supabase public values; do not substitute a secret/service-role key.
+## A. Remaining production prerequisites
+
+Apply the existing migrations (including `compilation_sessions`), deploy the
+current MCP/frontend code, configure backend Bedrock/model access and a private
+shared clarification signing key, then discover all six tools and run live
+intelligence acceptance. Repository code does not prove these steps were completed.
+Real Alexa+/Echo onboarding, compatible OAuth discovery/account linking and native
+device integration remain separate work. Speech-to-text, live provider ingestion,
+scheduling workers and notification delivery are not claimed.
+
+## B. Vercel Production variables
+
+Verify these are configured; this document does not assert a live environment audit:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=https://counton-api.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com
 NEXT_PUBLIC_SUPABASE_URL=<existing Supabase project URL>
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<existing public publishable/anon key>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<existing public publishable key>
 COUNTON_MCP_URL=https://counton-mcp.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com/mcp
 ```
 
-`COUNTON_MCP_URL` is server-side. Never add a shared test access token to Vercel.
-Production browser bundles contain neither the server MCP URL nor localhost API
-dependencies. Changes to NEXT_PUBLIC values require a rebuild.
+`COUNTON_MCP_URL` is server-only. Never add AWS credentials, database secrets,
+service-role keys, signing secrets or shared test tokens to Vercel. Changes to
+public build values require a rebuild. Backend rollout settings and exact smoke
+commands are in [Bedrock integration](bedrock-integration.md).
 
-## C. Exact manual production test
+## C. Manual production test
 
-1. In a signed-out browser, open the production `/alexa`; verify login redirect.
-2. Sign in with an existing CountOn account through Supabase. Return to `/alexa`.
-3. Wait for “Connected to CountOn MCP”; do not accept a merely loading badge.
-4. Ask “What am I counting on?” Verify real claims/statuses and the list trace.
-5. Expand trace details: Streamable HTTP, initialize success, tools discovered yes.
-6. Ask “Tell me about my electricity bill”. Verify list/get traces and a real row.
-   Use an account with an electricity expectation; an honest no-match otherwise is correct.
-7. Ask “I'm counting on my grocery bill staying under $120 this week”.
-8. Verify capture trace and “Saved to CountOn”, then click “View in CountOn”.
-9. Confirm the new claim in the normal CountOn detail page; refresh and confirm it persists.
-10. Verify mobile at 390px; optionally toggle “Read replies”. Text remains available.
-11. In DevTools, `/alexa` tool requests target `/api/mcp`, not FastAPI CRUD.
-    Inspect only header presence; never copy or share its bearer value.
-12. For automated tests, run the tagged script below, which cleans up its own row.
-    A deliberately saved user's demo expectation is a real record, not a mock.
+Use the configured `https://counton-frontend.vercel.app/alexa` address after rollout:
 
-Unauthenticated safe endpoint probe (no credentials):
+1. Signed out, verify the login gate; sign in with an existing dedicated test user.
+2. Initialize/discover MCP. Confirm all six tools, not merely the core-tool badge.
+3. Ask “What am I counting on?”; verify actual claims/statuses and safe list trace.
+4. Ask “Tell me about my electricity bill”; use a real returned ID or honest no-match.
+5. Ask “I'm counting on my bill being lower.” Answer “My electricity bill”,
+   “My last bill was $142.10”, then “When my next bill arrives”. Check that no
+   expectation appears before completion; verify separate compile/continue/capture traces.
+6. Follow “View in CountOn”, refresh and verify the same persisted claim/criteria.
+   Bill arrival is wording in the claim, not a fabricated deadline or scheduler.
+7. In a separate incomplete draft, test “Actually make that $150”, “Never mind”,
+   and a new package topic. Old bill facts must not leak into a replacement.
+8. Ask why an owned electricity expectation with real evidence and a recorded
+   MISMATCH failed. Compare the concise explanation against those supplied facts.
+   No market/surcharge/causation claim without evidence is acceptable.
+9. Repeat for MATCH, UNKNOWN and no evaluation: no mismatch investigator invocation.
+10. Test ambiguity, no match, expired state and another user; verify no duplicate
+    capture on replay and no access across owners. Keep technical provenance out of speech.
+11. In DevTools, tool requests must go to `/api/mcp`, not direct browser MCP or
+    FastAPI CRUD. Inspect header presence only, never copy the bearer value.
+12. Confirm mobile layout/text and optional read-aloud. Deliberate user saves are
+    real records; automated acceptance should use tagged data and exact-ID cleanup.
+
+Safe unauthenticated endpoint probe:
 
 ```sh
 curl -i -X POST https://counton-frontend.vercel.app/api/mcp \
   -H 'Content-Type: application/json' -d '{"action":"list_tools"}'
 ```
 
-Expected: `401`, `AUTH_REQUIRED`. Do not paste a real token into shell history.
+Expected `401/AUTH_REQUIRED`. Do not paste real credentials into shell history.
 
-## D. Exact 60-second judge script
+## D. 60-second judge script
 
-Prepare a signed-in tab with the seeded electricity expectation before the clock starts.
-
-| Time | Action and spoken line |
-| --- | --- |
-| 0–8s | Open /alexa. “CountOn keeps everyday expectations separate from evidence. This is our Alexa+ MCP web demo.” |
-| 8–20s | Ask the list starter. “These are my real records. This trace shows live initialization and MCP discovery.” Expand its trace. |
-| 20–35s | Ask the electricity starter. “It lists, matches a real ID, then gets its recorded status. It does not invent why a bill changed.” |
-| 35–50s | Ask the grocery starter. “This saves a strict $120 expectation through capture_expectation.” Point to the capture trace. |
-| 50–60s | Click View in CountOn and refresh. “The normal FastAPI UI reads the same persisted Supabase record. Quiet success, attention only to verified exceptions.” |
-
-## E. Exact two-minute judge script
+Prepare a signed-in, validated deployment and an owned evidence-backed mismatch.
 
 | Time | Action and spoken line |
 | --- | --- |
-| 0–15s | Show /alexa and live badge. “Expectation → evidence → evaluation → exception. Silence is success, but missing evidence is never proof.” |
-| 15–35s | List expectations and expand trace. “Browser → authenticated Next.js route → official MCP Streamable HTTP. These are my actual owned rows.” |
-| 35–55s | Electricity detail. “List identifies the claim; get uses its returned UUID. Current MCP gives recorded status, not a fabricated explanation.” |
-| 55–75s | Type “I'm counting on my bill being lower.” “It asks which bill and what reference amount. We do not invent a baseline.” |
-| 75–95s | Use grocery capture starter. “Explicit USD, strict less-than target, a real timezone-aware deadline, no invented evidence.” Show Saved and trace. |
-| 95–110s | View in CountOn and refresh. “MCP and FastAPI share services and Supabase persistence. The row survives navigation and refresh.” |
-| 110–120s | Show SKILL.md in the repository. “Compatible agent hosts get the same tool mappings and safety boundaries. This is our demo, not Amazon's official simulator.” |
+| 0–10s | Open /alexa. “CountOn separates expectations from evidence. This is our web demo for the Alexa+ track.” |
+| 10–20s | List expectations and expand trace. “These are my actual owned records through real MCP.” |
+| 20–40s | Capture the grocery $120-this-week expectation. “Bedrock interprets; a separate MCP capture saves the complete criteria.” |
+| 40–50s | View in CountOn and refresh. “The dashboard reads the same persisted row through FastAPI.” |
+| 50–60s | Ask why the prepared mismatch failed. “Only the recorded deterministic mismatch permits grounded explanation; AI does not decide the result.” |
+
+## E. Two-minute judge script
+
+| Time | Action and spoken line |
+| --- | --- |
+| 0–20s | List/detail and show MCP trace. “Expectation → evidence → evaluation → exception. Missing evidence is not proof.” |
+| 20–55s | Start an ambiguous bill, answer subject/baseline/timing. “One question at a time, preserving established facts; nothing is saved while incomplete.” |
+| 55–75s | Show capture and refresh its normal detail view. “MCP acts through existing owned services; both paths share Supabase.” |
+| 75–95s | Correct then cancel a separate incomplete draft. “Corrections retain facts; cancellation writes no expectation. Replay cannot duplicate compiled capture.” |
+| 95–110s | Explain a prepared MISMATCH; contrast MATCH/UNKNOWN. “Bedrock uses only grounded evidence; successful or unknown outcomes skip investigation.” |
+| 110–120s | Show SKILL.md. “Compatible hosts get the same six-tool contract. Silence is success. Real Alexa/Echo linking is still separate.” |
 
 ## F. Architecture
 
 ```text
-Supabase Auth -> browser session.access_token
-                         |
+Supabase Auth → browser session.access_token
 Browser /alexa --Bearer--> Next.js POST /api/mcp (Node)
-                              |
-                         official MCP client
-                         initialize -> tools/list -> tools/call
-                              |
-                    Streamable HTTP + same Bearer
-                              |
-                    Lightsail CountOn MCP /mcp
-                              |
-                       JWT + owned services --------+
-                                                   |
-Browser dashboard --Bearer--> Lightsail FastAPI ----+--> same Supabase PostgreSQL
-
-Agent Skill -> host instructions for the same three tools (no extra transport)
+                           official MCP client
+                           initialize → tools/list → tools/call
+                           Streamable HTTP + same Bearer
+                             ↓
+                       CountOn Python MCP /mcp
+                       existing JWT + ownership
+                         ├─ compile / continue → Bedrock + canonical clarification
+                         │                      ↔ durable compilation_sessions ledger
+                         ├─ capture / get / list → existing CountOn services
+                         └─ explain → latest evaluation → MISMATCH only → grounded AI
+                             ↓
+                       shared PostgreSQL / Supabase
+                             ↑
+Browser dashboard --Bearer--> FastAPI → same owned services
+Real evidence → deterministic evaluator → persisted MATCH / UNKNOWN / MISMATCH
+Agent Skill → host instructions for these six tools; no extra transport or App UI
 ```
 
 ## Repeating automated acceptance
 
-Frontend: `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`.
-Backend: run `pytest tests/test_mcp.py tests/test_mcp_network.py tests/test_mcp_services.py`
-with a separately configured loopback `TEST_DATABASE_URL` ending in `_test`;
-also run `pytest tests/test_auth.py`. Never point that fixture at application data.
+From `frontend`: `npm run test`, `npm run lint`, `npm run typecheck`, `npm run build`.
+From `backend`: `pytest` with a private loopback `TEST_DATABASE_URL` ending in
+`_test`; see [database testing](../backend/db/README.md#local-workflow).
+Without it database tests skip; never point that fixture at application data.
+
 The read-only `tests/mcp-live.test.ts` requires explicit `COUNTON_MCP_URL` and
-`COUNTON_MCP_TEST_ACCESS_TOKEN`, supplied through the process environment.
+`COUNTON_MCP_TEST_ACCESS_TOKEN` in the process environment. It validates core reads;
+use [intelligence smoke](bedrock-integration.md#exact-production-checks) for the
+six-tool/live inference path. Neither a core badge nor mock output certifies AWS access.
 
-`node tests/alexa-live.mjs` requires `COUNTON_ALEXA_BASE_URL`,
-`COUNTON_E2E_API_BASE_URL`, `COUNTON_E2E_EMAIL`, `COUNTON_E2E_PASSWORD`.
-Use the production frontend/API URLs and a dedicated test account, with secrets
-provided securely. It tags only its test capture, checks ID/tag ownership before
-cleanup, and confirms the row is absent. Artifacts are ignored screenshots in
-`frontend/test-results/alexa/`. The product parser/transport is not modified.
+`node tests/alexa-live.mjs` requires private `COUNTON_E2E_EMAIL` /
+`COUNTON_E2E_PASSWORD`, plus `COUNTON_ALEXA_BASE_URL` and `COUNTON_E2E_API_BASE_URL`.
+It compiles a tagged utterance, checks capture/normal API persistence, and cleans
+only its exact test row. Artifacts are ignored under `frontend/test-results/alexa/`.
+Use a dedicated account and review cleanup failures; never leave junk intentionally.
 
-## Security audit scope
+## Security review boundary
 
-Scanned current tracked/untracked source text and committed history of all local
-Git refs for JWTs, private keys, database URLs and known ignored secrets. Candidate
-files were README.md, backend/db/README.md, backend/tests/test_demo_identity.py,
-and frontend/tests/mcp.test.ts. Generic credential-assignment review additionally
-checked backend/tests/test_config.py, frontend/tests/alexa.test.tsx,
-frontend/tests/auth.test.tsx, and frontend/tests/screens.test.tsx; their hits were
-synthetic test values or a Markdown fence after an empty credential field.
-The reviewed files contain documented local-development values,
-placeholder URLs or deliberate synthetic fixtures; no real production credential
-was identified and no credential remediation was needed. Ignored env/linkage
-files were verified. Frontend production configuration contains no backend
-database/admin credential. Safe responses and logging are covered by source
-review, tests, and a bounded recent runtime-log inspection; this is not a claim
-to have audited remote Git refs or all historical cloud logs.
-The Vercel sample contained 50 entries with no private credential/header matches.
-Lightsail's container-log API returned no MCP events, so MCP log safety is
-supported by source review and the passing capture/redaction tests rather than
-an observed cloud-log sample.
+Verify ignored env/linkage files and scan tracked source for real credentials before
+publishing. Synthetic test fixtures and documented loopback development values are
+not production credentials. Safe response/log tests cover token/body redaction;
+source inspection and local tests do not certify all cloud logs or remote Git refs.
+No production secret/environment audit is claimed by this documentation cleanup.

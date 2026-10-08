@@ -1,8 +1,3 @@
-> Current transport integration: authenticated MCP `explain_expectation_mismatch`
-> calls this pure service after owned historical reads. See
-> [deployment and conversational integration](../../../docs/bedrock-integration.md).
-> The pure boundary below is implemented and used by the authenticated MCP tool.
-
 # Bedrock Mismatch Investigator
 
 The deterministic evaluator answers **“Did the expectation fail?”** Bedrock answers
@@ -11,7 +6,26 @@ The recorded result, comparison target, observed value, tolerance and evaluator
 reason remain authoritative. Explanation never changes evaluation or writes expectation/evaluation/evidence
 rows. The existing authenticated MCP explanation tool is consumed by `/alexa`.
 
-## Pure service contract
+## Service responsibilities
+
+The similarly named modules are intentionally retained:
+
+- `app/services/investigation_service.py` is the pure explanation boundary. It
+  accepts already-loaded typed expectation/evaluation/evidence, delegates to the
+  canonical investigator, and owns/closes a default client. It does no auth,
+  database reads or persistence.
+- `app/services/investigator_service.py` is owned database orchestration. It loads
+  the owned expectation and latest evaluation, gates MISMATCH, bounds evidence
+  reads, then delegates to the pure boundary. Non-mismatch/missing evaluation uses
+  existing domain errors.
+
+They are not duplicate implementations. The MCP explanation tool has its own
+response-oriented outcome gate (MATCH/UNKNOWN/no evaluation are friendly results),
+then calls the pure service with that same loaded snapshot and provenance. This
+avoids reloading a different evaluation between gating and explanation. Neither
+module changes evaluator outcomes, and neither is renamed in this cleanup.
+
+## Service contracts
 
 For an owned database read, use the existing orchestration module:
 
@@ -170,7 +184,7 @@ This output is verified by an **offline mocked Converse** test, not a live AWS
 model invocation. With Bedrock disabled/down, the same immutable summary is
 returned with insufficient-cause wording and no invented factors.
 
-## Validation and next integration
+## Validation and current integration
 
 From `backend`, with the existing `.venv` activated:
 
