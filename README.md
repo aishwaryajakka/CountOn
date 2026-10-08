@@ -9,6 +9,42 @@ The [CountOn Agent Skill](docs/agent-skill.md) teaches compatible agent hosts th
 existing MCP workflows while separating expectations from evidence/evaluation.
 It complements the Alexa+ web demo; transport remains Streamable HTTP.
 
+## Alexa+ hackathon track
+
+Live demo: **https://counton-frontend.vercel.app/alexa**. Sign in normally,
+wait for the verified MCP badge, then use the list, electricity detail, and
+grocery capture starter prompts. Successful capture links to the ordinary
+CountOn detail page; refresh demonstrates shared persistence.
+
+```text
+Supabase Auth -> current browser access token
+Browser /alexa -> Bearer -> Next.js /api/mcp -> real MCP initialize/tools/list/tools/call
+               -> Streamable HTTP -> Lightsail CountOn MCP -> owned services -> Supabase
+Browser dashboard -> Bearer -> Lightsail FastAPI -> same services/database
+```
+
+The demo uses the official TypeScript MCP client and the existing Python MCP
+server. Only capture_expectation, get_expectation, and list_expectations are
+exposed; all tool arguments use exactly `{ "request": {...} }`. Tokens remain
+in the existing secure session/request flow and are never printed or returned.
+Current MCP responses expose stored status, not evidence/evaluation reasoning.
+The router is deterministic; Bedrock and native Alexa+ device linking are not
+implemented. This is CountOn's web demo, not Amazon's official simulator.
+
+Vercel Production requires NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL,
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and server-only COUNTON_MCP_URL. They are
+configured for the canonical production URL; no service-role key is used.
+
+Final acceptance on 2026-10-08: production initialize/discovery/list/get/capture,
+normal UI handoff, refresh/persistence, mobile layout, and tagged exact-ID cleanup
+passed. Frontend lint/typecheck/build and 89 standard tests passed, plus the live
+MCP test. Backend: 38 MCP tests against isolated counton_test and 35 auth tests
+passed. The Agent Skill passed its reference validator. No backend transport
+changes were required.
+
+See [full acceptance, environment setup, manual test, and timed judge scripts](docs/hackathon-acceptance.md),
+[simulator guide](frontend/docs/alexa-demo.md), and [Agent Skill guide](docs/agent-skill.md).
+
 ## Architecture
 
 ```text
