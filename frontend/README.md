@@ -14,7 +14,7 @@ applied. Google Fonts must be reachable during the initial build.
 git pull
 cd frontend
 npm install
-cp .env.example .env.local
+touch .env.local
 ```
 
 Replace the two Supabase placeholders with the team's **public** configuration:
@@ -29,6 +29,65 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<team-provided-public-key>
 demo credentials in frontend environment files. `NEXT_PUBLIC_*` values are built
 into the browser bundle; rebuild/restart after changing them. Production API base
 URLs should use HTTPS. The base URL is the API origin, without `/api/v1`.
+
+## Vercel production
+
+Production: **https://counton-frontend.vercel.app**. Deploy the `frontend`
+directory as a Next.js project; use `npm run build` and the default Next.js
+output settings. No `vercel.json` is required.
+
+The Vercel project `counton-frontend` has these Production environment variables:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://counton-api.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com
+NEXT_PUBLIC_SUPABASE_URL=<existing Supabase project URL>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<existing public publishable key>
+```
+
+Only these public values belong in the frontend. Backend credentials remain on
+Lightsail. `.env.local` and `.vercel/` are ignored. Production rejects missing,
+non-HTTPS, or localhost API configuration. Environment changes require a rebuild.
+
+From the repository root, using the already installed Vercel CLI:
+
+```sh
+cd frontend
+npm install
+npm run build
+vercel link --project counton-frontend
+vercel --prod
+```
+
+If the CLI is unavailable, install it with `npm install -g vercel` and run
+`vercel login`. The API's `ALLOWED_ORIGINS` must include
+`https://counton-frontend.vercel.app`; preserve its other origins. A different
+custom domain or preview origin needs its own explicit CORS entry.
+
+The stable project alias is also supported. Lightsail `counton-api` currently
+uses this JSON-array environment value (enter it directly, without extra shell quotes):
+
+```env
+ALLOWED_ORIGINS=["https://counton-api.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com","https://counton-frontend.vercel.app","https://counton-frontend-aishwaryajakkas-projects.vercel.app"]
+```
+
+Pydantic Settings parses the environment variable as a `list[str]` from JSON;
+comma-separated text is not the supported format. Origins must match exactly,
+without a trailing slash. Updating Lightsail environment settings requires a
+new API deployment. No origin is hardcoded in backend source.
+
+For connection failures, the browser console reports `CountOn API request failed`
+with failure category, method, API origin, route, status, duration, and request
+reference when available. It omits tokens, headers, bodies, query values and
+upstream error details. Status `0` means the browser could not obtain a response;
+check CORS preflight, connectivity and the actual page origin. HTTP `401` means
+the API responded and rejected the session; HTTP `5xx` needs backend investigation.
+The expectations request is `GET /api/v1/expectations?limit=100&offset=0`, with
+`Authorization: Bearer <Supabase access token>`.
+
+CLI production deployment is configured. For automatic GitHub deployments,
+add the GitHub login connection in Vercel, connect `aishwaryajakka/CountOn`, and
+set its Root Directory to `frontend`. Supabase email/password authentication
+continues to use the existing project and session flow.
 
 ## Run locally
 

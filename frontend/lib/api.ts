@@ -6,17 +6,36 @@ export class ApiError extends Error {
 }
 type Dependencies = { token: () => Promise<string | null>; unauthorized: () => Promise<void>; fetcher?: typeof fetch; baseUrl?: string };
 export function createApiClient(deps: Dependencies) {
-  const base = (deps.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+  const configured = deps.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const base = (configured ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000')).replace(/\/$/, '');
+  if (!base) throw new Error('Configure NEXT_PUBLIC_API_BASE_URL before building the production frontend.');
+  if (process.env.NODE_ENV === 'production') {
+    const url = new URL(base);
+    if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
+      throw new Error('Production NEXT_PUBLIC_API_BASE_URL must point to the public HTTPS API.');
+    }
+  }
   async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = await deps.token();
     if (!token) { await deps.unauthorized(); throw new ApiError('Your session has ended. Please sign in again.', 401); }
     const headers = new Headers(options.headers);
     headers.set('Authorization', `Bearer ${token}`);
     if (options.body) headers.set('Content-Type', 'application/json');
+    const started = performance.now();
+    const logFailure = (failure: 'network' | 'http' | 'response', status: number, requestId?: string) => {
+      // Keep credentials, query values, request bodies and upstream errors out of logs.
+      console.warn('CountOn API request failed', {
+        failure, status, requestId, method: options.method ?? 'GET',
+        origin: new URL(base).origin,
+        route: `/api/v1${path.split('?')[0]}`.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id'),
+        durationMs: Math.round(performance.now() - started),
+      });
+    };
     let response: Response;
     try { response = await (deps.fetcher ?? fetch)(`${base}/api/v1${path}`, { ...options, headers, cache: 'no-store' }); }
     catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error;
+      logFailure('network', 0);
       throw new ApiError('We couldn’t reach CountOn. Check your connection and try again.', 0);
     }
     if (!response.ok) {
@@ -25,11 +44,16 @@ export function createApiClient(deps: Dependencies) {
       const envelope = body && typeof body === 'object' && 'error' in body ? body.error : null;
       const message = response.status === 429 ? 'Please wait a moment before trying again.' : response.status >= 500 ? 'CountOn is temporarily unavailable. Please try again.' : envelope && typeof envelope === 'object' && 'message' in envelope && typeof envelope.message === 'string' ? envelope.message : 'Something went wrong. Please try again.';
       const id = response.headers.get('X-Request-ID') ?? (envelope && typeof envelope === 'object' && 'request_id' in envelope && typeof envelope.request_id === 'string' ? envelope.request_id : undefined);
+      logFailure('http', response.status, id);
       throw new ApiError(message, response.status, id);
     }
     if (response.status === 204) return undefined as T;
     try { return await response.json() as T; }
-    catch { throw new ApiError('We couldn’t read this response. Please try again.', response.status, response.headers.get('X-Request-ID') ?? undefined); }
+    catch {
+      const id = response.headers.get('X-Request-ID') ?? undefined;
+      logFailure('response', response.status, id);
+      throw new ApiError('We couldn’t read this response. Please try again.', response.status, id);
+    }
   }
   // FastAPI returns arrays, with limit/offset rather than a pagination envelope.
   async function all<T>(path: string, signal?: AbortSignal): Promise<T[]> {
