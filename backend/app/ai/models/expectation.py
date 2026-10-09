@@ -57,16 +57,37 @@ class ClarificationRequest(BaseModel):
     required: bool = Field(default=True, description="Whether clarification is required before proceeding")
     question: Optional[str] = Field(default=None, description="Human-friendly clarification question to ask the user")
     missing_fields: List[str] = Field(default_factory=list, description="List of missing or ambiguous fields")
+    draft_expectation: Optional[dict[str, Any]] = Field(default=None, description="Partial expectation draft accumulated so far")
+
+
+class CancellationRequest(BaseModel):
+    """
+    Represents a structured intent to cancel an expectation.
+    """
+    expectation_id: Optional[str] = Field(default=None, description="ID of the expectation to cancel if provided")
+    target_claim: Optional[str] = Field(default=None, description="Target claim or subject to cancel")
+    reason: Optional[str] = Field(default=None, description="Optional cancellation reason")
+
+
+class CorrectionRequest(BaseModel):
+    """
+    Represents a structured user correction or amendment to an existing expectation.
+    """
+    expectation_id: Optional[str] = Field(default=None, description="ID of the expectation being corrected")
+    field: Optional[str] = Field(default=None, description="Field being updated (e.g. deadline, baseline, metric)")
+    new_value: Any = Field(default=None, description="New value for the field")
 
 
 class ExpectationCompilationResult(BaseModel):
     """
     Wrapper returned by compile_expectation.
-    Contains either a valid Expectation OR a ClarificationRequest.
+    Contains either a valid Expectation, ClarificationRequest, or CancellationRequest.
     """
-    kind: Literal["expectation", "clarification"] = Field(..., description="Discriminator for result type")
+    kind: Literal["expectation", "clarification", "cancellation"] = Field(..., description="Discriminator for result type")
     expectation: Optional[Expectation] = Field(default=None, description="Compiled expectation if kind=='expectation'")
     clarification: Optional[ClarificationRequest] = Field(default=None, description="Clarification request if kind=='clarification'")
+    cancellation: Optional[CancellationRequest] = Field(default=None, description="Cancellation request if kind=='cancellation'")
+    is_correction: bool = Field(default=False, description="True if this compilation represents a correction or update to an existing expectation")
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ExpectationCompilationResult":
@@ -74,6 +95,8 @@ class ExpectationCompilationResult(BaseModel):
             raise ValueError("expectation must be provided when kind is 'expectation'")
         if self.kind == "clarification" and self.clarification is None:
             raise ValueError("clarification must be provided when kind is 'clarification'")
+        if self.kind == "cancellation" and self.cancellation is None:
+            raise ValueError("cancellation must be provided when kind is 'cancellation'")
         return self
 
 
