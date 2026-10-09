@@ -87,6 +87,14 @@ def _mock_investigate_mismatch(
             confidence=0.95
         )
 
+    if "outlook_calendar" in sources or "outlook_email" in sources:
+        status_val = metrics.get("appointment_status") or metrics.get("appointment_date") or "rescheduled"
+        return InvestigationResult(
+            explanation="Your Outlook Calendar shows the appointment was rescheduled to a different date or marked as cancelled.",
+            key_factors=["Outlook Calendar verification", f"Calendar record indicates: {status_val}"],
+            confidence=0.92,
+        )
+
     if len(evidence) == 1 and ("bill" in sources or "utility_bill" in sources) and not usage_val:
         return InvestigationResult(
             explanation="I found that the result differed from your expectation, but the available evidence isn't sufficient to determine why.",
