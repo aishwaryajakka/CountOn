@@ -42,6 +42,9 @@ class StructuredFormatter(logging.Formatter):
             "repair_count",
             "turn_count",
             "clarification_event",
+            "run_id",
+            "action",
+            "audit_status",
         ):
             if hasattr(record, key):
                 value[key] = getattr(record, key)

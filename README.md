@@ -17,8 +17,8 @@ outcomes or invent observations.
 
 ```text
 Supabase Auth → current user's bearer token
-  Browser /alexa → authenticated Next.js /api/mcp
-    → official MCP client → Streamable HTTP → Python MCP
+  Browser /alexa → Next.js /api/agent → JWT-authenticated FastAPI agent route
+    → controlled orchestrator/session → MCP SDK Streamable HTTP → Python MCP
       → compiler / stateful clarification / grounded investigator
       → owned CountOn services → repositories → PostgreSQL / Supabase
   Browser dashboard → authenticated FastAPI → same services/database
@@ -37,7 +37,8 @@ written directly to Supabase.
 | --- | --- |
 | **Done locally** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; local test/build validation. |
 | **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
-| **Not complete** | Traditional Alexa Skill intents/backend connection, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; Outlook, Ring and Bee ingestion; continuous scheduling/monitor worker; broader Trust Orchestrator/privacy ledger. Existing account/job/audit/provenance records are contracts, not those completed integrations. |
+| **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
+| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; Outlook, Ring and Bee ingestion; continuous scheduling/monitor worker; broader autonomous orchestration/shared session infrastructure. Existing account/job/audit/provenance records are contracts, not those completed integrations. |
 
 The core MCP tools are `capture_expectation`, `get_expectation`, and
 `list_expectations`. The intelligence tools are `compile_expectation`,
@@ -171,14 +172,14 @@ routing and a bounded owned-record search, not an autonomous agent.
 3. Configure secure live Bedrock/model access on the MCP service.
 4. Run live Bedrock smoke on the trusted backend.
 5. Run live `/alexa` intelligence E2E, including clarification, shared persistence and Why.
-6. Finish traditional Alexa Skill intents/interaction model.
-7. Connect its authenticated backend endpoint without changing the evaluator boundary.
+6. Import the traditional Alexa interaction model and deploy its signed HTTPS adapter.
+7. Provision compatible OAuth account linking/consent and verify the authenticated path.
 8. Test the Alexa Skills Kit simulator.
 9. Test real Alexa/Echo.
 10. Add Outlook ingestion.
 11. Add Ring ingestion.
 12. Add Bee ingestion.
-13. Build the broader Trust Orchestrator/privacy/provenance layer using existing grounded provenance.
+13. Manually validate the minimal Trust Orchestrator source policy, receipts and audit delivery; broader autonomous monitoring remains future work.
 14. Complete final demo hardening.
 
 This order preserves the requested priorities. Runtime configuration and migrations
@@ -187,6 +188,8 @@ makes a provider, worker or Alexa device integration complete.
 
 ## Component documentation
 
+- [Controlled orchestrator and Alexa session boundary](backend/app/agent/README.md)
+- [Traditional Alexa HTTPS adapter, interaction model and console/account-link setup](docs/traditional-alexa.md)
 - [MCP tools, auth, startup and remote smoke](docs/mcp.md)
 - [Bedrock integration and rollout](docs/bedrock-integration.md)
 - [Compiler/client semantics](backend/app/ai/README.md),
@@ -197,3 +200,9 @@ makes a provider, worker or Alexa device integration complete.
   and [Next.js MCP client](frontend/docs/mcp-client.md)
 - [Hackathon acceptance](docs/hackathon-acceptance.md) and
   [Agent Skill inspection/consumption](docs/agent-skill.md)
+
+The minimal Trust Orchestrator now validates evidence-source permissions, creates
+backend-authored response receipts and records redacted runs in existing audit_events.
+The web simulator exposes an expandable safe provenance summary. See the
+[trust acceptance and exact manual runbook](docs/trust-orchestrator.md); implementation
+and local tests do not establish production Bedrock or Alexa/Echo acceptance.

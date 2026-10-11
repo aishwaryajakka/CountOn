@@ -22,11 +22,12 @@ def get_current_user(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AuthenticationError()
     user = get_token_verifier().verify(credentials.credentials)
-    request.state.user_id=str(user.id)
-    ensure_profile(db, user.id)
+    request.state.user_id = str(user.id)
+    profile = ensure_profile(db, user.id)
+    request.state.profile_timezone = profile.timezone
     return user
 
 
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
 
-__all__ = ["get_db", "get_current_user", "CurrentUser"]
+__all__ = ["CurrentUser", "get_current_user", "get_db"]

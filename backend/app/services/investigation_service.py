@@ -3,7 +3,10 @@
 from collections.abc import Sequence
 from typing import Protocol
 
+from app.agent.privacy import EvidenceAccessPolicy
+from app.ai.investigation_evidence import InvestigationInputError
 from app.ai.mismatch_investigator import BedrockMismatchInvestigator
+from app.evaluators.base import EvaluationResult
 from app.schemas.evaluation import EvaluationResponse
 from app.schemas.evidence import EvidenceResponse
 from app.schemas.expectation import ExpectationResponse
@@ -34,6 +37,16 @@ def investigate_mismatch(
     Future orchestration must get owned expectation/evaluation/evidence via existing
     services and pass the verified principal as context, never a client-supplied ID.
     """
+    if (
+        evaluation.result != EvaluationResult.MISMATCH
+        or evaluation.expectation_id != expectation.id
+        or context
+        and context.authenticated_user_id not in (None, expectation.user_id)
+        or any(item.expectation_id != expectation.id for item in evidence)
+    ):
+        raise InvestigationInputError()
+    policy = EvidenceAccessPolicy(expectation)
+    evidence = [item for item in evidence if policy.decide(item).allowed]
     if investigator is not None:
         return investigator.investigate_mismatch(
             expectation=expectation,

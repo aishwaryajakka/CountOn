@@ -11,6 +11,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from app.db.models.evidence import Evidence
 
+from app.agent.privacy import EvidenceAccessPolicy
 from app.db.models.expectation import ComparisonType, ExpectationType
 from app.evaluators.base import EvaluationResult, latest_evidence
 from app.evaluators.numeric import extract_numeric
@@ -148,9 +149,11 @@ def normalize(
         selection_metric = observed_value.metric
     allowed = {selection_metric} | set(CONTRIBUTORS.get(metric or "", ()))
     candidates: list[EvidenceResponse] = []
+    policy = EvidenceAccessPolicy(expectation)
     for item in evidence:
         if (
-            item.metric not in allowed
+            not policy.decide(item).allowed
+            or item.metric not in allowed
             or not aware(item.created_at)
             or not aware(item.observed_at)
             or item.created_at > evaluation.created_at

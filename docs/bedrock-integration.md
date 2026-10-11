@@ -10,21 +10,17 @@ introduced. This keeps discovery and the judge trace consistent while making
 **Bedrock interprets → MCP acts** visible as separate calls.
 
 ```text
-User → /alexa → deterministic conversational router
-                 │
-                 ├─ list/detail → Next.js /api/mcp → Streamable HTTP → list/get
-                 │
-                 ├─ capture → /api/mcp → MCP compile_expectation
-                 │                         → Bedrock compiler
-                 │                         → signed clarification if needed
-                 │                         → existing ExpectationCreate
-                 │           → separate MCP capture_expectation → owned services
-                 │
-                 └─ why failed → list/match → MCP explain_expectation_mismatch
-                                               → owned expectation
-                                               → latest deterministic evaluation
-                                               → bounded historical evidence
-                                               → Bedrock investigator/fallback
+User → /alexa → Next.js /api/agent → authenticated FastAPI agent route
+→ controlled orchestrator + bounded session
+  ├─ list/detail → MCP list/get, owned selection/disambiguation
+  ├─ capture → MCP compile/continue → Bedrock + canonical signed state
+  │          → complete validated expectation → separate MCP capture
+  └─ contextual why → owned get → MCP explain_expectation_mismatch
+                      → latest deterministic evaluation
+                      → MISMATCH only → relevant evidence → investigator/fallback
+
+Every MCP action uses real SDK Streamable HTTP and {"request": {...}}.
+Next.js /api/mcp is discovery-only; browser tool dispatch is rejected.
 
 MCP → CountOn services → PostgreSQL / Supabase
 Dashboard → FastAPI → same PostgreSQL / Supabase
@@ -73,14 +69,16 @@ contribution is not causation, net effect or proof of matching billing periods.
 List/detail stay deterministic; capture regexes choose intent only and produce no
 static payload. Active clarification answers/corrections/cancellation go to the
 continuation tool. List/detail can interrupt clarification without saving anything.
-Trusted Next.js orchestration captures only the final validated structure. An ambiguous detail match asks
-for specificity; a missing match never creates an expectation. Search currently
-covers the first 50 records and discloses that limit.
+The controlled backend orchestrator captures only the final validated structure.
+An ambiguous detail match asks for selection; a missing match never creates an
+expectation. Owned selection checks pages up to a 1,000-record bound and never
+claims uniqueness after a truncated search. The browser retains only a rotated
+opaque session handle; the compiler state and capture ticket stay server-side.
 
 Signed state contains no JWT, AWS data, credentials or stored principal ID. HMAC
 binds it to the authenticated user. It is integrity protected, **not encrypted**;
 it contains that user's private utterance/facts. Never log/echo the opaque state.
-Production requires a shared signing secret on every MCP replica; development
+Production requires the same signing secret on FastAPI and every MCP replica; development
 uses a process-local random key, invalidated on restart. TTL, turn limits and
 prompt-version checks reuse the clarification state machine. Rotate the key to
 invalidate existing handles. Signed state is not authentication.

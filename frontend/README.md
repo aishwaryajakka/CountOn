@@ -141,7 +141,7 @@ The supplied portrait is used only for this demo account; other users get initia
 | --- | --- |
 | `/` | Redirects to `/dashboard` |
 | `/login` | Email/password sign-in |
-| `/alexa` | Authenticated Alexa+ hackathon conversation using real MCP discovery/list/get, compiler/clarification/capture and grounded Why explanations; see [demo guide](docs/alexa-demo.md) |
+| `/alexa` | Authenticated Alexa+ hackathon conversation through the controlled backend orchestrator, real MCP discovery/actions, stateful clarification and grounded Why explanations; see [demo guide](docs/alexa-demo.md) |
 | `/dashboard` | Actual expectations, latest results, evidence context and dynamic counts |
 | `/expectations` | Cards and filters by presentation status |
 | `/expectations/new` | Conversational claim → explicit manual criteria → confirmation → API create |

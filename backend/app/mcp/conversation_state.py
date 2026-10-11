@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import secrets
 from functools import lru_cache
 from uuid import UUID
@@ -47,8 +48,20 @@ def signature(payload: str, user_id: UUID, key: bytes) -> str:
 
 
 def encode_state(state: ClarificationState, user_id: UUID, settings: Settings) -> str:
+    # JSONB may reorder nested facts. Canonical bytes keep replay signatures and
+    # stored digests stable without changing the state format or decoder.
     payload = (
-        base64.urlsafe_b64encode(state.model_dump_json().encode()).decode().rstrip("=")
+        base64.urlsafe_b64encode(
+            json.dumps(
+                state.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode()
+        )
+        .decode()
+        .rstrip("=")
     )
     token = payload + "." + signature(payload, user_id, signing_key(settings))
     if len(token) > 24000:

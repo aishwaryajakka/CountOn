@@ -6,6 +6,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.agent.privacy import EvidenceAccessPolicy
+from app.ai.investigation_evidence import InvestigationGroundingError, normalize
 from app.core.config import get_settings
 from app.core.exceptions import EvaluationNotFoundError
 from app.evaluators.base import EvaluationResult
@@ -30,6 +32,7 @@ from app.schemas.evaluation import EvaluationResponse
 from app.schemas.evidence import EvidenceResponse
 from app.schemas.expectation import ExpectationResponse
 from app.schemas.investigation import InvestigationContext
+from app.schemas.trust import EvidenceProvenance
 from app.services import (
     compiler_service,
     evaluation_service,
@@ -190,11 +193,32 @@ def explain_request(
     evidence = evidence_repository.investigation_evidence(
         db, expectation.id, evaluation
     )
+    owned_expectation = ExpectationResponse.model_validate(expectation)
+    owned_evaluation = EvaluationResponse.model_validate(evaluation)
+    actual_evidence = [EvidenceResponse.model_validate(row) for row in evidence]
+    context = InvestigationContext(authenticated_user_id=user_id)
     explained = investigation_service.investigate_mismatch(
-        expectation=ExpectationResponse.model_validate(expectation),
-        evaluation=EvaluationResponse.model_validate(evaluation),
-        evidence=[EvidenceResponse.model_validate(row) for row in evidence],
-        context=InvestigationContext(authenticated_user_id=user_id),
+        expectation=owned_expectation,
+        evaluation=owned_evaluation,
+        evidence=actual_evidence,
+        context=context,
+    )
+    facts = normalize(
+        expectation=owned_expectation,
+        evaluation=owned_evaluation,
+        evidence=actual_evidence,
+        context=context,
+        max_evidence=get_settings().investigator_max_evidence,
+    )
+    refs = {item.ref: item.item.id for item in facts.evidence}
+    if any(refs.get(ref.ref) != ref.evidence_id for ref in explained.evidence_refs):
+        raise InvestigationGroundingError()
+    policy = EvidenceAccessPolicy(owned_expectation)
+    provenance = EvidenceProvenance(
+        decisions=tuple(policy.decide(item) for item in actual_evidence),
+        used=tuple(ref.evidence_id for ref in explained.evidence_refs),
+        bedrock_attempted=explained.bedrock_attempted,
+        grounding_passed=explained.grounding_passed,
     )
     # Speech is rendered from accepted, grounded facts only. Keep provenance and
     # technical caveats available in the structured result, outside normal speech.
@@ -239,6 +263,7 @@ def explain_request(
         evidence_ids=[ref.evidence_id for ref in explained.evidence_refs],
         fallback_used=explained.generation == "deterministic",
         bedrock_used=explained.generation == "bedrock",
+        provenance=provenance,
         code=None
         if explained.generation == "bedrock"
         else "NO_EVIDENCE"

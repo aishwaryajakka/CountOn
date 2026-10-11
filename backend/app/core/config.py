@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     mcp_port: int = Field(default=8003, ge=1, le=65535)
     mcp_public_url: str | None = None
     mcp_allowed_origins: list[str] = Field(default_factory=list)
+    alexa_skill_id: str | None = Field(default=None, pattern=r"^amzn1\.ask\.skill\.[A-Za-z0-9-]+$")
     counton_demo_user_id: UUID | None = None
     counton_demo_email: str = "demo@counton.app"
     counton_demo_password: SecretStr | None = Field(default=None, repr=False)

@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from app.ai.bedrock_client import BedrockClient
-from app.ai.exceptions import BedrockError
+from app.ai.exceptions import BedrockError, BedrockResponseError
 from app.ai.investigation_evidence import (
     InvestigationFacts,
     InvestigationGroundingError,
@@ -266,6 +266,7 @@ class BedrockMismatchInvestigator:
         ):
             facts = replace(facts, evidence=facts.evidence[:-1], truncated=True)
         draft = None
+        grounding_passed: bool | None = None
         if facts.evidence:
             try:
                 draft = self.client.converse_json(
@@ -283,10 +284,21 @@ class BedrockMismatchInvestigator:
                 ):
                     raise InvestigationGroundingError()
                 result = explanation(facts, draft)
-            except (BedrockError, InvestigationGroundingError, ValidationError):
+                grounding_passed = True
+            except BedrockResponseError:
+                grounding_passed = False
+                result = explanation(facts, None)
+            except BedrockError:
+                result = explanation(facts, None)
+            except (InvestigationGroundingError, ValidationError):
+                grounding_passed = False
                 result = explanation(facts, None)
         else:
             result = explanation(facts, None)
+        result = result.model_copy(update={
+            "bedrock_attempted": bool(facts.evidence),
+            "grounding_passed": grounding_passed,
+        })
         logger.info(
             "Mismatch investigation completed",
             extra={
