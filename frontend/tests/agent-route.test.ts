@@ -9,6 +9,15 @@ const request = (body: unknown, auth: string | null = `Bearer ${token}`) => new 
 const fetcher = vi.fn();
 beforeEach(() => { vi.resetAllMocks(); vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://api.test'); vi.stubGlobal('fetch', fetcher); fetcher.mockResolvedValue(Response.json(output)); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+it('browser conversation has a deadline and masks timeout details without retries', async () => {
+  const deadline = vi.spyOn(AbortSignal, 'timeout');
+  fetcher.mockRejectedValue(new DOMException(`private ${token}`, 'TimeoutError'));
+  await expect(requestAgent(token, { text: 'Hello', session_reference: null })).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+  expect(deadline).toHaveBeenCalledWith(185_000);
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  deadline.mockRestore();
+});
 it('proxies only utterance/handle to the JWT-validated backend without redirects or caching', async () => { const response = await POST(request({ text: 'What am I counting on?', session_reference: null })); expect(response.status).toBe(200); expect(fetcher.mock.calls[0][0].href).toBe('https://api.test/api/v1/agent/converse'); expect(fetcher.mock.calls[0][1]).toMatchObject({ headers: { Authorization: `Bearer ${token}`, 'Accept-Language': 'en-US' }, body: '{"text":"What am I counting on?","session_reference":null}', redirect: 'error', cache: 'no-store' }); expect(response.headers.get('Cache-Control')).toBe('no-store'); expect(JSON.stringify(await response.json())).not.toContain(token); });
 it.each([null, 'Basic secret', 'Bearer one two'])('rejects malformed/missing auth: %s', async auth => { expect((await POST(request({ text: 'Hello', session_reference: null }, auth))).status).toBe(401); expect(fetcher).not.toHaveBeenCalled(); });
 it.each(['tool', 'user_id', 'action', 'plan', 'result', 'expectation_id', 'clarification_state', 'aws_credentials'])('rejects client %s injection before contacting backend', async field => { expect((await POST(request({ text: 'Hello', session_reference: null, [field]: 'injected-private' }))).status).toBe(400); expect(fetcher).not.toHaveBeenCalled(); });

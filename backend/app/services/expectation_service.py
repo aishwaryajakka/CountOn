@@ -4,13 +4,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ExpectationNotFoundError, InvalidExpectationError
-from app.db.models import Expectation, ExpectationStatus, ExpectationType
+from app.db.models import Expectation, ExpectationStatus, ExpectationType, MonitoringJob
 from app.repositories import expectation as repository
-from app.repositories.profile import ensure_profile
 from app.repositories import operations
+from app.repositories.profile import ensure_profile
 from app.schemas.expectation import ExpectationCreate, ExpectationUpdate
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,10 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
     validate_expectation(values | changes)
     try:
         repository.update_expectation(db, expectation, changes)
+        if expectation.status in (ExpectationStatus.cancelled, ExpectationStatus.resolved):
+            db.execute(update(MonitoringJob).where(MonitoringJob.expectation_id == expectation_id,
+                MonitoringJob.user_id == user_id, MonitoringJob.status.in_(['pending','running','paused']))
+                .values(status='cancelled', lease_token=None, lease_expires_at=None))
         operations.audit(db, expectation, "expectation.updated")
         db.commit()
     except Exception:

@@ -11,7 +11,9 @@ from app.api.v1 import (
     evidence,
     expectations,
     integrations,
+    monitoring,
     notifications,
+    provider_oauth,
 )
 
 router = APIRouter()
@@ -22,7 +24,9 @@ for module in (
     evidence,
     evaluations,
     notifications,
+    provider_oauth,
     integrations,
+    monitoring,
     compiler,
     dashboard,
 ):

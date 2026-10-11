@@ -1,6 +1,6 @@
 """Verify real signatures and claims; auth overrides exist only inside tests."""
-from time import time
 from datetime import datetime, timezone
+from time import time
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -27,8 +27,8 @@ def verifier(monkeypatch):
 
 
 def token(verifier, key, **changes):
-    claims = dict(iss=verifier.issuer, aud='authenticated', sub=str(uuid4()), role='authenticated',
-                  iat=int(time())-1, exp=int(time())+300)
+    claims = {'iss': verifier.issuer, 'aud': 'authenticated', 'sub': str(uuid4()), 'role': 'authenticated',
+                  'iat': int(time())-1, 'exp': int(time())+300}
     claims.update(changes)
     return jwt.encode(claims, key, algorithm='ES256', headers={'kid':'test-key'}), claims
 
@@ -71,7 +71,7 @@ def test_one_second_issuer_clock_skew(verifier, monkeypatch, fixed_jwt_clock, al
 @pytest.mark.parametrize('claim,offset', [('iat', 6), ('nbf', 6), ('exp', -6)])
 def test_clock_skew_window_is_bounded(verifier, monkeypatch, fixed_jwt_clock, algorithm, claim, offset):
     verifier, key = verifier
-    changes = dict(iat=fixed_jwt_clock-1, exp=fixed_jwt_clock+300)
+    changes = {'iat': fixed_jwt_clock-1, 'exp': fixed_jwt_clock+300}
     changes[claim] = fixed_jwt_clock+offset
     _, claims = token(verifier, key, **changes)
     if algorithm == 'HS256':
@@ -134,6 +134,21 @@ def test_legacy_hs256_requires_auth_server(verifier, monkeypatch, status, matchi
         assert str(verifier.verify(encoded).id)==claims['sub']
     else:
         with pytest.raises(AuthenticationError): verifier.verify(encoded)
+
+
+@pytest.mark.parametrize('body', [None, [], ['id'], 'unexpected', 42, {'id': None}])
+def test_legacy_auth_malformed_success_fails_closed(verifier, monkeypatch, body):
+    checked, key = verifier
+    _, claims = token(checked, key)
+    encoded = jwt.encode(claims, 'fixture-secret-at-least-32-characters', algorithm='HS256')
+    monkeypatch.setattr('app.core.auth.httpx.get', lambda *a, **k: SimpleNamespace(
+        status_code=200, json=lambda: body))
+    monkeypatch.setattr('app.api.dependencies.get_token_verifier', lambda: checked)
+    with TestClient(app) as client:
+        response = client.get('/api/v1/expectations', headers={'Authorization': f'Bearer {encoded}'})
+    assert response.status_code == 401
+    assert response.json()['error']['code'] == 'UNAUTHORIZED'
+    assert encoded not in response.text
 
 
 @pytest.mark.parametrize('headers', [{},{'Authorization':'Bearer invalid-token'},{'Authorization':'Basic invalid'}])

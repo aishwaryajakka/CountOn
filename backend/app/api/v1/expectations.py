@@ -3,12 +3,17 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status as http_status
+from fastapi import APIRouter, Depends, Query, Response
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_db
 from app.db.models import Expectation, ExpectationStatus, ExpectationType
-from app.schemas.expectation import ExpectationCreate, ExpectationResponse, ExpectationUpdate
+from app.schemas.expectation import (
+    ExpectationCreate,
+    ExpectationResponse,
+    ExpectationUpdate,
+)
 from app.services import expectation_service as service
 
 router = APIRouter(prefix="/expectations", tags=["expectations"])

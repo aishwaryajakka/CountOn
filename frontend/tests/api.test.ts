@@ -3,6 +3,35 @@ import { ApiError, createApiClient } from '@/lib/api';
 import { expectation } from './fixtures';
 describe('FastAPI client', () => {
   beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  it.each(['ftp://api.test', 'https://user:secret@api.test', 'https://api.test/path', 'https://api.test?key=private', 'https://api.test#fragment'])('rejects invalid API origins without echoing credentials', baseUrl => {
+    expect(() => createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), baseUrl })).toThrow('must be an HTTP(S) origin');
+  });
+  it('bounds requests while preserving caller cancellation', async () => {
+    const controller = new AbortController();
+    const deadline = vi.spyOn(AbortSignal, 'timeout');
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'));
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
+    await api.expectations(controller.signal);
+    expect(deadline).toHaveBeenCalledWith(20_000);
+    const signal = fetcher.mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+    deadline.mockRestore();
+  });
+  it('reports deadlines safely without retrying a possibly completed write', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new DOMException('private upstream detail', 'TimeoutError'));
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), fetcher });
+    await expect(api.request('/expectations', { method: 'POST', body: '{"claim":"private"}' })).rejects.toMatchObject({ status: 0 });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(/private upstream|private-token/);
+  });
+  it('preserves explicit caller aborts', async () => {
+    const aborted = new DOMException('Aborted', 'AbortError');
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher: vi.fn<typeof fetch>().mockRejectedValue(aborted) });
+    await expect(api.expectations()).rejects.toBe(aborted);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
   it('logs network diagnostics without credentials, query values or upstream details', async () => {
     const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), baseUrl: 'https://api.test', fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError('private provider detail')) });
     await expect(api.request('/expectations?private=value')).rejects.toMatchObject({ status: 0 });

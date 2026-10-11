@@ -1,11 +1,17 @@
 """Authenticated metadata-only connected accounts."""
 from typing import Annotated
 from uuid import UUID
-from fastapi import APIRouter,Depends,Query,Response
+
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
-from app.api.dependencies import CurrentUser,get_db
-from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
-from app.schemas.integration import IntegrationCreate,IntegrationUpdate,IntegrationResponse
+
+from app.api.dependencies import CurrentUser, get_db
+from app.db.models.integration import ConnectionStatus, ConnectionType, Provider
+from app.schemas.integration import (
+    IntegrationCreate,
+    IntegrationResponse,
+    IntegrationUpdate,
+)
 from app.services import integration_service as service
 
 router=APIRouter(prefix='/integrations',tags=['integrations'])

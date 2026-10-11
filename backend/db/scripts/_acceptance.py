@@ -6,19 +6,20 @@ from uuid import uuid4
 
 def run_acceptance(target: str) -> int:
     from sqlalchemy import select
+
     from app.db.models import Expectation
     from app.db.session import SessionLocal, engine
-    from app.schemas.expectation import ExpectationCreate
     from app.schemas.evidence import EvidenceCreate
-    from app.services import evidence_service, evaluation_service, expectation_service
+    from app.schemas.expectation import ExpectationCreate
+    from app.services import evaluation_service, evidence_service, expectation_service
 
     # This unique marker also identifies a committed row if a refresh fails
     # before create_expectation can return its ID. It is never used elsewhere.
     run_id = uuid4()
     claim = f"My next electricity bill will be lower [acceptance:{run_id}]"
     if target.upper() == "SUPABASE":
-        from db.scripts._token import access_token
         from app.core.auth import get_token_verifier
+        from db.scripts._token import access_token
         owner = get_token_verifier().verify(access_token()).id
     else:
         owner = run_id

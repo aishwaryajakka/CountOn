@@ -12,7 +12,7 @@ applied. Google Fonts must be reachable during the initial build.
 ```sh
 git pull
 cd frontend
-npm install
+npm ci
 touch .env.local
 ```
 
@@ -60,7 +60,7 @@ From the repository root, with an authenticated Vercel CLI:
 
 ```sh
 cd frontend
-npm install
+npm ci
 npm run build
 vercel link --project counton-frontend
 vercel --prod
@@ -243,3 +243,10 @@ JWT clock skew, ownership and deterministic evaluation. Current test counts and
 live deployment readiness must come from a fresh run; historical layout/Auth
 audits do not certify the current intelligence rollout. Real Alexa/Echo account
 linking, speech-to-text and live provider ingestion remain incomplete.
+
+For traditional ASK account linking, `/oauth/consent` uses the same Supabase login
+and native OAuth server. Set public `NEXT_PUBLIC_ALEXA_OAUTH_CLIENT_ID` and
+`NEXT_PUBLIC_ALEXA_REDIRECT_URIS` (comma-separated exact console callbacks), then
+rebuild. No client secret, AWS credential or service-role key belongs in these
+variables. The login return path is restricted to this consent flow. See
+[production setup](../docs/production-readiness.md).

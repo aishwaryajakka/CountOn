@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 import pytest
 import uvicorn
+
 from app.api import dependencies
 from app.core.logging import StructuredFormatter
 from app.core.observability import request_id
@@ -65,8 +66,9 @@ async def test_full_network_smoke_signed_jwt_and_cleanup(db, users, verifier, mo
 
 
 def test_http_health_readiness_request_ids_and_failure(monkeypatch):
-    from app.mcp import server as module
     from starlette.testclient import TestClient
+
+    from app.mcp import server as module
     @contextmanager
     def broken():
         raise RuntimeError('password token SQL secret-sentinel')
@@ -90,8 +92,9 @@ def test_http_health_readiness_request_ids_and_failure(monkeypatch):
 def test_tool_log_fields_and_no_input_values(caplog, monkeypatch):
     from uuid import UUID
 
-    from app.core.auth import AuthenticatedUser
     from starlette.testclient import TestClient
+
+    from app.core.auth import AuthenticatedUser
     user = AuthenticatedUser(UUID(int=1))
     @contextmanager
     def factory():
@@ -125,8 +128,9 @@ def test_smoke_refuses_remote_or_credential_urls(value):
 
 
 def test_valid_uuid_correlation_is_preserved_without_logging_headers():
-    from app.mcp.server import create_app, create_server
     from starlette.testclient import TestClient
+
+    from app.mcp.server import create_app, create_server
     with TestClient(create_app(create_server())) as client:
         value='12345678-1234-4234-8234-123456789abc'
         response=client.get('/health',headers={'X-Request-ID':value})

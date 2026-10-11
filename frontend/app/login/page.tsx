@@ -5,19 +5,21 @@ import { ArrowRight, Eye, EyeOff, Mail, ShieldCheck } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase';
 import { useAuth } from '@/components/auth-provider';
 import { Logo } from '@/components/ui';
+import { consentReturnPath } from '@/lib/oauth-consent';
 
 export default function Login() {
   const { session, loading, error: configError } = useAuth();
   const router = useRouter();
+  const destination = () => consentReturnPath(new URLSearchParams(window.location.search).get('next'));
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (!loading && session) router.replace('/dashboard'); }, [loading, session, router]);
+  useEffect(() => { if (!loading && session) router.replace(destination()); }, [loading, session, router]);
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(null); setBusy(true);
     try {
       const result = await getSupabase().auth.signInWithPassword({ email: email.trim(), password });
       if (result.error) { setError(result.error.message); setBusy(false); return; }
-      setPassword(''); router.replace('/dashboard');
+      setPassword(''); router.replace(destination());
     } catch { setError('Sign-in is unavailable. Check your connection and try again.'); setBusy(false); }
   }
   return <main className="login-page"><div className="login-frame"><section className="login-story"><div className="login-story-top"><Logo light /><span className="story-pill"><span className="status-dot" />Quiet by design</span></div><div className="story-content"><span className="story-kicker"><ShieldCheck size={17} />Clarity for what matters</span><h1>Know when reality stops matching what you expected.</h1><p>CountOn watches what you’re counting on and lets you know when something changes.</p><div className="story-example"><div><span className="signal" />Less checking.<br />More peace of mind.</div><p>Tell us what you expect. Follow the evidence. See what needs your attention.</p></div></div><div className="story-footer">Calm monitoring.<br />Clear signals.<span>Made for real life.</span></div></section>

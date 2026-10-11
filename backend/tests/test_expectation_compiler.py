@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
+from pydantic import ValidationError
+
 from app.ai.bedrock_client import BedrockClient
 from app.ai.expectation_compiler import BedrockExpectationCompiler, CompilerError
 from app.ai.prompts import (
@@ -25,7 +27,6 @@ from app.schemas.compiler import (
 )
 from app.schemas.expectation import ExpectationCreate
 from app.services.compiler_service import compile_expectation
-from pydantic import ValidationError
 
 TEXT = "My grocery bill should stay under $120 this week."
 

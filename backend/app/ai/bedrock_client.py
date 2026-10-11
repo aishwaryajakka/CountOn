@@ -73,7 +73,7 @@ def _text(response: dict[str, Any]) -> str:
         ):
             raise BedrockResponseError()
         text = "".join(block["text"] for block in blocks).strip()
-        if not text:
+        if not text or len(text.encode()) > 262144:
             raise BedrockResponseError()
         return text
     except (KeyError, TypeError, AttributeError):
@@ -160,6 +160,11 @@ class BedrockClient:
     def _invoke(self, request: dict[str, Any], telemetry: CallTelemetry) -> str:
         runtime = self._get_runtime()
         for attempt in range(self.settings.bedrock_max_retries + 1):
+            if (
+                time.monotonic() - telemetry.started
+                >= self.settings.bedrock_operation_timeout_seconds
+            ):
+                raise BedrockTimeoutError()
             try:
                 response = runtime.converse(**request)
             except (BotoCoreError, ClientError) as error:
@@ -171,18 +176,31 @@ class BedrockClient:
                 if not retryable or attempt == self.settings.bedrock_max_retries:
                     raise mapped from None
                 telemetry.retry_count += 1
-                self._sleep(min(5.0, self.settings.http_backoff_seconds * (2**attempt)))
+                delay = min(5.0, self.settings.http_backoff_seconds * (2**attempt))
+                if (
+                    time.monotonic() - telemetry.started + delay
+                    >= self.settings.bedrock_operation_timeout_seconds
+                ):
+                    raise BedrockTimeoutError() from None
+                self._sleep(delay)
             else:
                 try:
                     telemetry.observe(response)
                 except (AttributeError, TypeError):
                     raise BedrockResponseError() from None
+                if (
+                    time.monotonic() - telemetry.started
+                    >= self.settings.bedrock_operation_timeout_seconds
+                ):
+                    raise BedrockTimeoutError()
                 return _text(response)
         raise BedrockUnavailableError()
 
     def _request(
         self, system_prompt: str, user_content: str, temperature: float | None = None
     ) -> dict[str, Any]:
+        if len(system_prompt.encode()) > 131072 or len(user_content.encode()) > 65536:
+            raise BedrockValidationError()
         if temperature is not None and not 0 <= temperature <= 1:
             raise ValueError("temperature must be between zero and one")
         return {

@@ -1,7 +1,7 @@
 # Traditional Alexa Custom Skill
 
 The local HTTPS adapter and interaction model are implemented. **Developer Console
-setup, OAuth consent/token provisioning, deployed simulator acceptance and real
+setup, live OAuth issuance/refresh validation, deployed simulator acceptance and real
 Echo testing have not been completed by this change.** This is a traditional ASK
 Custom Skill transport, separate from Alexa+ MCP onboarding and the `/alexa` web
 simulator. There is no second compiler, clarification engine or investigator.
@@ -37,8 +37,10 @@ Keep existing Supabase auth/database settings. Set the same strong
 runtime credentials only on the trusted Python services. The Alexa endpoint fails
 closed with HTTP 503 when `ALEXA_SKILL_ID` is absent. Never store linked tokens,
 AWS credentials or an OAuth client secret in source, session attributes or public
-frontend configuration. No frontend changes, schema changes or new MCP tools are
-needed. `backend/alexa.env.sample` contains only non-secret configuration guidance.
+frontend configuration. The consent page uses Supabase's native OAuth server;
+production uses encrypted PostgreSQL conversation snapshots and the new security
+migration. No MCP tool names changed. See [production setup](production-readiness.md)
+and `backend/production.env.sample` before enabling the endpoint.
 
 Local startup:
 
@@ -145,14 +147,18 @@ tombstones beyond the timestamp window; capacity/64-turn limits fail safely.
 Initial compilation IDs are deterministically derived from the verified owner,
 Alexa session and request ID. The existing MCP PostgreSQL compilation ledger
 therefore also prevents first-turn retry duplication after API process restart.
-Continuation context is not restored after restart: users must restate it.
+With production PostgreSQL conversation storage, continuation context and retry
+envelopes survive restarts. Development memory storage still loses context.
 Cancel/Stop consumes an active draft through existing cancellation when reachable
 and always revokes its local reference. If linking is absent on SessionEnded, no
 private state is accessed and remaining state expires under its fixed TTL.
 
-Use **one API worker** while conversation/retry caches are in memory. Multi-worker
-deployment needs shared atomic transport/core state or reliable sticky routing.
-This change does not add distributed chat memory or a second persistence layer.
+Production requires `CONVERSATION_STORE_BACKEND=postgres` and a shared private
+`CONVERSATION_ENCRYPTION_KEY`. The existing AgentSessionState is encrypted at rest;
+owner-bound, fenced leases serialize concurrent turns. A core handle is consumed
+before tool execution, so a crash cannot replay a write from that handle. Exact ASK
+request retries return durable cached replies or uncertain-save speech. No bearer
+token or transcript is stored. Memory storage remains a development option only.
 
 The endpoint has a seven-second total deadline with no automatic retries. ASK has
 an [eight-second response budget](https://developer.amazon.com/en-US/docs/alexa/custom-skills/progressive-response-api-reference.html).
@@ -164,20 +170,22 @@ not solved by a progressive response or by the long web simulator timeout.
 
 ## Account linking: implementation status and manual configuration
 
-**Implemented:** linked access-token verification, per-user ownership and real
-MCP token forwarding. **Not implemented here:** an OAuth authorization/token server,
-consent UI, Alexa client registration, refresh provisioning or live account-link
-acceptance. The repo's regular Supabase login page is not an OAuth consent endpoint.
-Do not point Alexa at that page, Supabase's password grant or Login with Amazon and
-assume those tokens are CountOn tokens. No shared/demo token is an acceptable substitute.
+**Implemented:** native Supabase OAuth consent at `/oauth/consent`, strict callback
+and client/user validation, existing JWT verification with allowlisted OAuth
+`client_id`, Alexa client binding and MCP bearer forwarding. Supabase owns codes,
+PKCE, token issuance and refresh; CountOn does not implement a competing OAuth server.
+The production migration restricts linked clients from direct Supabase SQL access.
 
-One provider path that preserves Supabase auth is its
-[OAuth 2.1 server](https://supabase.com/docs/guides/auth/oauth-server/getting-started):
-enable it on the existing project, implement/deploy its authenticated consent UI,
-and register Alexa as a confidential client. Register **every exact Alexa callback
-URI shown in your console**, configure `client_secret_basic`, and enable PKCE S256.
-Keep client credentials in the provider/console, not the repo. Verify compatibility
-with Alexa's [authorization-code settings](https://developer.amazon.com/docs/alexaplus/account-linking/configure-authorization-code-grant.html).
+**Manual:** enable the existing project's [OAuth server](https://supabase.com/docs/guides/auth/oauth-server/getting-started),
+register a confidential Alexa client (`client_secret_basic`, PKCE S256), set Site URL
+and Authorization Path `/oauth/consent`, and register every exact redirect URI shown
+in your ASK console. Set frontend `NEXT_PUBLIC_ALEXA_OAUTH_CLIENT_ID` and
+`NEXT_PUBLIC_ALEXA_REDIRECT_URIS` (comma-separated exact callbacks). Set backend
+`OAUTH_ALLOWED_CLIENT_IDS` (JSON array), `ALEXA_OAUTH_CLIENT_ID`,
+`ALEXA_REQUIRE_CONFIRMATION=true` and durable store configuration. Never expose the
+client secret publicly. Live issuance, refresh/revocation, consent and Alexa
+recognition/device behavior still require external acceptance; see the
+[production runbook](production-readiness.md).
 
 Provider URLs (replace only with the existing project origin):
 
@@ -207,7 +215,7 @@ remains blocked until issuance and refresh satisfy this contract.
 3. Build → Invocation: confirm `count on`. Copy its Skill ID into backend
    `ALEXA_SKILL_ID`; redeploy the API with the dependencies above.
 4. Build → Interaction Model → JSON Editor: import the model linked above. Verify
-   List/Get/Capture/Why and Help/Cancel/Stop/Fallback intents and broad `text` slots.
+   List/Get/Capture/Why and Yes/No/Help/Cancel/Stop/Fallback intents and broad `text` slots.
 5. Verify the sample utterances and Capture dialog slot/prompt. Keep skill-controlled
    elicitation; do not add another Alexa domain compiler.
 6. Click **Save Model**.
@@ -235,7 +243,8 @@ remains blocked until issuance and refresh satisfy this contract.
 3. “tell me about my electricity bill” → owned record; duplicates disambiguate.
 4. “I'm counting on my bill being lower” → one clarification question; then
    “My electricity bill”, “My last bill was $142.10”, “When my next bill arrives”.
-5. Confirm no incomplete row, then one saved row in the normal web dashboard after
+5. Answer any additional currency/timing question, then say “yes” to the grounded
+   confirmation. Confirm no incomplete/unconfirmed row, then one saved row in the dashboard after
    refresh. Test correction before completion and cancellation of a separate draft.
 6. Ask “why did it fail” after selecting a prepared owned MISMATCH with real evidence.
    Test MATCH/UNKNOWN too; neither may invoke the investigator. Do not fabricate

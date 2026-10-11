@@ -1,9 +1,11 @@
 """Metadata-only connected accounts, notification policy and ownership."""
 from uuid import UUID
+
 import pytest
 from sqlalchemy import select
+
 from app.api.dependencies import get_current_user
-from app.db.models import AuditEvent,Notification
+from app.db.models import AuditEvent, Notification
 from app.main import app
 
 pytestmark=pytest.mark.integration
@@ -98,7 +100,7 @@ def test_external_event_replay_conflict_source_scope(client,numeric_payload,bill
 
 
 def test_notification_creation_idempotent_for_same_evaluation(client,db,numeric_payload,bill_payload):
-    from app.db.models import Expectation,Evaluation
+    from app.db.models import Evaluation, Expectation
     from app.services.notification_service import for_evaluation
     eid=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
     client.post(f'/api/v1/expectations/{eid}/evidence',json=bill_payload)

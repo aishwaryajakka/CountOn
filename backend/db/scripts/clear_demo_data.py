@@ -1,6 +1,6 @@
 """Delete only the configured identity's explicitly tagged demo artifacts."""
 from _common import run_cli
-from _demo import run,clear
+from _demo import clear, run
 
 
 def main():

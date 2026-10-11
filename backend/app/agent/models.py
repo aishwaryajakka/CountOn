@@ -189,6 +189,8 @@ class AgentResult(BaseModel):
 
     fallback_used: bool = False
     captured: bool = False
+    confirmation_required: bool = False
+    capture_state: SecretStr | None = Field(default=None, repr=False)
     compiled_expectation: ExpectationCreate | None = Field(default=None, repr=False)
     candidates: tuple[ExpectationResult, ...] = Field(default=(), max_length=10)
     trust: TrustResponse | None = None

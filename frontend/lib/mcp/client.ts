@@ -8,7 +8,7 @@ export async function requestMcp(accessToken: string | undefined, action: McpAct
   if (!accessToken) throw new McpClientError('AUTH_REQUIRED');
   let response: Response;
   try {
-    response = await fetch('/api/mcp', { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(action), cache: 'no-store' });
+    response = await fetch('/api/mcp', { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(action), cache: 'no-store', signal: AbortSignal.timeout(185_000) });
   } catch { throw new McpClientError('MCP_UNAVAILABLE'); }
   let body: McpResponse;
   try { body = await response.json(); } catch { throw new McpClientError('MCP_PROTOCOL_ERROR'); }

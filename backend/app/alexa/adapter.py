@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from time import monotonic
@@ -199,6 +201,17 @@ class AlexaConversationStore:
             raise InvalidAlexaRequest()
         return entry
 
+    @asynccontextmanager
+    async def turn(
+        self, event: AlexaEvent, user: AuthenticatedUser
+    ) -> AsyncIterator[_Conversation]:
+        entry = self.entry(event, user)
+        async with entry.lock:
+            yield entry
+
+    async def persist(self, entry: _Conversation) -> None:
+        pass  # In-memory development adapter; PostgreSQL overrides this method.
+
 
 class AlexaAdapter:
     def __init__(self, store: AlexaConversationStore, agent: AgentOrchestrator) -> None:
@@ -220,6 +233,10 @@ class AlexaAdapter:
             ):
                 return event.text
             return "I'm counting on " + event.text
+        if event.intent == "AMAZON.YesIntent":
+            return "yes"
+        if event.intent == "AMAZON.NoIntent":
+            return "no"
         return None
 
     @staticmethod
@@ -262,8 +279,7 @@ class AlexaAdapter:
         timezone: str = "UTC",
         deadline: float | None = None,
     ) -> dict[str, Any]:
-        entry = self.store.entry(event, user)
-        async with entry.lock:
+        async with self.store.turn(event, user) as entry:
             if entry.expires_at <= monotonic():
                 raise AlexaSessionUnavailable()
             cached = entry.replies.get(event.request_id)
@@ -283,6 +299,9 @@ class AlexaAdapter:
                 event.digest,
                 envelope(UNCERTAIN, end=True),
             )
+            await self.store.persist(
+                entry
+            )  # Durable crash/replay tombstone before tools.
             try:
                 async with asyncio.timeout_at(deadline):
                     if event.kind == "SessionEndedRequest":
@@ -306,7 +325,9 @@ class AlexaAdapter:
                             # cancellable network call so a timed-out first turn
                             # can revoke its context as well as later turns.
                             if entry.reference is None:
-                                entry.reference = self.agent.sessions.create(user)
+                                entry.reference = await asyncio.to_thread(
+                                    self.agent.sessions.create, user
+                                )
                             turn = await self.agent.handle_session(
                                 user,
                                 AgentInput(
@@ -321,7 +342,10 @@ class AlexaAdapter:
                                 entry.reference,
                             )
                             entry.reference = turn.session_reference
-                            entry.awaiting_reply = turn.result.clarification_required
+                            entry.awaiting_reply = (
+                                turn.result.clarification_required
+                                or turn.result.confirmation_required
+                            )
                             if turn.result.code == FailureCode.UNAUTHORIZED:
                                 reply = link_account()
                                 await self._discard(entry, user)
@@ -333,7 +357,9 @@ class AlexaAdapter:
                                     self.speech(turn.result),
                                     reference=entry.reference,
                                     end=terminal,
-                                    elicit=entry.awaiting_reply and not terminal,
+                                    elicit=turn.result.clarification_required
+                                    and not turn.result.confirmation_required
+                                    and not terminal,
                                 )
                                 if terminal:
                                     await self._discard(entry, user)

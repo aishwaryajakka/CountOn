@@ -49,6 +49,14 @@ class CallTelemetry:
             self.model_latency_ms += latency
 
     def finish(self, success: bool) -> None:
+        from app.core.observability import record
+
+        label = self.operation_name
+        record("bedrock_calls", label)
+        record("bedrock_success" if success else "bedrock_failures", label)
+        record("bedrock_latency_seconds", label, max(0, monotonic() - self.started))
+        record("bedrock_input_tokens", label, self.input_tokens)
+        record("bedrock_output_tokens", label, self.output_tokens)
         fields = vars(self).copy()
         fields.pop("started")
         fields["duration_ms"] = round((monotonic() - self.started) * 1000, 2)

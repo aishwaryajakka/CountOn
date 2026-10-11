@@ -1,8 +1,9 @@
 """Tagged, atomic demo seeding/cleanup; no OAuth or invented Supabase identities."""
 import os
-from uuid import UUID,uuid5,NAMESPACE_URL
-from datetime import datetime,timedelta,timezone
-from sqlalchemy import delete,func,select,text
+from datetime import datetime, timedelta, timezone
+from uuid import NAMESPACE_URL, UUID, uuid5
+
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 TAG='counton-demo-v1'
@@ -50,11 +51,22 @@ def lock(db,owner):
 
 
 def seed(db,owner):
-    from app.db.models import Expectation,Evidence,Evaluation,Notification,IntegrationConnection
-    from app.schemas.expectation import ExpectationCreate
+    from app.db.models import (
+        Evaluation,
+        Evidence,
+        Expectation,
+        IntegrationConnection,
+        Notification,
+    )
     from app.schemas.evidence import EvidenceCreate
+    from app.schemas.expectation import ExpectationCreate
     from app.schemas.integration import IntegrationCreate
-    from app.services import expectation_service,evidence_service,evaluation_service,integration_service
+    from app.services import (
+        evaluation_service,
+        evidence_service,
+        expectation_service,
+        integration_service,
+    )
     from db.scripts._demo_identity import ensure_demo_profile
     ensure_demo_profile(db,owner)
     for provider,kind,name,key,scopes in CONNECTIONS:
@@ -72,7 +84,7 @@ def seed(db,owner):
         if items:
             expectation=items[0]
         else:
-            payload=dict(claim=claim,type=kind,metric=metric,evidence_sources=[row[0] for row in OBSERVATIONS[key]])
+            payload={'claim': claim,'type': kind,'metric': metric,'evidence_sources': [row[0] for row in OBSERVATIONS[key]]}
             if kind=='numeric_comparison':payload.update(comparison='less_than',baseline=142.10,materiality_threshold=0.05)
             expectation=expectation_service.create_expectation(db,ExpectationCreate(**payload),owner,
                 compiler_metadata={'demo':True,'demo_tag':TAG,'demo_key':key,'mock':True})
@@ -85,15 +97,15 @@ def seed(db,owner):
         if result.result.value!=expected:raise RuntimeError('Demo scenario contract differs; no existing rows overwritten')
     db.commit()
     ids=list(db.scalars(select(Expectation.id).where(Expectation.user_id==owner,Expectation.compiler_metadata['demo_tag'].astext==TAG)))
-    return dict(connections=db.scalar(select(func.count()).select_from(IntegrationConnection).where(IntegrationConnection.user_id==owner,IntegrationConnection.connection_metadata['demo_tag'].astext==TAG)),
-        expectations=len(ids),evidence=db.scalar(select(func.count()).select_from(Evidence).where(Evidence.expectation_id.in_(ids))),
-        evaluations=db.scalar(select(func.count()).select_from(Evaluation).where(Evaluation.expectation_id.in_(ids))),
-        notifications=db.scalar(select(func.count()).select_from(Notification).where(Notification.expectation_id.in_(ids))))
+    return {'connections': db.scalar(select(func.count()).select_from(IntegrationConnection).where(IntegrationConnection.user_id==owner,IntegrationConnection.connection_metadata['demo_tag'].astext==TAG)),
+        'expectations': len(ids),'evidence': db.scalar(select(func.count()).select_from(Evidence).where(Evidence.expectation_id.in_(ids))),
+        'evaluations': db.scalar(select(func.count()).select_from(Evaluation).where(Evaluation.expectation_id.in_(ids))),
+        'notifications': db.scalar(select(func.count()).select_from(Notification).where(Notification.expectation_id.in_(ids)))}
 
 
 def clear(db,owner):
-    from app.db.models import Profile,Expectation,IntegrationConnection,AuditEvent
-    from app.services import expectation_service,integration_service
+    from app.db.models import AuditEvent, Expectation, IntegrationConnection, Profile
+    from app.services import expectation_service, integration_service
     lock(db,owner)
     profile=db.get(Profile,owner)
     if profile is None:return
@@ -117,8 +129,7 @@ def run(operation):
     from app.db.session import engine
     owner=configured_owner(get_settings())
     try:
-        with engine.begin() as connection:
-            with Session(bind=connection,join_transaction_mode='create_savepoint',expire_on_commit=False) as db:
-                return operation(db,owner)
+        with engine.begin() as connection, Session(bind=connection,join_transaction_mode='create_savepoint',expire_on_commit=False) as db:
+            return operation(db,owner)
     finally:
         engine.dispose()

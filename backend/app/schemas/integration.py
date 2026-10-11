@@ -1,9 +1,11 @@
 """Strict metadata-only account contracts; token/credential input is unsupported."""
 from datetime import datetime
-from typing import Annotated,Literal
+from typing import Annotated, Literal
 from uuid import UUID
-from pydantic import AliasChoices,BaseModel,ConfigDict,Field
-from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from app.db.models.integration import ConnectionStatus, ConnectionType, Provider
 
 
 class ConnectionMetadata(BaseModel):
@@ -48,4 +50,4 @@ class IntegrationResponse(BaseModel):
     last_synced_at: datetime|None
     created_at: datetime
     updated_at: datetime
-    credential_state: Literal['not_configured'] = 'not_configured'
+    credential_state: Literal['not_configured', 'configured'] = 'not_configured'

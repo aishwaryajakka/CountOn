@@ -5,7 +5,7 @@ export class AgentClientError extends Error {
 export async function requestAgent(token: string | undefined, input: AgentInput): Promise<AgentResponse> {
   if (!token) throw new AgentClientError('AUTH_REQUIRED');
   let response: Response;
-  try { response = await fetch('/api/agent', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(input), cache: 'no-store' }); }
+  try { response = await fetch('/api/agent', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(input), cache: 'no-store', signal: AbortSignal.timeout(185_000) }); }
   catch { throw new AgentClientError('UNAVAILABLE'); }
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {

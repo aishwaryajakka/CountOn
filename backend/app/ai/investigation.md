@@ -47,8 +47,8 @@ from app.services.investigation_service import investigate_mismatch
 
 explanation = investigate_mismatch(
     expectation=expectation_response,  # existing ExpectationResponse
-    evaluation=evaluation_response,    # existing EvaluationResponse
-    evidence=evidence_responses,       # Sequence[existing EvidenceResponse]
+    evaluation=evaluation_response,  # existing EvaluationResponse
+    evidence=evidence_responses,  # Sequence[existing EvidenceResponse]
     context=InvestigationContext(authenticated_user_id=verified_user_id),
 )
 ```

@@ -1,9 +1,24 @@
 """Durable contracts for monitoring, notifications and redacted audit history."""
 from datetime import datetime
 from uuid import UUID, uuid4
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, synonym
+
 from app.db.base import Base
 
 
@@ -13,6 +28,8 @@ class MonitoringJob(Base):
         ForeignKeyConstraint(['expectation_id','user_id'],['expectations.id','expectations.user_id'],ondelete='CASCADE',name='fk_job_owned_expectation'),
         CheckConstraint("status IN ('pending','running','paused','completed','failed','cancelled')",name='ck_job_status'),
         CheckConstraint('attempt_count >= 0',name='ck_job_attempts'),
+        CheckConstraint('interval_seconds >= 60 AND max_attempts BETWEEN 1 AND 20 AND max_evidence_age_seconds > 0', name='ck_job_schedule'),
+        ForeignKeyConstraint(['connection_id','user_id'], ['integration_connections.id','integration_connections.user_id'], ondelete='CASCADE', name='fk_job_owned_connection'),
         Index('uq_job_active_expectation','expectation_id',unique=True,postgresql_where=text("status IN ('pending','running','paused')")),
         Index('ix_job_due','status','next_run_at'),
     )
@@ -26,12 +43,24 @@ class MonitoringJob(Base):
     last_error: Mapped[str|None]=mapped_column(String(100))  # safe error code, never exception text
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
     updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=3600, server_default='3600')
+    recurring: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    window_start_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+    max_evidence_age_seconds: Mapped[int] = mapped_column(Integer, default=86400, server_default='86400')
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5, server_default='5')
+    run_key: Mapped[UUID] = mapped_column(PGUUID, default=uuid4, server_default=func.gen_random_uuid())
+    lease_token: Mapped[UUID|None] = mapped_column(PGUUID)
+    lease_expires_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True), index=True)
+    connection_id: Mapped[UUID|None] = mapped_column(PGUUID)
+    provider_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
 
 
 class Notification(Base):
     __tablename__='notifications'
     __table_args__=(CheckConstraint("status IN ('pending','read','sent','failed','dismissed')",name='ck_notification_status'),
         UniqueConstraint('evaluation_id',name='uq_notification_evaluation'),
+        UniqueConstraint('expectation_id', 'dedupe_key', name='uq_notification_observation'),
         ForeignKeyConstraint(['expectation_id','user_id'],['expectations.id','expectations.user_id'],ondelete='CASCADE',name='fk_notification_owner'),
         Index('ix_notification_owner_created','user_id','created_at'),
         ForeignKeyConstraint(['evaluation_id','expectation_id'],['evaluations.id','evaluations.expectation_id'],ondelete='CASCADE',name='fk_notification_evaluation'),)
@@ -46,6 +75,8 @@ class Notification(Base):
     evaluation_id: Mapped[UUID]=mapped_column(PGUUID)
     status: Mapped[str]=mapped_column(String(20),server_default='pending',default='pending')
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    dedupe_key: Mapped[str|None] = mapped_column(String(64))
+    acknowledged_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditEvent(Base):

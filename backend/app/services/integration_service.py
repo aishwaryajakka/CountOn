@@ -1,7 +1,9 @@
 """Metadata-only connections with atomic audit writes and ownership checks."""
 import logging
-from app.core.exceptions import ResourceNotFoundError,InvalidIntegrationError
-from app.repositories import integration as repository,audit
+
+from app.core.exceptions import InvalidIntegrationError, ResourceNotFoundError
+from app.repositories import audit
+from app.repositories import integration as repository
 from app.repositories.profile import ensure_profile
 
 logger=logging.getLogger(__name__)
@@ -37,6 +39,17 @@ def update(db,id,payload,user_id):
     if any(changes.get(k) is None for k in ('status','scopes','metadata') if k in changes):raise InvalidIntegrationError()
     try:
         repository.update(db,item,changes)
+        if item.provider == 'microsoft' and changes.get('status') in ('disconnected','pending'):
+            from sqlalchemy import delete
+
+            from app.db.models.integration import (
+                IntegrationCredential,
+                ProviderOAuthState,
+            )
+            db.execute(delete(IntegrationCredential).where(IntegrationCredential.connection_id == item.id))
+            db.execute(delete(ProviderOAuthState).where(ProviderOAuthState.connection_id == item.id))
+            item.oauth_generation = None
+            item.__dict__['_credential_state'] = 'not_configured'
         audit.record(db,user_id,'integration',item.id,'integration.updated',metadata=demo_metadata(item))
         db.commit();db.refresh(item)
     except Exception:

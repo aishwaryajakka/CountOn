@@ -1,11 +1,24 @@
 """MATCH/UNKNOWN are silent; MISMATCH produces one in-app row per evaluation."""
+from typing import Protocol
+
 from app.core.exceptions import ResourceNotFoundError
-from app.repositories import notification as repository,audit
+from app.repositories import audit
+from app.repositories import notification as repository
 
 
-def for_evaluation(db,expectation,evaluation):
+class NotificationChannel(Protocol):
+    def publish(self, db, expectation, evaluation, *, dedupe_key=None): ...
+
+
+class InAppChannel:
+    """Persistence is delivery; keep pending as the existing unread inbox state."""
+    def publish(self, db, expectation, evaluation, *, dedupe_key=None):
+        return repository.create_mismatch(db, expectation, evaluation, dedupe_key=dedupe_key)
+
+
+def for_evaluation(db,expectation,evaluation,*,dedupe_key=None):
     if evaluation.result.value != 'MISMATCH':return None
-    item,created=repository.create_mismatch(db,expectation,evaluation)
+    item,created=InAppChannel().publish(db,expectation,evaluation,dedupe_key=dedupe_key)
     if created:
         metadata={k:v for k,v in expectation.compiler_metadata.items() if k in ('demo','demo_tag')}
         audit.record(db,expectation.user_id,'notification',item.id,'notification.created',expectation.id,metadata)
