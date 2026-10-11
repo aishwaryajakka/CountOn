@@ -103,6 +103,23 @@ def test_bedrock_defaults():
     assert settings.bedrock_max_retries == 2
 
 
+def test_alexa_default_is_disabled_and_skill_id_is_environment_backed(monkeypatch):
+    monkeypatch.delenv("ALEXA_SKILL_ID", raising=False)
+    settings = Settings(_env_file=None, database_target="local", local_database_url=LOCAL)
+    assert settings.alexa_skill_id is None
+    monkeypatch.setenv("ALEXA_SKILL_ID", "amzn1.ask.skill.test-counton")
+    settings = Settings(_env_file=None, database_target="local", local_database_url=LOCAL)
+    assert settings.alexa_skill_id == "amzn1.ask.skill.test-counton"
+
+
+@pytest.mark.parametrize("value", ["", "not-a-skill-id", "https://example.com", "amzn1.ask.skill.bad?secret"])
+def test_alexa_skill_id_validation_hides_input(monkeypatch, value):
+    monkeypatch.setenv("ALEXA_SKILL_ID", value)
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, database_target="local", local_database_url=LOCAL)
+    assert "input_value" not in str(error.value)
+
+
 @pytest.mark.parametrize("value,expected", [("true", True), ("false", False), ("1", True), ("0", False)])
 def test_bedrock_enabled_environment_parsing(monkeypatch, value, expected):
     monkeypatch.setenv("BEDROCK_ENABLED", value)

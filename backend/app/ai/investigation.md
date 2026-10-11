@@ -208,3 +208,14 @@ MATCH, UNKNOWN and missing evaluation do not invoke this investigator.
 Current validation is recorded in the task report. Tests use mocked model outputs
 and isolated PostgreSQL for real persistence/evaluation/MCP acceptance. They do not
 claim live model quality or completed Alexa/Echo integration.
+
+## Evidence-source privacy
+
+Investigation now applies the shared deterministic EvidenceAccessPolicy before
+preparing any model input. Declared sources override narrow domain defaults;
+unrelated evidence is denied. Permissions never imply provider data is available.
+A recorded MISMATCH remains authoritative even when permitted evidence cannot
+explain it. Backend-authored provenance validates used UUIDs against normalized
+E-labels/source decisions. Accepted AI output and attempted client invocation are
+distinct; invalid output yields the grounded deterministic fallback. See
+[trust acceptance](../../../docs/trust-orchestrator.md).

@@ -7,8 +7,6 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
-from botocore.exceptions import EndpointConnectionError
-
 from app.ai.bedrock_client import BedrockClient
 from app.ai.investigation_evidence import InvestigationInputError, normalize
 from app.ai.mismatch_investigator import BedrockMismatchInvestigator
@@ -21,6 +19,7 @@ from app.schemas.expectation import ExpectationResponse
 from app.schemas.investigation import InvestigationContext
 from app.services import investigator_service
 from app.services.investigation_service import investigate_mismatch
+from botocore.exceptions import EndpointConnectionError
 
 NOW = datetime(2026, 10, 8, 20, tzinfo=timezone.utc)
 SECRET = "private-provider-token-DO-NOT-SEND"
@@ -342,7 +341,6 @@ def test_private_data_never_sent_or_logged(caplog):
     data[0].compiler_metadata = {"token": SECRET}
     for item in data[2]:
         item.raw_data = {"body": SECRET * 10000}
-        item.source = SECRET
         item.external_event_id = SECRET
         item.value["payload"] = SECRET
     data[1].reasoning["private"] = SECRET

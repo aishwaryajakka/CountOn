@@ -16,10 +16,10 @@ const taggedClaim = `${claim} [CountOn Alexa acceptance ${randomUUID()}]`;
 let captureId; let token; let monitoring = false; let directApiRequests = 0;
 page.on('request', request => { if (monitoring && request.url().startsWith(api + '/api/v1/')) directApiRequests++; });
 page.on('response', async response => {
-  if (!response.url().endsWith('/api/mcp')) return;
+  if (!response.url().endsWith('/api/agent')) return;
   try {
     const body = await response.json();
-    if (body.meta?.tool === 'capture_expectation' && body.result?.structuredContent?.id) captureId = body.result.structuredContent.id;
+    if (body.captured && body.saved_id) captureId = body.saved_id;
   } catch { /* No diagnostics containing response data. */ }
 });
 async function login(origin) {

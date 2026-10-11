@@ -13,7 +13,7 @@ results are recorded in the cleanup report; production checks must be run separa
 | Streamable HTTP | Official Python MCP server and TypeScript client; test real initialize/discovery/calls, not REST substitutes. |
 | Authentication | Existing Supabase JWT verifier, owned services and auth-gated `/alexa`; test missing/invalid/expired bearer and cross-user access. |
 | Tools | Discover `capture_expectation`, `get_expectation`, `list_expectations`, `compile_expectation`, `continue_expectation_compilation`, `explain_expectation_mismatch`; all use exactly one nested `request`. |
-| List/get | Actual current-user records; no match is honest, multiple matches require clarification. Search currently covers the first 50 records. |
+| List/get | Actual current-user records; no match is honest, multiple matches require clarification. The shared orchestrator uses bounded MCP pagination for topic resolution. |
 | Capture | Compile/clarify first; persist only COMPILED through MCP capture, with its verified ticket and durable replay receipt. |
 | Clarification | Existing canonical state handles correction, cancellation, replacement, expiration and max turns; no incomplete expectation is saved. |
 | Why? | Latest owned evaluation gates investigation. MATCH, UNKNOWN and no evaluation skip it; MISMATCH uses bounded historical real evidence. |
@@ -178,3 +178,12 @@ publishing. Synthetic test fixtures and documented loopback development values a
 not production credentials. Safe response/log tests cover token/body redaction;
 source inspection and local tests do not certify all cloud logs or remote Git refs.
 No production secret/environment audit is claimed by this documentation cleanup.
+
+## Minimal Trust Orchestrator pass
+
+The shared web/ASK orchestrator now has deterministic evidence-source permission
+checks, typed final receipts, per-run audit_events and safe expandable /alexa
+provenance. No new tools, tables or autonomous integrations were added.
+[Final trust acceptance](trust-orchestrator.md) lists the 18 security checks,
+Person 1/2 status tables, operational limits and exact manual test order.
+Automated local acceptance does not imply live AWS, ASK simulator or Echo acceptance.

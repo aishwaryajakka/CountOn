@@ -11,6 +11,7 @@ from app.evaluators.base import EvaluationResult
 from app.schemas.compiler import CompileContext
 from app.schemas.expectation import ExpectationCreate
 from app.schemas.investigation import MismatchExplanation
+from app.schemas.trust import EvidenceProvenance
 
 
 class CaptureExpectationInput(ExpectationCreate):
@@ -106,3 +107,4 @@ class ExplanationResult(BaseModel):
         | None
     ) = None
     bedrock_used: bool = False
+    provenance: EvidenceProvenance = Field(default_factory=EvidenceProvenance)

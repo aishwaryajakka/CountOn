@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
+import { POST as converse } from '@/app/api/agent/route';
 import { POST } from '@/app/api/mcp/route';
 
 const endpoint = process.env.COUNTON_MCP_URL;
@@ -16,8 +17,9 @@ it.skipIf(!endpoint || !token)('live initialize → tools/list → tools/call us
   };
   const discovered = await invoke({ action: 'list_tools' });
   expect(discovered.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining(['capture_expectation', 'get_expectation', 'list_expectations']));
-  const listed = await invoke({ action: 'call_tool', tool: 'list_expectations', arguments: { request: { limit: 50, offset: 0 } } });
-  const rows = listed.result.structuredContent.expectations;
-  expect(Array.isArray(rows)).toBe(true);
-  if (rows.length) await invoke({ action: 'call_tool', tool: 'get_expectation', arguments: { request: { expectation_id: rows[0].id } } });
+  const response = await converse(new Request('http://localhost/api/agent', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'What am I counting on?', session_reference: null }) }));
+  expect(response.status).toBe(200);
+  const listed = await response.json();
+  expect(listed.status).toBe('SUCCESS'); expect(Array.isArray(listed.rows)).toBe(true);
+  expect(JSON.stringify(listed).includes(token!)).toBe(false);
 }, 90_000);

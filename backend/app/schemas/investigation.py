@@ -59,6 +59,9 @@ class MismatchExplanation(BaseModel):
     prompt_version: str
     grounded: Literal[True] = True
     generation: Literal["bedrock", "deterministic"]
+    # Authored by the investigator, excluded from InvestigatorDraft / model output.
+    bedrock_attempted: bool = False
+    grounding_passed: bool | None = None
 
 
 class FactorDraft(BaseModel):
