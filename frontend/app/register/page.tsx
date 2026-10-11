@@ -28,7 +28,7 @@ export default function Register() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && session) {
@@ -40,7 +40,7 @@ export default function Register() {
     event.preventDefault();
 
     setError(null);
-    setSuccess(false);
+    setSuccess(null);
 
     if (password !== confirmPassword) {
       setError('Passwords do not match.');

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Lightbulb, Moon, Package, Wrench, Zap, type LucideIcon } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Lightbulb, Moon, Package, Settings, Wrench, Zap, type LucideIcon } from 'lucide-react';
 import type { Evidence, Evaluation, Expectation, WatchedExpectation } from '@/lib/types';
 import { contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, latestMetricEvidence, number, observedText, reasoningText } from '@/lib/presentation';
 import { useIdentity } from './auth-provider';
@@ -10,11 +10,11 @@ export function expectationIcon(expectation: Expectation): LucideIcon {
   const title = displayTitle(expectation);
   return title === 'Electricity bill' ? Zap : title === 'Package delivery' ? Package : title === 'Plumber appointment' ? Wrench : title.includes('meetings') ? Moon : CalendarDays;
 }
-export function ExpectationCard({ row }: { row: WatchedExpectation }) {
+export function ExpectationCard({ row, onManage }: { row: WatchedExpectation; onManage?: (expectation: Expectation) => void }) {
   const { expectation, latest } = row;
   const status = getExpectationPresentationStatus(expectation, latest);
   const { timeZone } = useIdentity();
-  return <article className={`card expectation-card ${status === 'attention' ? 'attention-card' : ''}`}><div className="card-top"><IconBox icon={expectationIcon(expectation)} tone={status === 'attention' ? 'orange' : 'blue'} /><Badge status={status} /></div><h3><Link href={`/expectations/${expectation.id}`}>{displayTitle(expectation)}</Link></h3><p className="claim">“{expectation.claim}”</p><div className="source-chips">{expectation.evidence_sources.map(source => <span key={source}>{humanize(source)}</span>)}</div><div className="card-bottom"><span><Clock3 size={14} />{formatDate(latest?.created_at ?? expectation.updated_at, timeZone)}</span><Link className="icon-button" href={`/expectations/${expectation.id}`} aria-label={`View ${displayTitle(expectation)}`}><ArrowRight size={18} /></Link></div></article>;
+  return <article className={`card expectation-card ${status === 'attention' ? 'attention-card' : ''}`}><div className="card-top"><IconBox icon={expectationIcon(expectation)} tone={status === 'attention' ? 'orange' : 'blue'} /><div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Badge status={status} />{onManage && <button className="icon-button" type="button" onClick={() => onManage(expectation)} aria-label={`Manage ${displayTitle(expectation)}`} title="Edit or manage lifecycle" style={{ width: '28px', height: '28px', padding: '4px' }}><Settings size={15} /></button>}</div></div><h3><Link href={`/expectations/${expectation.id}`}>{displayTitle(expectation)}</Link></h3><p className="claim">“{expectation.claim}”</p><div className="source-chips">{expectation.evidence_sources.map(source => <span key={source}>{humanize(source)}</span>)}</div><div className="card-bottom"><span><Clock3 size={14} />{formatDate(latest?.created_at ?? expectation.updated_at, timeZone)}</span><Link className="icon-button" href={`/expectations/${expectation.id}`} aria-label={`View ${displayTitle(expectation)}`}><ArrowRight size={18} /></Link></div></article>;
 }
 export function ComparisonCards({ expectation, evaluation, evidence }: { expectation: Expectation; evaluation: Evaluation | null; evidence: Evidence[] }) {
   const observedEvidence = evidence.find(item => item.id === evaluation?.observed.evidence_id) ?? latestMetricEvidence(evidence, expectation.metric);
