@@ -15,7 +15,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import CurrentUser, get_db
 from app.core.config import get_settings
-from app.db.models.integration import ProviderOAuthState
+from app.db.models.integration import IntegrationConnection, ProviderOAuthState
+from app.integrations.accounts import account_oauth
 from app.integrations.microsoft import MicrosoftOAuth
 from app.integrations.provider import ProviderError
 from app.schemas.integration import IntegrationResponse
@@ -68,7 +69,14 @@ async def callback(request: Request, db: Database):
         )
         if pending is None:
             raise ProviderError("OAUTH_STATE_INVALID", retryable=False)
-        MicrosoftOAuth(get_settings()).complete(
+        settings = get_settings()
+        legacy = MicrosoftOAuth(settings)
+        state_data = legacy.decrypt(pending.encrypted_verifier, pending.connection_id)
+        connection = db.get(IntegrationConnection, pending.connection_id)
+        if connection is None or connection.provider != "microsoft":
+            raise ProviderError("OAUTH_STATE_INVALID", retryable=False)
+        oauth = account_oauth(settings, connection) if state_data.get("connector") == "accounts" else legacy
+        oauth.complete(
             db,
             pending.connection_id,
             pending.user_id,
@@ -78,7 +86,7 @@ async def callback(request: Request, db: Database):
 
     await run_in_threadpool(exchange)
     return HTMLResponse(
-        "<!doctype html><html><title>CountOn</title><p>Outlook connected. Return to CountOn.</p></html>",
+        "<!doctype html><html><title>CountOn</title><p>Account connected. Select a source to synchronize. Return to CountOn.</p></html>",
         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
     )
 

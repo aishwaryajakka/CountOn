@@ -34,10 +34,16 @@ class TokenVerifier:
         self.allowed_client_ids = set(settings.oauth_allowed_client_ids)
         self.configured = bool(settings.supabase_url)
         jwks_url = settings.supabase_jwks_url or self.issuer + "/.well-known/jwks.json"
-        self.jwks = PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=600, cache_keys=False, timeout=10)
+        # PyJWT validates the URI at construction. An unconfigured local/CI
+        # backend must still reject credentials cleanly instead of failing
+        # before verify() can enforce the configured-project boundary.
+        self.jwks = (
+            PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=600, cache_keys=False, timeout=10)
+            if self.configured else None
+        )
 
     def verify(self, token: str) -> AuthenticatedUser:
-        if not self.configured:
+        if not self.configured or self.jwks is None:
             raise AuthenticationError()
         try:
             header = jwt.get_unverified_header(token)

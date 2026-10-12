@@ -1,13 +1,15 @@
 # CountOn Frontend
 
 Next.js App Router, React, strict TypeScript, plain CSS with shared design tokens,
-Lucide icons, and Supabase Auth. Space Grotesk and Inter use `next/font/google`
-and are served locally after the build.
+Lucide icons, and Supabase Auth. Space Grotesk and Inter use `next/font/local`
+with licensed, pinned assets in [public/fonts](public/fonts/README.md).
 
 ## First-time setup
 
 Prerequisites: Node.js 24 LTS, npm, and the existing FastAPI backend with migrations
-applied. Google Fonts must be reachable during the initial build.
+applied. Builds do not fetch Google Fonts. Set `NEXT_PUBLIC_API_BASE_URL` before
+building; production requires an HTTPS origin. CI uses a credential-free validation
+origin for its build artifact, which is never deployed.
 
 ```sh
 git pull
@@ -146,7 +148,7 @@ The supplied portrait is used only for this demo account; other users get initia
 | `/expectations` | Cards and filters by presentation status |
 | `/expectations/new` | Conversational claim → explicit manual criteria → confirmation → API create |
 | `/expectations/[id]` | Expectation, all evidence/history, latest evaluation, sources and timeline |
-| `/integrations` | Real account metadata; modeled accounts labeled; provider modal marked coming soon |
+| `/integrations` | Provider OAuth actions, sync health, calendar selection; modeled accounts labeled; live acceptance required |
 | `/notifications` | Actual notifications; mark read or dismiss through FastAPI |
 | `/activity` | Limited activity derived from creation/latest evaluation timestamps |
 | `/settings` | Read-only authenticated identity and timezone |
@@ -176,13 +178,11 @@ The normal Create Expectation form uses explicitly labeled manual criteria in
 `lib/manual-expectation.ts`. `/alexa` instead uses the implemented backend compiler
 and stateful clarification through the six-tool MCP surface; it never uses browser
 regexes to build arbitrary capture payloads. See [the conversational demo](docs/alexa-demo.md).
-Temporal/event expectations can be saved but cannot yet be deterministically
-evaluated. Utility usage and rate changes are contextual observations, not proof
-of causation. The app does not add scheduling, ingestion adapters, notification
-delivery, OAuth, editing APIs, or backend business logic.
+Temporal/event monitoring uses explicit criteria and real occurrence evidence; reply absence additionally requires verified source coverage. Utility usage and rate changes are contextual observations, not proof
+of causation. The UI uses existing backend APIs for provider consent/source binding, scheduling, condition edits and owned notification preferences. Business logic stays in the backend. See [automatic tracking](../docs/automatic-tracking.md).
 
 Dashboard/list data is shared in a workspace provider. Creation refetches it;
-notification updates refetch only after a successful PATCH. A failed update keeps
+visible dashboard/detail/inbox data also refreshes every 30 seconds and on focus. Notification updates refetch only after a successful PATCH. A failed update keeps
 the current notification. No full-page reload is used for mutations. Lists load
 all API pages up to 5,000 records; a large-scale cursor/aggregate dashboard needs a
 future coordinated API change. Filters are client-side because waiting status is
@@ -250,3 +250,15 @@ and native OAuth server. Set public `NEXT_PUBLIC_ALEXA_OAUTH_CLIENT_ID` and
 rebuild. No client secret, AWS credential or service-role key belongs in these
 variables. The login return path is restricted to this consent flow. See
 [production setup](../docs/production-readiness.md).
+
+Provider Connect/Reconnect/Sync/Disconnect and expectation source bindings use the
+existing authenticated FastAPI client. Configure only trusted backend provider secrets;
+see [integration acceptance](../docs/integrations-acceptance.md). No provider token
+or client secret is returned to the browser.
+
+Source review on expectation detail uses the typed owned monitoring plan. Suggested
+references show a reason and sync status; confirmation requires explicit selection.
+Editing a source filter or a rejected/stale confirmation clears prior choices. Existing
+manual binding remains available. Voice capture currently saves complete expectations;
+account/order source selection must then be confirmed in the web detail view. See
+[source orchestration](../docs/orchestration.md) and [validation](../docs/orchestration-validation.md).

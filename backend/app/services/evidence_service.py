@@ -40,6 +40,10 @@ def add_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate, use
         evidence.idempotency_key = idempotency_key
         operations.audit(db, expectation, "evidence.ingested", evidence.id)
         if commit:
+            from datetime import datetime, timezone
+
+            from app.monitoring.sources import wake
+            wake(db, expectation, datetime.now(timezone.utc))
             db.commit()
         else:
             db.flush()

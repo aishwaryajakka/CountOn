@@ -264,3 +264,19 @@ credential chain/STS without model invocation or credential/identity output.
 API/MCP/CORS/owned-row checks. Supply a dedicated token privately; no data is created.
 Neither replaces the local `production_smoke.py` or full browser/worker/device
 acceptance. See [results and rollout boundaries](../../docs/production-readiness.md#deployment-investigation-follow-up-2026-10-11).
+
+### Isolated backup/restore smoke
+
+With `TEST_DATABASE_URL` privately set to a distinct loopback `*_test` database,
+matching `pg_dump`/`pg_restore` installed, local CREATEDB permission and no other
+test process using that database, run:
+
+```sh
+python db/scripts/backup_restore_smoke.py --local-test
+```
+
+The script creates one tagged fixture, restores an archive into a generated local
+database, verifies schema and evidence-linked evaluation/notification history,
+then removes only its fixture and generated database. It rejects remote targets,
+the application database and URL options, and never prints credentials or rows.
+It is not a production backup, role/RLS or encryption-key recovery acceptance.

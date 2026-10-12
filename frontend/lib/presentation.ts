@@ -67,12 +67,19 @@ export function observedText(evaluation?: Evaluation | null, unit?: string | nul
 }
 export function reasoningText(evaluation: Evaluation | null) {
   if (!evaluation) return 'No evaluation has been recorded yet. Evidence will appear here when it is received.';
+  const reason = evaluation.reasoning.reason;
+  if (evaluation.result === 'MISMATCH' && reason === 'reply_absent_after_covered_deadline') return 'No matching reply was found during verified mailbox coverage through your deadline.';
+  if (evaluation.result === 'MISMATCH' && reason === 'event_observed_after_deadline') return 'The recorded event occurred after your deadline.';
   if (evaluation.result === 'MISMATCH') return 'The latest observation for the expected metric did not meet your criteria, including the configured tolerance.';
   if (evaluation.result === 'MATCH') return 'The latest observation for the expected metric met your criteria, including the configured tolerance.';
-  const reason = evaluation.reasoning.reason;
-  if (reason === 'unsupported_expectation_type' || reason === 'temporal_evaluation_not_implemented' || reason === 'not_implemented') return 'This expectation needs a time-based interpretation. Temporal and event evaluation are not available yet.';
+  if (reason === 'unsupported_expectation_type' || reason === 'temporal_evaluation_not_implemented' || reason === 'not_implemented') return 'This evaluation path could not establish the event. Automatic temporal tracking requires explicit criteria and trustworthy source evidence.';
   if (reason === 'no_relevant_evidence') return 'There is no usable evidence for the exact metric this expectation is watching.';
-  return 'The available evidence does not support a determination yet. Time-based and event interpretations remain unsupported.';
+  if (reason === 'incomplete_mailbox_coverage') return 'CountOn does not have continuous mailbox coverage for this deadline yet. It cannot safely claim a reply was absent.';
+  if (reason === 'ambiguous_sources') return 'More than one source is bound. Choose one source so CountOn can evaluate the right account.';
+  if (reason === 'source_unavailable' || reason === 'source_not_bound') return 'The selected source is unavailable. Reconnect or choose a source; the current outcome is unknown.';
+  if (reason === 'stale_source' || reason === 'stale_evidence') return 'The source or evidence is too old to establish the current outcome. CountOn is waiting for a fresh observation.';
+  if (reason === 'conflicting_evidence') return 'The relevant observations conflict. CountOn will keep the outcome unknown until the evidence is clear.';
+  return 'The available evidence does not support a determination yet.';
 }
 export function latestMetricEvidence(items: Evidence[], metric: string | null): Evidence | undefined {
   return items.filter(item => item.metric === metric).sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at) || Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))[0];

@@ -153,6 +153,11 @@ Cancel/Stop consumes an active draft through existing cancellation when reachabl
 and always revokes its local reference. If linking is absent on SessionEnded, no
 private state is accessed and remaining state expires under its fixed TTL.
 
+Owned expectation detail speech includes the persisted lifecycle status, rather
+than inventing an evaluation. Edit or cancel an already saved expectation through
+the web application and reread it through Alexa/MCP. Voice editing and saved-row
+cancellation are not implemented; Cancel/Stop terminates the conversation/draft.
+
 Production requires `CONVERSATION_STORE_BACKEND=postgres` and a shared private
 `CONVERSATION_ENCRYPTION_KEY`. The existing AgentSessionState is encrypted at rest;
 owner-bound, fenced leases serialize concurrent turns. A core handle is consumed

@@ -31,8 +31,10 @@ class Schema:
 
 
 @pytest.fixture(autouse=True)
-def head(monkeypatch):
-    monkeypatch.setattr(readiness, "expected_revisions", lambda: {"8a524c91df23"})
+def head(monkeypatch, request):
+    # Unit schemas use a fixed fixture revision; real DB tests validate the actual packaged head.
+    if "db" not in request.fixturenames:
+        monkeypatch.setattr(readiness, "expected_revisions", lambda: {"8a524c91df23"})
 
 
 def test_ready_checks_all_registered_tables_columns_and_revision():

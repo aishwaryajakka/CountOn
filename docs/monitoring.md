@@ -1,4 +1,8 @@
-# Background monitoring and Outlook evidence
+# Background monitoring
+
+The automatic multi-provider workflow, coverage-gated reply deadlines, tracking controls
+and opt-in notification delivery are documented in [automatic tracking](automatic-tracking.md).
+The sections below also describe the preserved legacy Outlook subject-rule connector.
 
 The worker extends CountOn's existing jobs, services, evaluations and inbox. It
 does not call Bedrock, change the six MCP tools, or write from the browser to
@@ -57,7 +61,7 @@ the worker. The existing backend image supports the same command override:
 
 Multiple **worker processes** are safe with the same database. The API's existing
 conversation/rate-limit stores remain process-local; its single-worker deployment
-limitation is unchanged. Apply migration `7f413b80ce12` before rolling out this code.
+limitation is unchanged. Apply all migrations through `ac746eb3f145` before rolling out this code.
 Downgrade removes the new monitoring/OAuth state: use only disposable databases
 or an explicitly planned rollback with backup. No production migration was run.
 
@@ -89,7 +93,7 @@ leases. `status: paused` suspends polling. Requeue a `failed` job with a complet
 valid PUT; it resets attempts/run identity, preserving evaluation history.
 
 - `recurring: false`: poll one expectation until MATCH, resolution/cancellation,
-  or explicit operator pause. A meaningful mismatch does not prove the user has
+  or explicit operator pause (unbound one-shot jobs). Bound provider expectations keep monitoring after MATCH. A meaningful mismatch does not prove the user has
   resolved it, so polling continues without repeating the same notification.
 - `recurring: true`: numeric/boolean criteria repeat at fixed intervals; successful
   runs advance evidence windows and due times. Old period evidence cannot satisfy
@@ -98,11 +102,11 @@ valid PUT; it resets attempts/run identity, preserving evaluation history.
 - The evaluator retains authority. Monitoring UNKNOWN resets a nonterminal
   expectation to monitoring; manual legacy evaluation behavior remains unchanged.
 - Resolved/cancelled expectations atomically cancel active jobs. In-flight work
-  cannot notify after cancellation. One-shot fulfilled expectations stop.
+  cannot notify after cancellation. Unbound one-shot fulfilled expectations stop; bound provider expectations remain eligible for changes.
 - Temporal/event monitoring needs an explicit metric/deadline and real positive
   boolean occurrence evidence. Observation on/before deadline MATCHes, observation
   after deadline MISMATCHes. Missing evidence and negative/ambiguous event claims
-  remain UNKNOWN, even after deadline. Recurring temporal deadlines are rejected:
+  remain UNKNOWN, even after deadline, except a covered, authenticated reply-absence attestation. See the automatic tracking runbook. Recurring temporal deadlines are rejected:
   the current expectation model has only one absolute deadline.
 
 ## Leasing, retries and atomicity
@@ -122,7 +126,7 @@ a committed evaluation without its notification or advance an uncommitted run.
 Stable job/run keys prevent retry duplication; evidence IDs derive from connected
 account plus immutable Graph message ID. Repeated polling of the same fact yields
 history but suppresses the same mismatch notice using an observation/criteria hash.
-Different new observations can create new notifications. Manual API evaluation
+Continuous monitoring suppresses repeated alerts within one mismatch episode, including across UNKNOWN interruptions; a subsequent MATCH resets it. Manual API evaluation
 also supports optional `Idempotency-Key`, returning the original result on replay.
 
 Transient failures retry with `30 * 2^(attempt-1)` seconds, capped at one day;
@@ -283,3 +287,10 @@ application-configured database. Microsoft app ID/secret/callback/encryption key
 are not configured locally, so no live consent or Graph request was attempted.
 The worker is disabled by default. No production migration, deployment, commit
 or push was performed.
+
+## Shared account sync
+
+The legacy Mail.ReadBasic subject-rule path above remains compatible. New Gmail,
+Outlook Mail.Read and calendar account synchronization runs in a separate durable
+provider worker and publishes through explicit owned source bindings into the same
+Evidence service. See [provider setup and acceptance](integrations-acceptance.md).

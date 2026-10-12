@@ -38,7 +38,7 @@ written directly to Supabase.
 | **Done locally** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
 | **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
 | **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
-| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Outlook consent/ingestion verification, Ring and Bee ingestion; broader autonomous orchestration/shared session infrastructure. Metadata records alone do not prove live provider or device integrations. |
+| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification, Ring and Bee ingestion; broader autonomous orchestration/shared session infrastructure. Metadata records alone do not prove live provider or device integrations. |
 
 The core MCP tools are `capture_expectation`, `get_expectation`, and
 `list_expectations`. The intelligence tools are `compile_expectation`,
@@ -194,11 +194,13 @@ makes a provider, worker or Alexa device integration complete.
 
 ## Component documentation
 
+- [CI failure investigation, fixes and executed validation](docs/ci-validation.md)
 - [Controlled orchestrator and Alexa session boundary](backend/app/agent/README.md)
 - [Traditional Alexa HTTPS adapter, interaction model and console/account-link setup](docs/traditional-alexa.md)
 - [MCP tools, auth, startup and remote smoke](docs/mcp.md)
 - [Bedrock integration and rollout](docs/bedrock-integration.md)
-- [Background monitoring and Outlook setup](docs/monitoring.md)
+- [Background monitoring and legacy Outlook setup](docs/monitoring.md)
+- [Gmail, Outlook, calendars and order evidence acceptance](docs/integrations-acceptance.md)
 - [Compiler/client semantics](backend/app/ai/README.md),
   [clarification state machine](backend/app/ai/clarification.md), and
   [grounded investigator](backend/app/ai/investigation.md)
@@ -220,3 +222,14 @@ explicit Alexa capture confirmation. The six MCP tool contracts and deterministi
 evaluator remain authoritative. See the [production readiness checklist and exact
 deployment/acceptance commands](docs/production-readiness.md). Live OAuth, AWS,
 ASK/Echo, Graph and deployed end-to-end acceptance remain required.
+
+Account sync now has local Google/Microsoft OAuth, official Gmail/Graph/calendar reads,
+encrypted durable checkpoints, push wake-ups and explicit source bindings. Provider
+credentials and live read-only acceptance remain required; see the integration guide.
+
+Automatic provider tracking now connects authenticated push/poll sync to the existing durable monitoring worker, deterministic evaluation and deduplicated inbox. Coverage-gated reply deadlines, calendar changes, predicted shipping warnings, tracking controls and opt-in email are implemented locally. Real provider/email acceptance remains pending. See [automatic tracking and operations](docs/automatic-tracking.md).
+
+The resumed [typed source orchestration](docs/orchestration.md) connects complete saved
+expectations to explicitly confirmed authorized sources and existing durable workers.
+[Current validation and release gates](docs/orchestration-validation.md) distinguish
+local automated results from human review, cloud/model and Alexa device acceptance.

@@ -44,6 +44,9 @@ class CallTelemetry:
             value = response.get("usage", {}).get(key)
             if type(value) is int and value >= 0:
                 setattr(self, field, getattr(self, field) + value)
+        self.total_tokens = max(
+            self.total_tokens, self.input_tokens + self.output_tokens
+        )
         latency = response.get("metrics", {}).get("latencyMs")
         if type(latency) is int and latency >= 0:
             self.model_latency_ms += latency

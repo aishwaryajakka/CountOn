@@ -39,6 +39,37 @@ def test_valid_signature(verifier):
     assert str(verifier.verify(encoded).id) == claims['sub']
 
 
+def test_unconfigured_supabase_fails_closed_without_constructing_jwks(monkeypatch):
+    def unexpected_jwks(*args, **kwargs):
+        pytest.fail('An unconfigured verifier must not construct a JWKS client')
+    monkeypatch.setattr('app.core.auth.PyJWKClient', unexpected_jwks)
+    checked = TokenVerifier(Settings(
+        _env_file=None, database_target='local',
+        local_database_url='postgresql+psycopg://fixture@localhost/fixture',
+        supabase_url=None, supabase_jwks_url=None,
+    ))
+    assert checked.jwks is None
+    with pytest.raises(AuthenticationError):
+        checked.verify('invalid-token')
+
+
+def test_unconfigured_auth_returns_401_for_api_and_mcp(monkeypatch):
+    from app.mcp.auth import authenticated_user_from_header
+    checked = TokenVerifier(Settings(
+        _env_file=None, database_target='local',
+        local_database_url='postgresql+psycopg://fixture@localhost/fixture',
+        supabase_url=None, supabase_jwks_url=None,
+    ))
+    monkeypatch.setattr('app.api.dependencies.get_token_verifier', lambda: checked)
+    monkeypatch.setattr('app.mcp.auth.get_token_verifier', lambda: checked)
+    with TestClient(app) as client:
+        response = client.get('/api/v1/expectations', headers={'Authorization': 'Bearer invalid-token'})
+    assert response.status_code == 401
+    assert response.json()['error']['code'] == 'UNAUTHORIZED'
+    with pytest.raises(AuthenticationError):
+        authenticated_user_from_header('Bearer invalid-token')
+
+
 @pytest.fixture
 def fixed_jwt_clock(monkeypatch):
     timestamp = 2_000_000_000

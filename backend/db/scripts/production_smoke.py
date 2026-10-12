@@ -16,6 +16,16 @@ GROUPS = {
     "Durable conversations and shared monitoring persistence": [
         "tests/test_production_conversations.py"
     ],
+    "Confirmed capture, provider tracking and notification recovery": [
+        "tests/test_release_journey.py",
+        "tests/test_automatic_tracking.py",
+    ],
+    "Source planning, cross-provider correlation and operation budgets": [
+        "tests/test_source_planning.py",
+        "tests/test_source_correlation.py",
+        "tests/test_orchestration_budgets.py",
+        "tests/test_orchestration_eval.py",
+    ],
 }
 
 

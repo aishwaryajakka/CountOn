@@ -20,7 +20,7 @@ jobs:
           POSTGRES_DB: counton
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U counton -d counton'
+          --health-cmd "pg_isready -U counton -d counton"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ENVIRONMENT: test
@@ -41,6 +41,8 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: 'backend/*requirements*.txt'
+      - name: Update the audited installer
+        run: python -m pip install --upgrade pip==26.2.1
       - run: python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-security.txt
       - name: Prepare isolated test database
         run: |
@@ -55,6 +57,8 @@ jobs:
       - run: mypy --strict --follow-imports=silent --ignore-missing-imports app/ai app/agent app/alexa app/mcp/compiler.py app/mcp/intelligence.py app/mcp/conversation_state.py app/mcp/schemas.py app/api/v1/agent.py app/api/v1/alexa.py app/schemas/compiler.py app/schemas/clarification.py app/schemas/investigation.py app/schemas/trust.py app/services/compiler_service.py app/services/investigation_service.py app/services/agent_audit.py db/scripts/bedrock_smoke.py
       - run: python -m pytest -q --tb=short
       - run: python db/scripts/production_smoke.py
+      - name: Synthetic orchestration evaluation (human review remains a release gate)
+        run: python db/scripts/orchestration_eval.py
       - name: Medium and high severity static security gate
         run: bandit -q -r app -ll
       - run: pip-audit --progress-spinner off
@@ -79,7 +83,13 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
+        env:
+          # Credential-free validation artifact; CI does not deploy this build.
+          # Real Vercel builds must use the configured production API origin.
+          NEXT_PUBLIC_API_BASE_URL: https://api.counton.invalid
       - run: npm audit --omit=dev
+      - name: Audit frontend build and runtime dependencies
+        run: npm audit --audit-level=high
   secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 10

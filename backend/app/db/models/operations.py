@@ -59,6 +59,7 @@ class MonitoringJob(Base):
 class Notification(Base):
     __tablename__='notifications'
     __table_args__=(CheckConstraint("status IN ('pending','read','sent','failed','dismissed')",name='ck_notification_status'),
+        UniqueConstraint('id', 'user_id', name='uq_notification_owner'),
         UniqueConstraint('evaluation_id',name='uq_notification_evaluation'),
         UniqueConstraint('expectation_id', 'dedupe_key', name='uq_notification_observation'),
         ForeignKeyConstraint(['expectation_id','user_id'],['expectations.id','expectations.user_id'],ondelete='CASCADE',name='fk_notification_owner'),
@@ -72,7 +73,7 @@ class Notification(Base):
     message: Mapped[str]=mapped_column(String(500),default='An expectation was contradicted by the latest evidence.',server_default='An expectation was contradicted by the latest evidence.')
     notification_metadata: Mapped[dict]=mapped_column('metadata',JSONB,default=dict,server_default=text("'{}'::jsonb"))
     sent_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
-    evaluation_id: Mapped[UUID]=mapped_column(PGUUID)
+    evaluation_id: Mapped[UUID|None]=mapped_column(PGUUID)
     status: Mapped[str]=mapped_column(String(20),server_default='pending',default='pending')
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
     dedupe_key: Mapped[str|None] = mapped_column(String(64))

@@ -24,6 +24,8 @@ class ProviderError(Exception):
             "OAUTH_STATE_INVALID",
             "INCOMPLETE_SYNC",
             "WORKER_ERROR",
+            "SYNC_CURSOR_EXPIRED",
+            "SOURCE_NOT_FOUND",
         }
         self.code = code if code in allowed else "PROVIDER_UNAVAILABLE"
         self.retryable = retryable

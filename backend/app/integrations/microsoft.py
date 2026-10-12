@@ -392,6 +392,8 @@ class MicrosoftOAuth:
                 ProviderOAuthState.user_id == user_id,
             )
         )
+        from app.db.models.provider_sync import ProviderSyncState
+        db.execute(delete(ProviderSyncState).where(ProviderSyncState.connection_id == connection_id, ProviderSyncState.user_id == user_id))
         connection.status = "disconnected"
         connection.oauth_generation = None
         connection.scopes = []

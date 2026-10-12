@@ -459,9 +459,17 @@ def test_worker_metrics_use_stable_run_correlation_and_restore_context(
     assert {name for name, _, _, _ in observed} == {
         "monitoring_attempts",
         "monitoring_latency_seconds",
+        "monitoring_outcomes",
+        "monitoring_unknown_reasons",
     }
     assert all(
-        label == "worker" and correlation == run_id and amount >= 0
-        for _, label, amount, correlation in observed
+        correlation == run_id and amount >= 0
+        for _, _, amount, correlation in observed
     )
+    assert {(name, label) for name, label, _, _ in observed} == {
+        ("monitoring_attempts", "worker"),
+        ("monitoring_latency_seconds", "worker"),
+        ("monitoring_outcomes", "UNKNOWN"),
+        ("monitoring_unknown_reasons", "no_relevant_evidence"),
+    }
     assert observability.request_id.get() == previous

@@ -1,6 +1,7 @@
 """Public domain models and enums; imports register all Alembic metadata."""
 
 from app.db.models.conversation import ConversationRecord
+from app.db.models.delivery import NotificationDelivery, NotificationPreference
 from app.db.models.evaluation import Evaluation, EvaluationResult
 from app.db.models.evidence import Evidence
 from app.db.models.expectation import (
@@ -10,6 +11,12 @@ from app.db.models.expectation import (
     ExpectationType,
 )
 from app.db.models.profile import Profile
+from app.db.models.provider_sync import (
+    ExpectationSourceBinding,
+    ProviderSourceEvent,
+    ProviderSyncState,
+    ProviderWatch,
+)
 
 __all__ = [
     "AuditEvent",
@@ -20,14 +27,20 @@ __all__ = [
     "EvaluationResult",
     "Evidence",
     "Expectation",
+    "ExpectationSourceBinding",
     "ExpectationStatus",
     "ExpectationType",
     "IntegrationConnection",
     "IntegrationCredential",
     "MonitoringJob",
     "Notification",
+    "NotificationDelivery",
+    "NotificationPreference",
     "Profile",
     "ProviderOAuthState",
+    "ProviderSourceEvent",
+    "ProviderSyncState",
+    "ProviderWatch",
 ]
 
 from app.db.models.compilation_session import CompilationSession

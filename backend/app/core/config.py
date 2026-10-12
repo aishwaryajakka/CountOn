@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     bedrock_max_retries: int = Field(default=2, ge=0, le=5)
     bedrock_native_structured_output: bool = False
     bedrock_operation_timeout_seconds: int = Field(default=45, ge=1, le=120)
+    bedrock_compiler_model_id: str | None = Field(default=None, min_length=1, max_length=256)
+    bedrock_investigator_model_id: str | None = Field(default=None, min_length=1, max_length=256)
+    bedrock_max_concurrent_calls: int = Field(default=4, ge=1, le=32)
+    bedrock_max_total_tokens: int = Field(default=8192, ge=1, le=131072)
     max_request_bytes: int = Field(default=131072, ge=32768, le=1048576)
     agent_execution_timeout_seconds: int = Field(default=45, ge=1, le=120)
     conversation_store_backend: Literal['memory', 'postgres'] = 'memory'
@@ -75,17 +79,32 @@ class Settings(BaseSettings):
     counton_demo_email: str = "demo@counton.app"
     counton_demo_password: SecretStr | None = Field(default=None, repr=False)
     monitoring_enabled: bool = False
+    notification_email_enabled: bool = False
+    notification_email_api_key: SecretStr | None = Field(default=None, repr=False)
+    notification_email_from: str | None = Field(default=None, pattern=r'^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$', max_length=254)
+    frontend_public_url: str | None = None
     monitoring_poll_seconds: int = Field(default=5, ge=1, le=300)
     monitoring_lease_seconds: int = Field(default=300, ge=120, le=3600)
     monitoring_backoff_seconds: int = Field(default=30, ge=1, le=3600)
     microsoft_graph_enabled: bool = False
+    google_integrations_enabled: bool = False
+    google_client_id: str | None = Field(default=None, max_length=255)
+    google_client_secret: SecretStr | None = Field(default=None, repr=False)
+    google_redirect_uri: str | None = None
+    provider_sync_enabled: bool = False
+    provider_sync_interval_seconds: int = Field(default=900, ge=60, le=86400)
+    provider_retention_days: int = Field(default=30, ge=1, le=90)
+    provider_webhook_url: str | None = None
+    gmail_pubsub_topic: str | None = Field(default=None, pattern=r'^projects/[a-z0-9-]+/topics/[A-Za-z0-9._~-]+$')
+    gmail_pubsub_audience: str | None = None
+    gmail_pubsub_service_account: str | None = Field(default=None, pattern=r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$')
     microsoft_client_id: UUID | None = None
     microsoft_client_secret: SecretStr | None = Field(default=None, repr=False)
     microsoft_tenant_id: str = Field(default='common', pattern=r'^(common|organizations|consumers|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$')
     microsoft_redirect_uri: str | None = None
     integration_token_encryption_key: SecretStr | None = Field(default=None, repr=False)
 
-    @field_validator('microsoft_client_secret', 'integration_token_encryption_key', mode='before')
+    @field_validator('microsoft_client_secret', 'google_client_secret', 'integration_token_encryption_key', mode='before')
     @classmethod
     def empty_provider_secret(cls, value: object) -> object:
         return None if value == '' else value
@@ -93,6 +112,12 @@ class Settings(BaseSettings):
     @model_validator(mode='after')
     def validate_provider_settings(self) -> 'Settings':
         import base64
+        if self.frontend_public_url:
+            url = urlsplit(self.frontend_public_url)
+            if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in ('', '/'):
+                raise ValueError('FRONTEND_PUBLIC_URL must be a credential-free HTTPS origin')
+        if self.notification_email_enabled and not all((self.notification_email_api_key, self.notification_email_from, self.frontend_public_url, self.integration_token_encryption_key)):
+            raise ValueError('Email delivery requires its API key, verified sender, frontend origin and encryption key')
         if self.integration_token_encryption_key:
             try:
                 key = base64.b64decode(self.integration_token_encryption_key.get_secret_value(), altchars=b'-_', validate=True)
@@ -100,11 +125,13 @@ class Settings(BaseSettings):
                     raise ValueError()
             except ValueError:
                 raise ValueError('INTEGRATION_TOKEN_ENCRYPTION_KEY must encode exactly 32 random bytes') from None
-        if self.microsoft_redirect_uri:
-            uri = urlsplit(self.microsoft_redirect_uri)
+        for callback_uri in (self.microsoft_redirect_uri, self.google_redirect_uri, self.provider_webhook_url, self.gmail_pubsub_audience):
+            if not callback_uri:
+                continue
+            uri = urlsplit(callback_uri)
             local = uri.hostname in ('localhost', '127.0.0.1', '::1')
             if (not uri.hostname or uri.username or uri.password or uri.query or uri.fragment
-                or any(c.isspace() for c in self.microsoft_redirect_uri)
+                or any(c.isspace() for c in callback_uri)
                 or not (uri.scheme == 'https' or (local and self.environment != 'production' and uri.scheme == 'http'))):
                 raise ValueError('MICROSOFT_REDIRECT_URI requires a credential-free HTTPS callback, or development loopback HTTP')
             try:
@@ -114,6 +141,10 @@ class Settings(BaseSettings):
         if self.microsoft_graph_enabled and not all((self.microsoft_client_id, self.microsoft_client_secret,
                                                     self.microsoft_redirect_uri, self.integration_token_encryption_key)):
             raise ValueError('Microsoft Graph requires client, redirect and encryption configuration')
+        if self.google_integrations_enabled and not all((self.google_client_id, self.google_client_secret, self.google_redirect_uri, self.integration_token_encryption_key)):
+            raise ValueError('Google integrations require client, redirect and encryption configuration')
+        if any((self.gmail_pubsub_topic, self.gmail_pubsub_audience, self.gmail_pubsub_service_account)) and not all((self.gmail_pubsub_topic, self.gmail_pubsub_audience, self.gmail_pubsub_service_account, self.provider_webhook_url)):
+            raise ValueError('Gmail push requires topic, audience, service account and webhook configuration')
         return self
 
     @field_validator("counton_demo_user_id", mode="before")

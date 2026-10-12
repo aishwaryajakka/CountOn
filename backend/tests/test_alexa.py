@@ -319,6 +319,7 @@ async def test_list_get_contextual_why(settings, user):
     from app.schemas.trust import EvidenceProvenance
     from tests.test_mismatch_investigator import adapter as investigator_adapter
     from tests.test_mismatch_investigator import draft, execute, inputs
+
     data = inputs()
     investigator, _ = investigator_adapter(draft(data))
     explained = execute(data, investigator)
@@ -359,7 +360,7 @@ async def test_list_get_contextual_why(settings, user):
         ),
         user,
     )
-    assert speech(got) == row.claim
+    assert speech(got) == row.claim + ". CountOn is monitoring this expectation."
     why = await adapter.handle(
         parsed(
             event_body(
@@ -802,11 +803,18 @@ def test_real_compiler_clarification_and_shared_dashboard(
 
         from app.db.models import AuditEvent
 
-        assert db.scalar(select(AuditEvent).where(
-            AuditEvent.user_id == users[0].id,
-            AuditEvent.entity_type == "orchestration",
-            AuditEvent.expectation_id == records[0]["id"],
-        ).limit(1)) is not None
+        assert (
+            db.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.user_id == users[0].id,
+                    AuditEvent.entity_type == "orchestration",
+                    AuditEvent.expectation_id == records[0]["id"],
+                )
+                .limit(1)
+            )
+            is not None
+        )
         if mode == "correction":
             assert records[0]["baseline"] == 150
         assert (
@@ -1003,3 +1011,30 @@ def test_cert_chain_san_and_expiry_rejected(change, signing, monkeypatch):
         monkeypatch.setattr("ask_sdk_webservice_support.verifier.datetime", Future)
     with pytest.raises(InvalidAlexaRequest):
         sdk.verify(headers, raw, SKILL)
+
+
+@pytest.mark.parametrize(
+    "status,phrase",
+    [
+        ("monitoring", "monitoring this expectation"),
+        ("fulfilled", "recorded status is fulfilled"),
+        ("contradicted", "needs attention"),
+        ("unknown", "recorded status is unknown"),
+        ("resolved", "expectation is resolved"),
+        ("cancelled", "Tracking has been cancelled"),
+    ],
+)
+def test_detail_speech_reports_only_persisted_status(status, phrase):
+    from app.agent.actions import AgentAction, AgentStatus
+    from app.agent.models import AgentResult
+
+    row = shared.compact().model_copy(update={"status": status})
+    result = AgentResult(
+        action=AgentAction.GET_EXPECTATION,
+        status=AgentStatus.SUCCESS,
+        message=row.claim,
+        expectation=row,
+    )
+    assert phrase in AlexaAdapter.speech(result)
+    assert row.claim in AlexaAdapter.speech(result)
+    assert not result.bedrock_used and result.evaluator_status is None

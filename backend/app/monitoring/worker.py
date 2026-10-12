@@ -20,6 +20,7 @@ from app.db.models import Expectation, ExpectationStatus, MonitoringJob
 from app.db.models.integration import IntegrationConnection, IntegrationCredential
 from app.db.session import SessionLocal
 from app.integrations.provider import EvidenceProvider, ProviderError
+from app.monitoring.sources import bindings
 from app.schemas.evidence import EvidenceCreate
 from app.services import evaluation_service, evidence_service
 
@@ -114,8 +115,24 @@ class Worker:
         now: datetime | None = None,
     ) -> bool:
         with self.sessions() as db:
-            # Same lock order as schedule/lifecycle writes. Claim acquisition never
-            # waits on an expectation, and provider I/O never holds these locks.
+            # Match provider publication/revocation: account before expectation/job.
+            # Read the current job reference without locking the job first. Any
+            # concurrent reconfiguration changes the run key and fails live_claim.
+            connection = db.scalar(
+                select(IntegrationConnection)
+                .join(
+                    MonitoringJob,
+                    MonitoringJob.connection_id == IntegrationConnection.id,
+                )
+                .where(
+                    MonitoringJob.id == claim.job_id,
+                    MonitoringJob.user_id == claim.user_id,
+                    IntegrationConnection.user_id == claim.user_id,
+                )
+                .with_for_update(of=IntegrationConnection)
+            )
+            # Claim acquisition never waits on an expectation; provider I/O holds
+            # none of these publication locks.
             expectation = db.scalar(
                 select(Expectation)
                 .where(
@@ -136,28 +153,24 @@ class Worker:
             if not live_claim(job, claim, current):
                 return False
             assert job is not None
+            bound = bool(expectation and bindings(db, expectation))
             if expectation is None or expectation.status in (
                 ExpectationStatus.cancelled,
                 ExpectationStatus.resolved,
             ):
                 job.status = "cancelled"
             elif (
-                not job.recurring and expectation.status == ExpectationStatus.fulfilled
+                not bound
+                and not job.recurring
+                and expectation.status == ExpectationStatus.fulfilled
             ):
                 job.status = "completed"
             else:
                 provider_identity = None
                 if job.connection_id:
-                    connection = db.scalar(
-                        select(IntegrationConnection)
-                        .where(
-                            IntegrationConnection.id == job.connection_id,
-                            IntegrationConnection.user_id == claim.user_id,
-                        )
-                        .with_for_update()
-                    )
                     if (
                         connection is None
+                        or connection.id != job.connection_id
                         or connection.status != "connected"
                         or connection.provider != "microsoft"
                         or connection.connection_type != "email"
@@ -204,7 +217,10 @@ class Worker:
                 job.last_run_at = current
                 if result.result.value == "UNKNOWN":
                     expectation.status = ExpectationStatus.monitoring
-                if not job.recurring and result.result.value == "MATCH":
+                from app.services.notification_service import monitoring_warnings
+
+                monitoring_warnings(db, expectation, result, current)
+                if not bound and not job.recurring and result.result.value == "MATCH":
                     job.status = "completed"
                 else:
                     # Skip missed polling intervals; do not produce catch-up storms.
@@ -215,10 +231,15 @@ class Worker:
                         // job.interval_seconds
                         + 1,
                     )
-                    if job.recurring:
+                    if job.recurring and not bound:
                         job.window_start_at = job.scheduled_at + period * (elapsed - 1)
                     job.scheduled_at += period * elapsed
                     job.next_run_at = job.scheduled_at
+                    if (
+                        expectation.deadline
+                        and current < expectation.deadline < job.next_run_at
+                    ):
+                        job.next_run_at = expectation.deadline
                     job.run_key = uuid4()
                     job.status = "pending"
                 job.attempt_count = 0
@@ -297,6 +318,7 @@ class Worker:
                     not in (ExpectationStatus.cancelled, ExpectationStatus.resolved)
                     and (
                         job.recurring
+                        or bool(bindings(db, expectation))
                         or expectation.status != ExpectationStatus.fulfilled
                     )
                     and job.connection_id

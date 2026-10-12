@@ -73,6 +73,11 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
             db.execute(update(MonitoringJob).where(MonitoringJob.expectation_id == expectation_id,
                 MonitoringJob.user_id == user_id, MonitoringJob.status.in_(['pending','running','paused']))
                 .values(status='cancelled', lease_token=None, lease_expires_at=None))
+        elif any(field in changes for field in ('metric', 'comparison', 'baseline', 'target_value', 'deadline', 'materiality_threshold', 'evidence_sources', 'status')):
+            from datetime import datetime, timezone
+
+            from app.monitoring.sources import wake
+            wake(db, expectation, datetime.now(timezone.utc))
         operations.audit(db, expectation, "expectation.updated")
         db.commit()
     except Exception:

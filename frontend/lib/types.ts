@@ -23,7 +23,7 @@ export interface Evaluation {
   observed: JsonObject; confidence: number; reasoning: JsonObject; created_at: string;
 }
 export interface Notification {
-  id: string; user_id: string; expectation_id: string; evaluation_id: string;
+  id: string; user_id: string; expectation_id: string; evaluation_id: string | null;
   type: string; channel: string; status: 'pending' | 'read' | 'sent' | 'failed' | 'dismissed';
   message: string; metadata: JsonObject; sent_at: string | null; created_at: string;
 }

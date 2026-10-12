@@ -14,7 +14,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from app.agent.actions import FailureCode
+from app.agent.actions import AgentAction, FailureCode
 from app.agent.models import AgentInput, AgentResult
 from app.agent.orchestrator import AgentOrchestrator
 from app.core.auth import AuthenticatedUser
@@ -267,6 +267,20 @@ class AlexaAdapter:
             )
         if result.captured:
             return "Got it. I'll track that."
+        if (
+            result.action == AgentAction.GET_EXPECTATION
+            and result.expectation is not None
+        ):
+            # GET exposes persisted lifecycle status, not a new evaluation verdict.
+            status = {
+                "monitoring": "CountOn is monitoring this expectation.",
+                "fulfilled": "Its recorded status is fulfilled.",
+                "contradicted": "Its recorded status is contradicted; it needs attention.",
+                "unknown": "Its recorded status is unknown.",
+                "resolved": "This expectation is resolved.",
+                "cancelled": "Tracking has been cancelled.",
+            }[result.expectation.status]
+            return " ".join(result.expectation.claim.split())[:240] + ". " + status
         # Speech comes exclusively from the existing controlled result, including
         # deterministic MATCH/UNKNOWN and grounded MISMATCH/fallback responses.
         return " ".join(result.answer.split())[:1200]

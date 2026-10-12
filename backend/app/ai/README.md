@@ -133,7 +133,7 @@ investigator selects evaluation snapshots and bounded numeric/boolean evidence,
 excluding raw data, ownership, source text, claims and provider credentials.
 Do not persist prompts by default. Treat all user/evidence content as untrusted
 input and keep investigator output grounded in the returned evidence.
-Compiler prompt version is `v2`; the implemented investigator uses `v2`.
+Compiler prompt version is `v3`; the implemented investigator uses `v2`.
 
 ## Verification
 
@@ -246,9 +246,12 @@ All dates derive from the explicit caller instant converted to its IANA timezone
 The conservative initial date vocabulary does not yet parse arbitrary absolute
 calendar dates or every natural-language date phrase. Unsupported syntax asks
 clarification rather than delegating unchecked calendar calculations to the model.
-Temporal/event records are representable but their deterministic evaluation is
-currently deferred and returns UNKNOWN. The compiler never claims they are
-already operationally evaluated. Non-numeric negative/absence assertions cannot
+Temporal/event monitoring evaluates real, explicitly bound occurrence evidence
+against a deadline. Missing or unsupported evidence remains UNKNOWN. Package and
+Amazon package compile to `package_delivery`, which the order-email connector now
+supports with an explicit reported delivery timestamp; an estimate never proves
+arrival. See [source orchestration](../../../docs/orchestration.md).
+Non-numeric negative/absence assertions cannot
 be converted into positive assertions; the current boolean evaluator asserts True.
 Changing appointments/records, absence windows and schedules need a richer contract.
 

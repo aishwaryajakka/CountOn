@@ -77,7 +77,7 @@ _LIST = re.compile(
     re.IGNORECASE,
 )
 _CAPTURE = re.compile(
-    r"^(?:i'm counting on|i am counting on|i expect|i'm expecting|save|monitor|track)\s",
+    r"^(?:i'm counting on|i am counting on|i expect|i'm expecting|make sure|save|monitor|track)\s",
     re.IGNORECASE,
 )
 _WHY = re.compile(r"^why\s", re.IGNORECASE)
