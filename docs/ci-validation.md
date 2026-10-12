@@ -1,5 +1,9 @@
 # CI failure investigation — October 12, 2026
 
+The later [Alexa dependency collection failure](alexa-ci-compatibility.md) is a
+separate Ubuntu/OpenSSL compatibility issue on HEAD `b87570e`. The frontend/secrets
+jobs passed that run. The record below describes the earlier Docker/build fixes.
+
 Branch: `feature/alexa-mcp`, base revision `e7c74ac5db21`, with existing uncommitted
 work retained. **Local CI commands pass; GitHub-hosted CI has not been rerun.**
 No commit, push, workflow dispatch, production migration or deployment occurred.

@@ -71,9 +71,12 @@ spoken slots and `apiAccessToken` cannot authenticate a CountOn user.
 Certificate URLs are restricted to canonical HTTPS `s3.amazonaws.com/echo.api/*.pem`
 on port 443 without credentials/query/redirects. Certificate download, body size and
 cache are bounded. SDK SAN, expiry and body-signature checks are retained. The SDK's
-legacy `certvalidator` fails on current macOS native crypto, so the maintained
+legacy `certvalidator` depends on platform `oscrypto`; CountOn's maintained
 `pyhanko-certvalidator` performs PKIX chain/digital-signature validation against
 the Mozilla CA bundle; requester-supplied certificates cannot become trust roots.
+The SDK still imports `oscrypto` before selecting this validator. Runtime requirements
+pin the official, SHA-verified OpenSSL version-parser fix; CI imports both FFI paths
+before collecting tests. See [Alexa CI compatibility](alexa-ci-compatibility.md).
 No network fetching is permitted during chain building. Verification failures
 return HTTP 400 without input or exception text. See Amazon's
 [HTTPS verification requirements](https://developer.amazon.com/en-US/docs/alexa/custom-skills/host-a-custom-skill-as-a-web-service.html).

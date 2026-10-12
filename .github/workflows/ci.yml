@@ -40,10 +40,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: 'backend/*requirements*.txt'
+          cache-dependency-path: |
+            backend/*requirements*.txt
+            backend/constraints.txt
       - name: Update the audited installer
         run: python -m pip install --upgrade pip==26.2.1
       - run: python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-security.txt
+      - name: Alexa cryptographic dependencies and adapter import
+        run: python db/scripts/alexa_import_smoke.py
       - name: Prepare isolated test database
         run: |
           python - <<'PY'
