@@ -88,8 +88,8 @@ class _BoundedRequestVerifier(RequestVerifier):
         return data
 
     def _validate_cert_chain(self, cert_chain: bytes) -> None:
-        # ASK's legacy certvalidator fails on current macOS native crypto. Its
-        # maintained successor performs the same PKIX/digital-signature checks.
+        # Use the maintained PKIX/digital-signature validator. ASK still imports
+        # legacy certvalidator/oscrypto; its native import is pinned/tested in CI.
         # SDK URL, expiry, Alexa SAN and SHA-256 body verification remain intact.
         certs = [
             x509.Certificate.load(der)

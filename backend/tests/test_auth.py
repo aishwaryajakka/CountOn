@@ -116,13 +116,17 @@ def test_clock_skew_window_is_bounded(verifier, monkeypatch, fixed_jwt_clock, al
 
 
 @pytest.mark.parametrize('changes', [
-    {'exp':int(time())-60}, {'iss':'https://other.example/auth/v1'}, {'aud':'other'},
-    {'sub':'not-a-uuid'}, {'role':'service_role'}, {'role':'anon'}, {'iat':int(time())+300},
-    {'nbf':int(time())+300},
+    {'exp':-60}, {'iss':'https://other.example/auth/v1'}, {'aud':'other'},
+    {'sub':'not-a-uuid'}, {'role':'service_role'}, {'role':'anon'}, {'iat':300},
+    {'nbf':300},
 ])
-def test_invalid_claims(verifier, changes):
+def test_invalid_claims(verifier, changes, fixed_jwt_clock):
     verifier, key = verifier
-    encoded, _ = token(verifier, key, **changes)
+    # NumericDate offsets use the verifier's frozen clock, never collection time.
+    claims = {'iat':fixed_jwt_clock-1, 'exp':fixed_jwt_clock+300}
+    claims.update({name: fixed_jwt_clock+value if name in ('exp','iat','nbf') else value
+                   for name, value in changes.items()})
+    encoded, _ = token(verifier, key, **claims)
     with pytest.raises(AuthenticationError):
         verifier.verify(encoded)
 

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.agent.adapters import CapabilityError, CountOnMcpAdapter
 from app.agent.models import AgentInput
@@ -296,7 +296,8 @@ async def test_compiler_capture_worker_and_shared_api_data_source(
         job = db.scalar(
             select(MonitoringJob).where(MonitoringJob.expectation_id == eid)
         )
-        job.next_run_at = datetime.now(timezone.utc)
+        # Claiming uses the database clock; do not race an independent host clock.
+        job.next_run_at = db.scalar(select(func.clock_timestamp()))
         db.commit()
     assert worker.run_once()
     with sessions() as db:

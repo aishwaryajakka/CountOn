@@ -18,6 +18,9 @@ mcp-types>=2.3.0,<3.0
 boto3[crt]>=1.43.108,<2.0
 botocore>=1.43.108,<2.0
 ask-sdk-webservice-support>=1.3.3,<2.0
+# ASK imports certvalidator/oscrypto at module load, even with our maintained PKIX path.
+# Immutable official upstream source for the OpenSSL version-detection fix (PR #76).
+oscrypto @ https://codeload.github.com/wbond/oscrypto/tar.gz/ebbc944485b278192b60080ea1f495e287efb4f8#sha256=fa482f4b2f86eed75a451564d5a50edf7fceddaec32c389ab37038f26064905b
 pyhanko-certvalidator>=0.32.1,<1.0
 # Direct imports at ASGI / signed Alexa / protocol boundaries.
 anyio>=4.9,<5.0
