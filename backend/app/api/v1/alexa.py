@@ -34,6 +34,9 @@ router = APIRouter(prefix="/alexa", tags=["alexa"])
 def authenticated_context(token: str) -> tuple[AuthenticatedUser, str]:
     # Identical JWT verifier/profile semantics to the normal protected API.
     user = get_token_verifier().verify(token)
+    configured_client = get_settings().alexa_oauth_client_id
+    if configured_client and user.oauth_client_id != configured_client:
+        raise AuthenticationError()  # type: ignore[no-untyped-call]
     with SessionLocal() as db:
         profile = ensure_profile(db, user.id)
         timezone = profile.timezone or "UTC"
@@ -103,6 +106,7 @@ async def fulfillment(request: Request) -> JSONResponse:
                 settings=settings,
                 session_store=request.app.state.agent_sessions,
                 audit_sink=persist_run,
+                require_capture_confirmation=settings.alexa_require_confirmation,
             )
             store: AlexaConversationStore = request.app.state.alexa_sessions
             reply = await AlexaAdapter(store, agent).handle(

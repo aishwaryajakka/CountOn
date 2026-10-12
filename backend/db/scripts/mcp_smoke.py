@@ -55,29 +55,27 @@ def token_for_smoke(demo_login):
 
 async def call(url, token, name, request):
     headers = {'Authorization': f'Bearer {token}'} if token else {}
-    async with httpx2.AsyncClient(headers=headers, timeout=20) as http:
-        async with Client(streamable_http_client(url, http_client=http), cache=None) as client:
-            return await client.call_tool(name, {'request': request})
+    async with httpx2.AsyncClient(headers=headers, timeout=20) as http, Client(streamable_http_client(url, http_client=http), cache=None) as client:
+        return await client.call_tool(name, {'request': request})
 
 
 CORE_TOOLS = {'capture_expectation', 'get_expectation', 'list_expectations'}
 
 
 async def discover(url, token):
-    async with httpx2.AsyncClient(headers={'Authorization': f'Bearer {token}'}, timeout=20) as http:
-        async with Client(streamable_http_client(url, http_client=http), cache=None) as client:
-            result = await client.list_tools()
-            names = {tool.name for tool in result.tools}
-            if not CORE_TOOLS <= names:
-                import re
-                safe = lambda name: name if re.fullmatch(r'[A-Za-z0-9_]{1,80}', name) else '<invalid name>'
-                missing = sorted(CORE_TOOLS - names)
-                unexpected = sorted(safe(name) for name in names - CORE_TOOLS)
-                raise SmokeFailure(f'Tool discovery mismatch: missing={missing}, unexpected={unexpected}')
-            import json
-            for tool in result.tools:
-                json.dumps(tool.input_schema, allow_nan=False)
-                json.dumps(tool.output_schema, allow_nan=False)
+    async with httpx2.AsyncClient(headers={'Authorization': f'Bearer {token}'}, timeout=20) as http, Client(streamable_http_client(url, http_client=http), cache=None) as client:
+        result = await client.list_tools()
+        names = {tool.name for tool in result.tools}
+        if not CORE_TOOLS <= names:
+            import re
+            safe = lambda name: name if re.fullmatch(r'[A-Za-z0-9_]{1,80}', name) else '<invalid name>'
+            missing = sorted(CORE_TOOLS - names)
+            unexpected = sorted(safe(name) for name in names - CORE_TOOLS)
+            raise SmokeFailure(f'Tool discovery mismatch: missing={missing}, unexpected={unexpected}')
+        import json
+        for tool in result.tools:
+            json.dumps(tool.input_schema, allow_nan=False)
+            json.dumps(tool.output_schema, allow_nan=False)
     print('PASS MCP initialization and required core tool discovery')
 
 
@@ -190,7 +188,7 @@ def main():
         return 0
     except SmokeFailure as error:
         print(f'FAIL {error}')
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - Mask transport failures and user interruption
         print('FAIL smoke interrupted or service unavailable; no credentials or exception details printed')
     return 1
 

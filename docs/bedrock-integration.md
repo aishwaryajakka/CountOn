@@ -157,7 +157,10 @@ No vercel.json change is needed. No new browser CORS path was added.
 
 Boto3's standard credential chain is reused. Local development can use authenticated
 SSO/profile credentials (`aws sso login --profile YOUR_PROFILE`, then set
-`AWS_PROFILE` privately). [Converse requires `bedrock:InvokeModel`](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html).
+`AWS_PROFILE` privately). A console `login_session` profile uses
+`aws login --profile NAME`, not `aws sso login`. The current default login needs
+refresh; run `python db/scripts/aws_preflight.py --verify-identity` from backend
+then the harmless Bedrock smoke. See [actual credential/deployment evidence](production-readiness.md#deployment-investigation-follow-up-2026-10-11). [Converse requires `bedrock:InvokeModel`](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html).
 Grant it only for the selected permitted model/profile resources. Example policy
 template for a directly invoked regional foundation model:
 
@@ -321,8 +324,10 @@ runtime credentials, then run live compilation/clarification/capture/explanation
 acceptance before claiming production intelligence readiness.
 
 Intentionally deferred: arbitrary intent classification, evidence/evaluate/update/
-resolve MCP tools, Ring/Bee/provider ingestion, workers, notification delivery,
-cache infrastructure and real Alexa/Echo account linking. Conversation state is
+resolve MCP tools, Ring/Bee ingestion, external notification delivery, cache
+infrastructure and real Alexa/Echo account linking. Durable PostgreSQL workers,
+delegated Outlook ingestion and the in-app inbox are implemented locally;
+[monitoring operation](monitoring.md) documents the remaining live provider setup. Conversation state is
 already durable; automatic ledger retention/cleanup remains operational work.
 
 ## Natural Why? acceptance

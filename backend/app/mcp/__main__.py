@@ -1,5 +1,6 @@
 """Config-driven ASGI startup: python -m app.mcp."""
 import uvicorn
+
 from app.core.config import get_settings
 
 

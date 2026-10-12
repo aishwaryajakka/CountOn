@@ -206,8 +206,9 @@ Compilation, clarification, explanation and `/alexa` orchestration are implement
 locally. Deployment addresses do not prove that the latest code/model access is
 live; initialize and discover all six tools, then run intelligence acceptance.
 Real Alexa+/Echo onboarding/account linking and compatible OAuth resource metadata
-remain incomplete. Ring/Bee/provider ingestion, workers and external notification
-delivery are absent. Direct structured capture has no generic idempotency key;
+remain incomplete. PostgreSQL workers and encrypted delegated Outlook ingestion
+are implemented locally; [provider/worker deployment](monitoring.md) needs live
+Microsoft verification. Ring/Bee and external notification delivery remain absent. Direct structured capture has no generic idempotency key;
 compiler-backed capture has durable replay protection. Bedrock is opt-in.
 
 ## Next Steps for Alexa+

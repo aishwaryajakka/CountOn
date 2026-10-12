@@ -1,16 +1,16 @@
 """Operational behavior without network services or secret-bearing responses."""
-from types import SimpleNamespace
-from uuid import UUID,uuid4
+from uuid import UUID, uuid4
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
-from app.main import app
-from app.api.dependencies import get_db
+
 from app.core.config import Settings
 from app.core.http_client import ExternalHTTPClient
 from app.core.rate_limit import MemoryRateLimiter
+from app.main import app
 
 
 def config(**changes):
@@ -24,7 +24,7 @@ def test_ready(ready,monkeypatch):
         response=client.get('/ready')
     assert response.status_code==(200 if ready else 503)
     if not ready:
-        assert response.json()['error']==dict(code='NOT_READY',message='Service dependencies are not ready',request_id=response.headers['x-request-id'])
+        assert response.json()['error']=={'code': 'NOT_READY','message': 'Service dependencies are not ready','request_id': response.headers['x-request-id']}
 
 
 def test_database_ready_failure():
@@ -105,8 +105,7 @@ def test_transport_timeouts_have_bounded_attempts(method,count):
     def fail(request):
         calls.append(request)
         raise httpx.ConnectTimeout('sensitive transport error',request=request)
-    with ExternalHTTPClient(config(),transport=httpx.MockTransport(fail),sleep=lambda _:None) as client:
-        with pytest.raises(httpx.ConnectTimeout):client.request(method,'https://external.example')
+    with ExternalHTTPClient(config(),transport=httpx.MockTransport(fail),sleep=lambda _:None) as client, pytest.raises(httpx.ConnectTimeout):client.request(method,'https://external.example')
     assert len(calls)==count
 
 
@@ -118,8 +117,9 @@ def test_invalid_configuration(changes):
 
 
 def test_production_configuration():
-    base=dict(_env_file=None,environment='production',database_target='supabase',
-        supabase_database_url='postgresql+psycopg://fixture@cloud.example/postgres?sslmode=require',supabase_url='https://auth.example',supabase_publishable_key='public-fixture',allowed_origins=['https://counton.example'])
+    base={'_env_file': None,'environment': 'production','database_target': 'supabase',
+        'conversation_store_backend':'postgres','conversation_encryption_key':'dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHQ=',
+        'supabase_database_url': 'postgresql+psycopg://fixture@cloud.example/postgres?sslmode=require','supabase_url': 'https://auth.example','supabase_publishable_key': 'public-fixture','allowed_origins': ['https://counton.example']}
     assert Settings(**base).environment=='production'
     for changes in [{'supabase_database_url':'postgresql+psycopg://fixture@cloud.example/postgres'},{'rate_limit_enabled':False},{'allowed_origins':['http://localhost:3000']},{'supabase_publishable_key':None}, {'allowed_origins':[]}, {'supabase_jwks_url':'https://other.example/jwks'}]:
         with pytest.raises(ValidationError):Settings(**(base|changes))
@@ -151,7 +151,9 @@ def test_failed_metric_exporter_does_not_break_api(monkeypatch,caplog):
 
 
 def test_structured_logs_include_context_without_tokens():
-    import json,logging
+    import json
+    import logging
+
     from app.core.logging import StructuredFormatter
     from app.core.observability import request_id
     token=request_id.set('10000000-0000-4000-8000-000000000001')

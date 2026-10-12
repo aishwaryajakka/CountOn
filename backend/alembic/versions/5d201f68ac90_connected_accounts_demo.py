@@ -3,9 +3,10 @@
 Revision ID: 5d201f68ac90
 Revises: 4bc128091ea7
 """
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ARRAY,JSONB,UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+
+from alembic import op
 
 revision='5d201f68ac90'
 down_revision='4bc128091ea7'

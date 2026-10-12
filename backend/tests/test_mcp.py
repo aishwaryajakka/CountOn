@@ -13,7 +13,11 @@ from starlette.testclient import TestClient
 from app.core.auth import AuthenticatedUser
 from app.core.exceptions import AuthenticationError
 from app.mcp import auth
-from app.mcp.schemas import CaptureExpectationInput, GetExpectationInput, ListExpectationsInput
+from app.mcp.schemas import (
+    CaptureExpectationInput,
+    GetExpectationInput,
+    ListExpectationsInput,
+)
 from app.mcp.server import create_server
 
 DESCRIPTIONS = {

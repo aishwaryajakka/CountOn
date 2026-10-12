@@ -49,7 +49,9 @@ def speech_is_safe(result: AgentResult) -> bool:
                 != receipt.used
             ):
                 return False
-            if explained.bedrock_used != (explained.explanation.generation == "bedrock"):
+            if explained.bedrock_used != (
+                explained.explanation.generation == "bedrock"
+            ):
                 return False
             if explained.bedrock_used and receipt.grounding_passed is not True:
                 return False

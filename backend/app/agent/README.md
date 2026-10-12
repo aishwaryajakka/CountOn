@@ -217,14 +217,15 @@ retains the draft without executing tools. `reset_session` explicitly cancels an
 active draft before discarding its record and creates a fresh session ID; if
 cancellation is unavailable, it preserves the draft for a safe reset retry.
 
-The in-memory store defaults to 1,024 live sessions and uses the existing
-`clarification_ttl_seconds` as a fixed maximum session lifetime (15 minutes by
-default). The compiler's own expiry is checked as well. Expiry is not extended by
-activity. Expired entries are pruned; live entries are never silently evicted.
-Restart drops context safely. **This store is single-process/event-loop only**;
-reuse one orchestrator/store per backend host. Multiple workers or replicas need a
-shared atomic store or explicit sticky routing before deployment; no distributed
-storage, database migration or generic chat memory is added here.
+Development memory storage supports 1,024 bounded sessions and the existing fixed
+clarification TTL (15 minutes by default). Production uses the PostgreSQL adapters
+in `app/conversations/` with the SAME AgentSessionState, encrypted snapshots and
+owner-bound fenced leases. The shared capacity is 1,024 records across core and
+ASK transport state; expired non-busy records are pruned on admission. Handles
+are consumed before remote actions and rotated on successful turn completion.
+A crash requires a new conversation and checking records before retrying a save;
+exact ASK retries use persisted safe responses/tombstones. No JWTs or transcripts
+are persisted. See [production operation](../../../docs/production-readiness.md).
 
 Trusted-host example, after existing JWT verification:
 
@@ -263,14 +264,14 @@ public variables. `COUNTON_MCP_URL` on Next.js is used for discovery only. Set A
 COUNTON_CLARIFICATION_SIGNING_KEY on FastAPI and MCP**, including separate local
 processes; process-random development keys cannot verify each other's tokens.
 Keep AWS credentials only in the MCP/backend runtime provider chain. Deploy the
-API change before enabling the updated frontend. No database migration is needed.
+API changes and current Alembic head before enabling the updated frontend.
 
-The API lifespan owns one bounded session store. Sessions remain single-worker,
-in-memory; restart/refresh/user switch requires restating context. Multiple workers
-need shared atomic storage or sticky routing before rollout. SDK/proxy timeouts
-never automatically retry writes; lost save responses instruct users to check the
-dashboard. Local signed-JWT/HTTP/persistence tests are not production deployment
-validation or completed Alexa/Echo integration.
+The API lifespan selects development memory or production PostgreSQL state. Browser
+refresh/user switch deliberately drops the local opaque handle. Server restarts
+preserve PostgreSQL state, but crashes during a turn invalidate its handle rather
+than risk a duplicate action. No write retries are automatic. Linked Alexa users
+confirm completed drafts before capture; active corrections still use the canonical
+clarification engine. Local passes do not establish production OAuth or Echo acceptance.
 
 ## Traditional Alexa transport
 
@@ -284,7 +285,7 @@ avoid duplicate rows on request retry after restart. `AgentSessionStore.discard`
 revokes terminal transport context without creating a replacement session.
 
 See [Traditional Alexa setup](../../../docs/traditional-alexa.md) for the model,
-account-linking gap, request verification, single-worker/deadline limits and manual
+native account-linking setup, request verification, durable state/deadline limits and manual
 console acceptance. Local adapter tests do not claim Alexa/Echo deployment.
 
 ## Minimal trust boundary

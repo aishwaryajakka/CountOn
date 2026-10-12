@@ -2,10 +2,12 @@
 import logging
 from time import perf_counter
 from uuid import UUID, uuid4
+
+from starlette.middleware.cors import CORSMiddleware
+
+from app.api.errors import error_response
 from app.core import observability
 from app.core.rate_limit import MemoryRateLimiter
-from app.api.errors import error_response
-from starlette.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger('counton.requests')
 
@@ -53,7 +55,7 @@ class OperationalMiddleware:
             else:
                 try:
                     await self.app(scope,receive,correlated)
-                except Exception as error:
+                except Exception as error:  # noqa: BLE001 - HTTP boundary masks private failures
                     logger.error('Request failed request_id=%s error_type=%s',rid,type(error).__name__)
                     if response_started:
                         raise RuntimeError('Response failed after headers') from None

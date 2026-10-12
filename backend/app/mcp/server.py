@@ -1,22 +1,23 @@
 """Standalone ASGI bootstrap; the existing FastAPI application is unchanged."""
 
+import asyncio
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from starlette.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import ValidationError
-
-from app.core.logging import configure_logging
-from app.mcp.http import RequestContextMiddleware, BearerAuthMiddleware
-from app.core.config import get_settings
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.cors import CORSMiddleware
-from urllib.parse import urlsplit
+from starlette.responses import JSONResponse
+
+from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.mcp.auth import current_user
-from app.mcp.tools import register_tools, SessionFactory, UserResolver
+from app.mcp.http import BearerAuthMiddleware, RequestContextMiddleware
+from app.mcp.tools import SessionFactory, UserResolver, register_tools
 from app.services.readiness import database_ready
 
 
@@ -24,10 +25,16 @@ class CountOnMCPServer(MCPServer):
     async def call_tool(self, name, arguments, context=None):
         # The SDK's validation error text includes rejected input values. Keep
         # those out of responses and SDK logs, including unknown argument names.
-        if set(arguments) != {"request"}:
+        if not isinstance(arguments, dict) or set(arguments) != {"request"}:
             raise ToolError("INVALID_ARGUMENTS: Supply only the structured request argument.")
+        if name not in ('capture_expectation','get_expectation','list_expectations','compile_expectation',
+                        'continue_expectation_compilation','explain_expectation_mismatch'):
+            raise ToolError('UNKNOWN_TOOL: Tool is not available.')
         try:
-            return await super().call_tool(name, arguments, context)
+            async with asyncio.timeout(120):
+                return await super().call_tool(name, arguments, context)
+        except TimeoutError:
+            raise ToolError('UNAVAILABLE: Operation timed out; check records before retrying a write.') from None
         except ToolError as error:
             if isinstance(error.__cause__, ValidationError):
                 raise ToolError("INVALID_ARGUMENTS: Check required fields, field types, and pagination bounds.") from None
@@ -51,7 +58,7 @@ def create_server(
             try:
                 with session_factory() as db:
                     return database_ready(db)
-            except Exception:
+            except Exception:  # noqa: BLE001 - Readiness must mask connection/configuration details
                 return False
         if not await run_in_threadpool(check):
             return JSONResponse({"status": "not_ready", "service": "counton-mcp"}, status_code=503)
@@ -83,7 +90,9 @@ def create_app(server=None, *, settings=None):
             yield
 
     app.router.lifespan_context = lifespan
+    from app.api.budgets import RequestBudgetMiddleware
     app.add_middleware(BearerAuthMiddleware)
+    app.add_middleware(RequestBudgetMiddleware, settings=settings, mcp=True)
     if settings.mcp_allowed_origins:
         app.add_middleware(CORSMiddleware, allow_origins=settings.mcp_allowed_origins,
             allow_methods=["GET", "POST", "DELETE"],

@@ -9,6 +9,10 @@ export function createApiClient(deps: Dependencies) {
   const configured = deps.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL;
   const base = (configured ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000')).replace(/\/$/, '');
   if (!base) throw new Error('Configure NEXT_PUBLIC_API_BASE_URL before building the production frontend.');
+  const configuredUrl = new URL(base);
+  if (!['http:', 'https:'].includes(configuredUrl.protocol) || configuredUrl.username || configuredUrl.password || configuredUrl.search || configuredUrl.hash || !['', '/'].includes(configuredUrl.pathname)) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL must be an HTTP(S) origin without credentials, paths, queries or fragments.');
+  }
   if (process.env.NODE_ENV === 'production') {
     const url = new URL(base);
     if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
@@ -32,9 +36,12 @@ export function createApiClient(deps: Dependencies) {
       });
     };
     let response: Response;
-    try { response = await (deps.fetcher ?? fetch)(`${base}/api/v1${path}`, { ...options, headers, cache: 'no-store' }); }
+    const deadline = AbortSignal.timeout(20_000);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    try { response = await (deps.fetcher ?? fetch)(`${base}/api/v1${path}`, { ...options, signal, headers, cache: 'no-store' }); }
     catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') throw error;
+      // DOMExceptions can come from another realm and fail instanceof Error.
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') throw error;
       logFailure('network', 0);
       throw new ApiError('We couldn’t reach CountOn. Check your connection and try again.', 0);
     }

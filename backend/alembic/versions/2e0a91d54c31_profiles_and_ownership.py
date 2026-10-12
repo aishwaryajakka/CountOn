@@ -3,9 +3,10 @@
 Revision ID: 2e0a91d54c31
 Revises: 1bbc27e27689
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = '2e0a91d54c31'
 down_revision = '1bbc27e27689'

@@ -70,8 +70,8 @@ def validate_response(response: object) -> SmokeOutput:
         fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", payload, re.DOTALL)
         payload = fenced.group(1) if fenced else payload
 
-        def pairs(items):
-            result = {}
+        def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
             for key, value in items:
                 if key in result:
                     raise UnusableResponse()

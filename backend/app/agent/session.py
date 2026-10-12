@@ -34,6 +34,7 @@ class AgentSessionState(BaseModel):
     session_id: UUID = Field(default_factory=uuid4)
     selected_expectation_id: UUID | None = None
     clarification_reference: SecretStr | None = Field(default=None, repr=False)
+    pending_capture_reference: SecretStr | None = Field(default=None, repr=False)
     last_action: AgentAction | None = None
     pending_disambiguation_ids: tuple[UUID, ...] = Field(default=(), max_length=10)
     created_at: AwareDatetime
@@ -51,9 +52,14 @@ class AgentSessionState(BaseModel):
         if self.pending_disambiguation_ids and self.selected_expectation_id is not None:
             raise ValueError("Ambiguous context cannot have a selected expectation")
         checked_reference(self.clarification_reference)
-        if (
-            self.marker != SessionMarker.READY
-            and self.clarification_reference is not None
+        checked_reference(self.pending_capture_reference)
+        if self.clarification_reference and self.pending_capture_reference:
+            raise ValueError(
+                "Draft cannot be active and awaiting confirmation together"
+            )
+        if self.marker != SessionMarker.READY and (
+            self.clarification_reference is not None
+            or self.pending_capture_reference is not None
         ):
             raise ValueError("Terminal draft cannot retain clarification state")
         return self

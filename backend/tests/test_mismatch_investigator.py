@@ -7,6 +7,8 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from botocore.exceptions import EndpointConnectionError
+
 from app.ai.bedrock_client import BedrockClient
 from app.ai.investigation_evidence import InvestigationInputError, normalize
 from app.ai.mismatch_investigator import BedrockMismatchInvestigator
@@ -19,10 +21,22 @@ from app.schemas.expectation import ExpectationResponse
 from app.schemas.investigation import InvestigationContext
 from app.services import investigator_service
 from app.services.investigation_service import investigate_mismatch
-from botocore.exceptions import EndpointConnectionError
 
 NOW = datetime(2026, 10, 8, 20, tzinfo=timezone.utc)
 SECRET = "private-provider-token-DO-NOT-SEND"
+
+
+@pytest.mark.parametrize('metric', [None, [], {'unexpected': 'metric'}, 42])
+def test_invalid_legacy_evaluation_metric_returns_no_evidence(metric):
+    from types import SimpleNamespace
+
+    from app.repositories.evidence import investigation_evidence
+
+    db = Mock()
+    snapshot = SimpleNamespace(expected={'metric': metric}, observed={})
+    assert investigation_evidence(db, uuid4(), snapshot) == []
+    db.scalar.assert_not_called()
+    db.scalars.assert_not_called()
 
 
 def inputs():

@@ -20,6 +20,16 @@ describe('MCP route and browser helper', () => {
     sdk.callTool.mockResolvedValue({ content: [], structuredContent: { id: 'expectation-id' } });
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it('browser discovery has a deadline and masks timeout details without retries', async () => {
+    const deadline = vi.spyOn(AbortSignal, 'timeout');
+    const fetcher = vi.fn().mockRejectedValue(new DOMException(`private ${token}`, 'TimeoutError'));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(requestMcp(token, { action: 'list_tools' })).rejects.toMatchObject({ code: 'MCP_UNAVAILABLE' });
+    expect(deadline).toHaveBeenCalledWith(185_000);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    deadline.mockRestore();
+  });
   it('rejects missing or malformed authorization without opening MCP', async () => {
     for (const authorization of [null, 'Basic private', 'Bearer one two']) {
       const response = await POST(request({ action: 'list_tools' }, authorization));

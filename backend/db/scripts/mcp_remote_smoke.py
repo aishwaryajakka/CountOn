@@ -1,17 +1,17 @@
 """Remote HTTPS MCP probe. Writes require an owner-scoped API cleanup path."""
 import argparse
 import asyncio
-import logging
 import ipaddress
-import re
+import logging
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from db.scripts._token import access_token
-from db.scripts.mcp_smoke import SmokeFailure, discover, call, success, smoke
+from db.scripts.mcp_smoke import SmokeFailure, call, discover, smoke, success
 
 
 def https_url(value):
@@ -62,7 +62,7 @@ def main():
         return 0
     except SmokeFailure as error:
         print(f'FAIL {error}')
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - Mask transport failures and user interruption
         print('FAIL remote probe interrupted or unavailable; no credential or exception details printed')
     return 1
 

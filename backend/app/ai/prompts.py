@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-EXPECTATION_COMPILER_PROMPT_VERSION = "v2"
+EXPECTATION_COMPILER_PROMPT_VERSION = "v3"
 MISMATCH_INVESTIGATOR_PROMPT_VERSION = "v2"
 CLARIFICATION_PROMPT_VERSION = "clarification-v1"
 
@@ -61,14 +61,17 @@ Omit/null unused proof fields. A quote is provenance of interpretation, not evid
 Normalize subjects into lower-case snake_case metrics, removing leading my/the.
 Grocery/electricity/utility bill, spending or cost uses total_cost to match current
 bill evidence. Do not invent unrelated metric names. No subject -> clarification.
+Package/Amazon package uses package_delivery. Sources and exact order identifiers
+are selected separately using authorized records; never invent them during compile.
 Amounts may have decimals, thousands commas, negative values or zero; preserve
 numeric value exactly. Current schema has no currency field: bill evidence uses
 USD. Treat en-US locale as USD for '$'/dollars; otherwise clarify currency unless
 USD/US dollars is explicit. Non-USD requests need currency clarification.
 Non-numeric fields cannot contain numeric operands or comparisons. Positive
 boolean assertions only: current boolean evaluator asserts True. Temporal/event
-expectations may describe an occurrence with a deadline, but their evaluator is
-currently deferred; do not claim they can be evaluated today. Absence, time
+expectations may describe an occurrence with a deadline. Monitoring requires an
+explicit authorized source and real occurrence evidence; missing evidence stays
+UNKNOWN. Never claim a predicted delivery date proves arrival. Absence, time
 windows, repeated schedules and changing an existing record cannot be expressed
 safely as a new positive assertion: return unsupported or targeted clarification.
 Evidence sources default to []. Include only sources explicitly named after

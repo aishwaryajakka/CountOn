@@ -12,7 +12,8 @@ legacy `app/mcp/compiler.py` adapter strips ownership before delegation. The MCP
 see [the integration handoff](../../../docs/bedrock-integration.md). The mismatch investigator is
 available through a pure service; see [grounding and integration](investigation.md). The bounded
 clarification workflow is now available through the pure application service; see
-[conversation state, security and integration](clarification.md). The authenticated Next.js `/alexa` route orchestrates the existing MCP tools.
+[conversation state, security and integration](clarification.md). The authenticated `/alexa` web simulator delegates to FastAPI’s shared orchestrator,
+which uses the existing MCP tools.
 It compiles/clarifies before capture and explains only confirmed mismatch.
 This remains a web simulator; real Alexa/Echo integration is not complete.
 
@@ -30,6 +31,7 @@ Existing Pydantic Settings owns configuration; no second loader is introduced.
 | `BEDROCK_MAX_TOKENS` | `1000` | Maximum output tokens, 1–65536; obey model limits |
 | `BEDROCK_TEMPERATURE` | `0.1` | Sampling temperature, 0–1; obey model limits |
 | `BEDROCK_REQUEST_TIMEOUT_SECONDS` | `30` | Connect/read timeout per attempt, >0–120 |
+| `BEDROCK_OPERATION_TIMEOUT_SECONDS` | `45` | Whole logical call retry/repair budget; late results discarded |
 | `BEDROCK_MAX_RETRIES` | `2` | Additional recoverable infrastructure attempts, 0–5 |
 | `BEDROCK_NATIVE_STRUCTURED_OUTPUT` | `false` | Enable Converse JSON-schema output only for a compatible model/schema |
 
@@ -41,7 +43,10 @@ intelligence is not added as a dependency.
 Use the normal boto3 credential provider chain: local AWS SSO/profile/shared
 credentials or an appropriate workload role. Do not pass credentials to this
 client. Authenticate an existing SSO profile using `aws sso login --profile NAME`
-and set `AWS_PROFILE=NAME` locally if needed. A Lightsail deployment must supply
+and set `AWS_PROFILE=NAME` locally if needed. For a `login_session` profile, use
+`aws login --profile NAME` instead; the current default profile requires this refresh.
+Run `python db/scripts/aws_preflight.py --verify-identity` from backend before the
+opt-in model smoke; it never prints credentials or identity values. A Lightsail deployment must supply
 an appropriate supported credential provider; do not assume it has an IAM role.
 
 IAM requires **`bedrock:InvokeModel`** for non-streaming Converse on the selected
@@ -128,7 +133,7 @@ investigator selects evaluation snapshots and bounded numeric/boolean evidence,
 excluding raw data, ownership, source text, claims and provider credentials.
 Do not persist prompts by default. Treat all user/evidence content as untrusted
 input and keep investigator output grounded in the returned evidence.
-Compiler prompt version is `v2`; the implemented investigator uses `v2`.
+Compiler prompt version is `v3`; the implemented investigator uses `v2`.
 
 ## Verification
 
@@ -241,9 +246,12 @@ All dates derive from the explicit caller instant converted to its IANA timezone
 The conservative initial date vocabulary does not yet parse arbitrary absolute
 calendar dates or every natural-language date phrase. Unsupported syntax asks
 clarification rather than delegating unchecked calendar calculations to the model.
-Temporal/event records are representable but their deterministic evaluation is
-currently deferred and returns UNKNOWN. The compiler never claims they are
-already operationally evaluated. Non-numeric negative/absence assertions cannot
+Temporal/event monitoring evaluates real, explicitly bound occurrence evidence
+against a deadline. Missing or unsupported evidence remains UNKNOWN. Package and
+Amazon package compile to `package_delivery`, which the order-email connector now
+supports with an explicit reported delivery timestamp; an estimate never proves
+arrival. See [source orchestration](../../../docs/orchestration.md).
+Non-numeric negative/absence assertions cannot
 be converted into positive assertions; the current boolean evaluator asserts True.
 Changing appointments/records, absence windows and schedules need a richer contract.
 
@@ -328,3 +336,16 @@ an arbitrary owned expectation.
 capture → PostgreSQL → deterministic evaluation → explanation, then a newer MATCH
 which must skip investigation. Model responses are mocked; live model quality and
 actual Alexa/Echo deployment remain separate validation/integration work.
+
+## Production reliability
+
+Input/output sizes and logical operation budgets are bounded. Timeout/throttling/
+recoverable provider failures have bounded backoff; auth/config failures are not
+retried, and repair stays within the same operation budget. Late SDK results are
+discarded; an in-flight synchronous SDK call still relies on configured connect/read
+timeouts (not forcibly killed). ASK has a separate seven-second deadline and no
+automatic write retry. Measure live latency before enabling Alexa. Aggregate call,
+success/failure, latency and token counters are available through the authenticated
+API `/metrics` sink. Process restarts reset this default sink; MCP/worker telemetry
+needs log aggregation or a configured external exporter for durable monitoring.
+See [production acceptance](../../../docs/production-readiness.md).

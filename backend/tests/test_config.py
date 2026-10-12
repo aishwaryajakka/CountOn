@@ -6,18 +6,44 @@ import sys
 from pathlib import Path
 
 import pytest
-from app.core.config import Settings
 from pydantic import ValidationError
+
+from app.core.config import Settings
 
 LOCAL = "postgresql+psycopg://local_user@localhost/local_database"
 SUPABASE = "postgresql+psycopg://remote_user@db.example.supabase.co/postgres"
+
+
+@pytest.mark.parametrize('origin', [
+    'https://*', 'https://host.test:0', 'https://host.test:65536',
+    'https://host.test:invalid', 'https://host .test', 'https://host.test?',
+    'https://host.test#', 'https://user:private-password@host.test',
+])
+@pytest.mark.parametrize('field', ['allowed_origins', 'supabase_url'])
+def test_auth_and_cors_origins_fail_closed(field, origin):
+    value = [origin] if field == 'allowed_origins' else origin
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, database_target='local', local_database_url=LOCAL, **{field: value})
+    assert 'private-password' not in str(error.value)
+    assert 'input_value' not in str(error.value)
+
+
+def test_valid_explicit_origin_ports_and_ipv6():
+    settings = Settings(_env_file=None, database_target='local', local_database_url=LOCAL,
+                        allowed_origins=['https://ui.test:8443', 'http://[::1]:3000'],
+                        supabase_url='https://auth.test:8443')
+    assert settings.allowed_origins == ['https://ui.test:8443', 'http://[::1]:3000']
 
 
 @pytest.fixture(autouse=True)
 def clear_database_overrides(monkeypatch):
     for name in ("DATABASE_URL", "DATABASE_TARGET", "LOCAL_DATABASE_URL", "SUPABASE_DATABASE_URL",
                  "BEDROCK_ENABLED", "AWS_REGION", "BEDROCK_MODEL_ID", "BEDROCK_MAX_TOKENS",
-                 "BEDROCK_TEMPERATURE", "BEDROCK_REQUEST_TIMEOUT_SECONDS", "BEDROCK_MAX_RETRIES"):
+                 "BEDROCK_TEMPERATURE", "BEDROCK_REQUEST_TIMEOUT_SECONDS", "BEDROCK_MAX_RETRIES",
+                 "MONITORING_ENABLED", "MONITORING_POLL_SECONDS", "MONITORING_LEASE_SECONDS",
+                 "MONITORING_BACKOFF_SECONDS", "MICROSOFT_GRAPH_ENABLED", "MICROSOFT_CLIENT_ID",
+                 "MICROSOFT_CLIENT_SECRET", "MICROSOFT_TENANT_ID", "MICROSOFT_REDIRECT_URI",
+                 "INTEGRATION_TOKEN_ENCRYPTION_KEY"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -166,3 +192,57 @@ def test_bedrock_sample_loads_with_existing_env_loader(tmp_path):
     assert settings.aws_region == "us-east-2"
     assert settings.bedrock_model_id == "openai.gpt-oss-120b-1:0"
     assert settings.bedrock_request_timeout_seconds == 30
+
+
+
+def test_monitoring_sample_defaults_and_safe_settings_repr():
+    from base64 import urlsafe_b64encode
+    sample = Path(__file__).resolve().parents[1] / "monitoring.env.sample"
+    settings = Settings(_env_file=sample, database_target="local", local_database_url=LOCAL)
+    assert settings.monitoring_enabled is False
+    assert settings.microsoft_graph_enabled is False
+    assert (settings.monitoring_poll_seconds, settings.monitoring_lease_seconds,
+            settings.monitoring_backoff_seconds) == (5, 300, 30)
+    secret = "private-test-client-secret"
+    settings = Settings(_env_file=None, database_target="local", local_database_url=LOCAL,
+                        microsoft_graph_enabled=True,
+                        microsoft_client_id="00000000-0000-0000-0000-000000000001",
+                        microsoft_client_secret=secret,
+                        microsoft_redirect_uri="https://api.test/callback",
+                        integration_token_encryption_key=urlsafe_b64encode(b"t" * 32).decode())
+    assert secret not in repr(settings)
+    assert "integration_token_encryption_key=" not in repr(settings)
+
+
+@pytest.mark.parametrize("name,value", [
+    ("MONITORING_LEASE_SECONDS", "1"), ("MONITORING_POLL_SECONDS", "0"),
+    ("MONITORING_BACKOFF_SECONDS", "-1"), ("MICROSOFT_GRAPH_ENABLED", "true"),
+    ("MICROSOFT_TENANT_ID", "------------------------------------"),
+    ("INTEGRATION_TOKEN_ENCRYPTION_KEY", "private-invalid-encryption-key"),
+    ("MICROSOFT_REDIRECT_URI", "https://api.test:invalid/callback"),
+    ("MICROSOFT_REDIRECT_URI", "https://user:private-password@api.test/callback"),
+    ("MICROSOFT_REDIRECT_URI", "https://api.test/callback?token=private-test-token"),
+])
+def test_monitoring_configuration_fails_closed_without_exposing_values(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, database_target="local", local_database_url=LOCAL)
+    assert "input_value" not in str(error.value)
+    assert "private-" not in str(error.value)
+
+
+def test_provider_callback_loopback_only_in_development(monkeypatch):
+    monkeypatch.setenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/callback")
+    assert Settings(_env_file=None, database_target="local", local_database_url=LOCAL,
+                    environment="development").microsoft_redirect_uri
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, database_target="local", local_database_url=LOCAL,
+                 environment="production")
+    monkeypatch.setenv("MICROSOFT_REDIRECT_URI", "http://api.test/callback")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, database_target="local", local_database_url=LOCAL)
+
+
+def test_monitoring_enabled_environment_parsing(monkeypatch):
+    monkeypatch.setenv("MONITORING_ENABLED", "true")
+    assert Settings(_env_file=None, database_target="local", local_database_url=LOCAL).monitoring_enabled

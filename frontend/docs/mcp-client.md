@@ -29,7 +29,8 @@ are disabled. Network-loss messages ask users to check CountOn before resaving.
 Frontend: configure the existing public API/Supabase variables and server-only
 `COUNTON_MCP_URL` for discovery. Backend: configure `MCP_PUBLIC_URL` for actual
 calls and the same `COUNTON_CLARIFICATION_SIGNING_KEY` on API and MCP. Session
-state is bounded, fixed-TTL and in-memory in one API worker; no state is stored in
-browser localStorage. API and frontend redeploys are needed to publish this path.
+state is bounded and fixed-TTL: memory for development, encrypted PostgreSQL for
+production. Browser localStorage never stores conversation state. Apply current
+Alembic head and configure the private conversation key before rollout. API and frontend redeploys are needed to publish this path.
 See [the demo guide](alexa-demo.md) and
 [backend orchestrator](../../backend/app/agent/README.md).

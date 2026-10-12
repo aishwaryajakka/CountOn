@@ -20,7 +20,7 @@ export function Avatar() {
   return email?.toLowerCase() === 'demo@counton.app' ? <Image src="/ashley-reference.png" width={38} height={38} sizes="38px" alt="Ashley’s demo portrait" className="avatar" /> : <span className="avatar initials" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>;
 }
 function Workspace({ children }: { children: ReactNode }) {
-  const board = useResource(loadBoard);
+  const board = useResource(loadBoard, 30000);
   const pathname = usePathname();
   const { name } = useIdentity();
   const [open, setOpen] = useState(false);

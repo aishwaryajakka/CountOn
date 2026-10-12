@@ -77,7 +77,7 @@ _LIST = re.compile(
     re.IGNORECASE,
 )
 _CAPTURE = re.compile(
-    r"^(?:i'm counting on|i am counting on|i expect|i'm expecting|save|monitor|track)\s",
+    r"^(?:i'm counting on|i am counting on|i expect|i'm expecting|make sure|save|monitor|track)\s",
     re.IGNORECASE,
 )
 _WHY = re.compile(r"^why\s", re.IGNORECASE)
@@ -108,9 +108,11 @@ class AgentOrchestrator:
         settings: Settings | None = None,
         session_store: AgentSessionStore | None = None,
         audit_sink: Callable[[AuthenticatedUser, AgentResult, int], None] | None = None,
+        require_capture_confirmation: bool = False,
     ) -> None:
         self.adapter = adapter or CountOnMcpAdapter()
         self.audit_sink = audit_sink
+        self.require_capture_confirmation = require_capture_confirmation
         self.settings = settings or get_settings()
         self.sessions = session_store or AgentSessionStore(
             ttl_seconds=self.settings.clarification_ttl_seconds
@@ -158,6 +160,16 @@ class AgentOrchestrator:
     ) -> AgentSessionState:
         fields = state.model_dump(mode="python")
         fields["last_action"] = result.action
+        fields["pending_capture_reference"] = None
+        if result.confirmation_required:
+            fields.update(
+                pending_capture_reference=result.capture_state,
+                clarification_reference=None,
+                selected_expectation_id=None,
+                pending_disambiguation_ids=(),
+                marker=SessionMarker.READY,
+            )
+            return AgentSessionState.model_validate(fields)
         if result.captured:
             fields.update(
                 selected_expectation_id=result.expectation_id,
@@ -228,7 +240,8 @@ class AgentOrchestrator:
             code=FailureCode.UNAVAILABLE,
         )
         try:
-            turn = await self._handle_session(user, input_, session_reference)
+            with anyio.fail_after(self.settings.agent_execution_timeout_seconds):
+                turn = await self._handle_session(user, input_, session_reference)
             result = turn.result
         finally:
             result = finish(
@@ -284,7 +297,10 @@ class AgentOrchestrator:
                 )
             )
         try:
-            reference = session_reference or self.sessions.create(user)
+            reference = session_reference or await anyio.to_thread.run_sync(
+                self.sessions.create, user
+            )
+            assert reference is not None
             async with self.sessions.turn(user, reference) as entry:
                 state = entry.state
                 if state.clarification_reference is not None:
@@ -300,8 +316,8 @@ class AgentOrchestrator:
                         ),
                     )
                 result = await self._session_turn(user, input_, state)
-                next_reference = self.sessions.advance(
-                    entry, self._next_session(state, result)
+                next_reference = await anyio.to_thread.run_sync(
+                    self.sessions.advance, entry, self._next_session(state, result)
                 )
                 return AgentSessionResult(
                     result=result, session_reference=next_reference
@@ -322,7 +338,80 @@ class AgentOrchestrator:
     ) -> AgentResult:
         text = input_.text.lower().replace("’", "'").rstrip(".!?")
         if _POLICY.search(text):
-            return await self.handle(user, input_)
+            rejected = await self.handle(user, input_)
+            if state.pending_capture_reference:
+                return rejected.model_copy(
+                    update={
+                        "confirmation_required": True,
+                        "capture_state": state.pending_capture_reference,
+                    }
+                )
+            return rejected
+        if state.pending_capture_reference is not None:
+            if _CANCEL.fullmatch(text) or text in (
+                "no",
+                "no thanks",
+                "do not save",
+                "don't save",
+            ):
+                return AgentResult(
+                    action=AgentAction.CANCEL,
+                    status=AgentStatus.CANCELLED,
+                    message="Cancelled. Nothing was saved.",
+                )
+            try:
+                compiled = decode_state(
+                    state.pending_capture_reference.get_secret_value(),
+                    user.id,
+                    self.settings,
+                )
+            except StateError:
+                raise CapabilityError(FailureCode.STATE_REJECTED) from None
+            if (
+                compiled.status != ClarificationStatus.COMPILED
+                or compiled.compiled_expectation is None
+            ):
+                raise CapabilityError(FailureCode.STATE_REJECTED)
+            if text in (
+                "yes",
+                "yes please",
+                "confirm",
+                "save it",
+                "go ahead",
+                "that's right",
+                "correct",
+            ):
+                capture = AgentPlan(
+                    action=AgentAction.CAPTURE_EXPECTATION,
+                    reason_code=ReasonCode.COMPILED_READY,
+                    allowed_tools=tools_for(AgentAction.CAPTURE_EXPECTATION),
+                    compiled_expectation=compiled.compiled_expectation,
+                    clarification_state=state.pending_capture_reference,
+                )
+                saved = await self._call(user, capture)
+                if not isinstance(saved, ExpectationResult):
+                    raise CapabilityError(FailureCode.PROTOCOL_ERROR)
+                return AgentResult(
+                    action=AgentAction.CAPTURE_EXPECTATION,
+                    status=AgentStatus.SUCCESS,
+                    message="Got it. I saved that expectation in CountOn.",
+                    expectation=saved,
+                    captured=True,
+                    steps=(
+                        AgentStep(
+                            action=AgentAction.CAPTURE_EXPECTATION,
+                            tool=CapabilityTool.CAPTURE,
+                        ),
+                    ),
+                )
+            if not _CAPTURE.match(text) or CORRECTION.match(text):
+                return AgentResult(
+                    action=AgentAction.COMPILE_EXPECTATION,
+                    status=AgentStatus.CLARIFICATION,
+                    message="Say yes to save it, or cancel and restate any changes.",
+                    confirmation_required=True,
+                    capture_state=state.pending_capture_reference,
+                )
         if _CANCEL.fullmatch(text) and state.clarification_reference is None:
             return AgentResult(
                 action=AgentAction.CANCEL,
@@ -760,6 +849,20 @@ class AgentOrchestrator:
                         clarification_state=SecretStr(output.capture_state),
                         metadata=plan.metadata,
                     )
+                    if self.require_capture_confirmation:
+                        self._verify_state(user, capture)
+                        return AgentResult(
+                            action=plan.action,
+                            status=AgentStatus.CLARIFICATION,
+                            message="I will track: "
+                            + " ".join(output.expectation.claim.split())[:240]
+                            + ". Should I save it?",
+                            confirmation_required=True,
+                            capture_state=SecretStr(output.capture_state),
+                            compiled_expectation=output.expectation,
+                            steps=tuple(steps),
+                            bedrock_used=output.bedrock_used,
+                        )
                     saved = await self._call(user, capture)
                     steps.append(
                         AgentStep(action=capture.action, tool=CapabilityTool.CAPTURE)

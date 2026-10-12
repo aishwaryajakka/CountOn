@@ -1,15 +1,16 @@
 """Owner-scoped notification persistence; no delivery credentials or network."""
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+
 from app.db.models import Notification
 
 
-def create_mismatch(db,expectation,evaluation):
-    values=dict(user_id=expectation.user_id,expectation_id=expectation.id,evaluation_id=evaluation.id,
-        notification_metadata={'result':'MISMATCH'})
+def create_mismatch(db,expectation,evaluation,*,dedupe_key=None):
+    values={'user_id': expectation.user_id,'expectation_id': expectation.id,'evaluation_id': evaluation.id,
+        'notification_metadata': {'result':'MISMATCH'}, 'dedupe_key': dedupe_key}
     if expectation.compiler_metadata.get('demo_tag'):
         values['notification_metadata'].update(demo=True,demo_tag=expectation.compiler_metadata['demo_tag'])
-    created_id=db.scalar(insert(Notification).values(**values).on_conflict_do_nothing(constraint='uq_notification_evaluation').returning(Notification.id))
+    created_id=db.scalar(insert(Notification).values(**values).on_conflict_do_nothing().returning(Notification.id))
     item=db.scalar(select(Notification).where(Notification.evaluation_id==evaluation.id,Notification.user_id==expectation.user_id))
     return item,created_id is not None
 
@@ -25,6 +26,9 @@ def list_notifications(db,user_id,status=None,limit=100,offset=0):
 
 
 def update_status(db,item,status):
+    from datetime import datetime, timezone
     item.status=status
+    if status in ('read','dismissed') and item.acknowledged_at is None:
+        item.acknowledged_at = datetime.now(timezone.utc)
     db.flush()
     return item

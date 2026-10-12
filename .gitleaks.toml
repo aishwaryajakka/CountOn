@@ -1,0 +1,15 @@
+# Keep default rules. These two exact strings are public protocol/test constants.
+[extend]
+useDefault = true
+[[allowlists]]
+description = "ASK HTTP header name, not a secret"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(?:^|/)backend/app/alexa/verification\.py$''']
+regexes = ['''Signature-256''']
+[[allowlists]]
+description = "Offline HS256 fixture; not used by runtime auth"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(?:^|/)backend/tests/test_auth\.py$''']
+regexes = ['''fixture-secret-at-least-32-characters''']

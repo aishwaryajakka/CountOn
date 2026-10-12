@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import func, select
 
-from app.db.models import Evidence, Evaluation, Expectation
+from app.db.models import Evaluation, Evidence, Expectation
 
 pytestmark = pytest.mark.integration
 

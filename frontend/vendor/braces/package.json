@@ -1,0 +1,12 @@
+{
+  "name": "@counton/braces",
+  "version": "3.0.3-counton.1",
+  "private": true,
+  "description": "CountOn depth-bounded security patch of MIT-licensed braces 3.0.3",
+  "license": "MIT",
+  "main": "index.js",
+  "type": "commonjs",
+  "dependencies": {
+    "fill-range": "7.1.1"
+  }
+}

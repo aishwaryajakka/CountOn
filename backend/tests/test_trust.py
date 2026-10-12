@@ -4,6 +4,9 @@ import json
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy import select
+
 from app.agent.actions import AgentAction, AgentStatus
 from app.agent.models import AgentInput, AgentResult
 from app.agent.orchestrator import AgentOrchestrator
@@ -14,9 +17,6 @@ from app.mcp.schemas import ExplanationResult
 from app.schemas.trust import EvidenceProvenance, SourceDecision
 from app.services import expectation_service
 from app.services.agent_audit import record_run
-from pydantic import ValidationError
-from sqlalchemy import select
-
 from tests import test_agent as shared
 from tests.test_mismatch_investigator import adapter, draft, execute, inputs
 

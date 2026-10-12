@@ -9,6 +9,14 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from ask_sdk_webservice_support.verifier import VerificationException
+from asn1crypto import x509 as asn1_x509
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.x509.oid import NameOID
+from fastapi.testclient import TestClient
+
 from app.agent.actions import CapabilityTool, FailureCode
 from app.agent.adapters import CapabilityError
 from app.agent.orchestrator import AgentOrchestrator
@@ -19,14 +27,6 @@ from app.core.auth import AuthenticatedUser
 from app.core.exceptions import AuthenticationError
 from app.main import app
 from app.mcp.schemas import CompilationResult, ExpectationListResult, ExplanationResult
-from ask_sdk_webservice_support.verifier import VerificationException
-from asn1crypto import x509 as asn1_x509
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.x509.oid import NameOID
-from fastapi.testclient import TestClient
-
 from tests import test_agent as shared
 from tests import test_auth as jwt_tests
 
@@ -317,9 +317,9 @@ async def test_list_get_contextual_why(settings, user):
     row = shared.compact()
     from app.agent.privacy import EvidenceAccessPolicy
     from app.schemas.trust import EvidenceProvenance
-
     from tests.test_mismatch_investigator import adapter as investigator_adapter
     from tests.test_mismatch_investigator import draft, execute, inputs
+
     data = inputs()
     investigator, _ = investigator_adapter(draft(data))
     explained = execute(data, investigator)
@@ -360,7 +360,7 @@ async def test_list_get_contextual_why(settings, user):
         ),
         user,
     )
-    assert speech(got) == row.claim
+    assert speech(got) == row.claim + ". CountOn is monitoring this expectation."
     why = await adapter.handle(
         parsed(
             event_body(
@@ -714,6 +714,8 @@ def test_interaction_model_contract():
         "AMAZON.CancelIntent",
         "AMAZON.StopIntent",
         "AMAZON.FallbackIntent",
+        "AMAZON.YesIntent",
+        "AMAZON.NoIntent",
     }
     for intent in intents.values():
         for sample in intent["samples"]:
@@ -739,7 +741,7 @@ def wired_alexa(client, real_adapter, settings, users, monkeypatch):
 
 @pytest.mark.parametrize("mode", ["complete", "clarification", "correction", "cancel"])
 def test_real_compiler_clarification_and_shared_dashboard(
-    wired_alexa, signing, wire_engine, mode
+    wired_alexa, signing, wire_engine, mode, db, users
 ):
     from tests.test_clarification import decision, initial, patch
     from tests.test_expectation_compiler import compiled
@@ -797,6 +799,22 @@ def test_real_compiler_clarification_and_shared_dashboard(
     assert len(records) == (0 if mode == "cancel" else 1)
     if records:
         assert speech(turn) == "Got it. I'll track that."
+        from sqlalchemy import select
+
+        from app.db.models import AuditEvent
+
+        assert (
+            db.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.user_id == users[0].id,
+                    AuditEvent.entity_type == "orchestration",
+                    AuditEvent.expectation_id == records[0]["id"],
+                )
+                .limit(1)
+            )
+            is not None
+        )
         if mode == "correction":
             assert records[0]["baseline"] == 150
         assert (
@@ -885,7 +903,6 @@ def test_signed_alexa_request_real_jwt_real_mcp_http_and_durable_replay(
     from app.api import dependencies
     from app.mcp import auth
     from app.mcp.server import create_app, create_server
-
     from tests.test_expectation_compiler import compiled
     from tests.test_mcp_network import live_server
 
@@ -994,3 +1011,30 @@ def test_cert_chain_san_and_expiry_rejected(change, signing, monkeypatch):
         monkeypatch.setattr("ask_sdk_webservice_support.verifier.datetime", Future)
     with pytest.raises(InvalidAlexaRequest):
         sdk.verify(headers, raw, SKILL)
+
+
+@pytest.mark.parametrize(
+    "status,phrase",
+    [
+        ("monitoring", "monitoring this expectation"),
+        ("fulfilled", "recorded status is fulfilled"),
+        ("contradicted", "needs attention"),
+        ("unknown", "recorded status is unknown"),
+        ("resolved", "expectation is resolved"),
+        ("cancelled", "Tracking has been cancelled"),
+    ],
+)
+def test_detail_speech_reports_only_persisted_status(status, phrase):
+    from app.agent.actions import AgentAction, AgentStatus
+    from app.agent.models import AgentResult
+
+    row = shared.compact().model_copy(update={"status": status})
+    result = AgentResult(
+        action=AgentAction.GET_EXPECTATION,
+        status=AgentStatus.SUCCESS,
+        message=row.claim,
+        expectation=row,
+    )
+    assert phrase in AlexaAdapter.speech(result)
+    assert row.claim in AlexaAdapter.speech(result)
+    assert not result.bedrock_used and result.evaluator_status is None
