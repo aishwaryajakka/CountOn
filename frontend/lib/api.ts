@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase';
-import type { Evidence, Evaluation, Expectation, ExpectationCreate, Integration, Notification, WatchedExpectation } from './types';
+import type { Evidence, EvidenceCreate, Evaluation, Expectation, ExpectationCreate, ExpectationUpdate, Integration, Notification, WatchedExpectation } from './types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public requestId?: string) { super(message); this.name = 'ApiError'; }
@@ -84,6 +84,10 @@ export function createApiClient(deps: Dependencies) {
     evaluations: (id: string, signal?: AbortSignal) => all<Evaluation>(`/expectations/${encodeURIComponent(id)}/evaluations`, signal),
     latest,
     createExpectation: (payload: ExpectationCreate) => request<Expectation>('/expectations', { method: 'POST', body: JSON.stringify(payload) }),
+    updateExpectation: (id: string, payload: Partial<ExpectationUpdate>) => request<Expectation>(`/expectations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteExpectation: (id: string) => request<void>(`/expectations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    addEvidence: (id: string, payload: EvidenceCreate) => request<Evidence>(`/expectations/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(payload) }),
+    evaluate: (id: string) => request<Evaluation>(`/expectations/${encodeURIComponent(id)}/evaluate`, { method: 'POST' }),
     notifications: (signal?: AbortSignal) => all<Notification>('/notifications', signal),
     updateNotification: (id: string, status: 'read' | 'dismissed') => request<Notification>(`/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     integrations: (signal?: AbortSignal) => all<Integration>('/integrations', signal),

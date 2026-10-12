@@ -22,7 +22,7 @@ export function displayTitle(expectation: Expectation): string {
   if (/\bno meetings? after 5\s*(?:pm|p\.m\.)\b/.test(claim)) return 'No meetings after 5 PM';
   return expectation.claim.length > 65 ? `${expectation.claim.slice(0, 62)}…` : expectation.claim;
 }
-const sources: Record<string, string> = { utility_bill: 'Utility bill', utility_usage: 'Energy usage', tariff: 'Electricity rate', delivery: 'Delivery tracking', ring: 'Ring', gmail: 'Gmail', google_calendar: 'Google Calendar', outlook_calendar: 'Outlook Calendar', confirmation_email: 'Confirmation email' };
+const sources: Record<string, string> = { utility_bill: 'Utility bill', utility_usage: 'Energy usage', tariff: 'Electricity rate', delivery: 'Delivery tracking', ring: 'Ring', bee: 'Bee wearable', gmail: 'Gmail', google_calendar: 'Google Calendar', outlook_calendar: 'Outlook Calendar', confirmation_email: 'Confirmation email' };
 export const humanize = (value: string) => sources[value] ?? value.replaceAll('_', ' ').replace(/^./, char => char.toUpperCase());
 const currencies = new Set(Intl.supportedValuesOf('currency'));
 export function number(value: number, unit?: string | null) {
@@ -52,6 +52,9 @@ export function evidenceValue(item: Evidence, timeZone?: string): string {
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${value}T12:00:00`));
     return value;
   }
+  if (typeof item.value.summary === 'string') return item.value.summary;
+  if (typeof item.value.event === 'string') return humanize(item.value.event);
+  if (item.value.detected !== undefined) return item.value.detected ? 'Package detected' : 'No package detected';
   return 'Observation recorded';
 }
 export const comparisonLabels = { less_than: 'Less than', less_than_or_equal: 'At most', greater_than: 'More than', greater_than_or_equal: 'At least', equal: 'Equal to', not_equal: 'Different from' };
