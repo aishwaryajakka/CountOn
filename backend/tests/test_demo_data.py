@@ -1,12 +1,22 @@
 """Demo scripts reuse only tagged rows and preserve other data, even same owner."""
 from uuid import uuid4
+
 import pytest
-from sqlalchemy import func,select
-from app.db.models import AuditEvent,Evidence,Evaluation,Expectation,IntegrationConnection,Notification,Profile
+from sqlalchemy import func, select
+
+from app.db.models import (
+    AuditEvent,
+    Evaluation,
+    Evidence,
+    Expectation,
+    IntegrationConnection,
+    Notification,
+    Profile,
+)
 from app.schemas.expectation import ExpectationCreate
 from app.schemas.integration import IntegrationCreate
-from app.services import expectation_service,integration_service
-from db.scripts._demo import seed,clear,TAG
+from app.services import expectation_service, integration_service
+from db.scripts._demo import TAG, clear, seed
 
 pytestmark=pytest.mark.integration
 
@@ -20,6 +30,8 @@ def test_seed_repeat_and_clear_preserves_unrelated_data(db,numeric_payload):
     first=seed(db,owner)
     assert first=={'connections':6,'expectations':5,'evidence':10,'evaluations':5,'notifications':1}
     after=counts(db)
+    assert [a-b for a,b in zip(after[:6],before[:6],strict=True)] == [1,6,5,10,5,1]
+    assert after[6] > before[6]  # Seeding must retain its audit records.
     assert seed(db,owner)==first
     assert counts(db)==after
     other=expectation_service.create_expectation(db,ExpectationCreate(**numeric_payload),owner)
@@ -51,9 +63,11 @@ def test_seed_refuses_existing_untagged_profile(db,users):
 
 def test_failed_seed_rolls_back_service_commits(postgres_engine,monkeypatch):
     from types import SimpleNamespace
+
     from sqlalchemy.orm import Session
-    from app.db import session as application_database
+
     from app.core import config
+    from app.db import session as application_database
     from app.services import evidence_service
     from db.scripts._demo import run
     owner=uuid4()

@@ -1,12 +1,22 @@
 """Stable error envelope; validation values and exception details are redacted."""
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
-from app.core.exceptions import ResourceNotFoundError, InvalidIntegrationError, AuthenticationError, EvaluationNotFoundError, ExpectationNotFoundError, InvalidExpectationError, IdempotencyConflictError
+from starlette.exceptions import HTTPException
+
+from app.core.exceptions import (
+    AuthenticationError,
+    EvaluationNotFoundError,
+    ExpectationNotFoundError,
+    IdempotencyConflictError,
+    InvalidExpectationError,
+    InvalidIntegrationError,
+    ResourceNotFoundError,
+)
 from app.core.observability import request_id
+from app.integrations.provider import ProviderError
 
 
 class ErrorDetail(BaseModel):
@@ -25,6 +35,9 @@ def error_response(status, code, message, headers=None):
 
 
 async def domain_error(request: Request, error: Exception):
+    if isinstance(error, ProviderError):
+        status = 503 if error.retryable or error.code == 'PROVIDER_DISABLED' else 400
+        return error_response(status, error.code, 'Provider unavailable; retry later' if status == 503 else 'Provider authorization or configuration requires attention')
     if isinstance(error, ResourceNotFoundError):
         return error_response(404,error.code,error.message)
     if isinstance(error, InvalidIntegrationError):
@@ -52,7 +65,7 @@ async def http_error(request, error):
 
 
 def register_exception_handlers(app: FastAPI):
-    for error in (ResourceNotFoundError,InvalidIntegrationError,AuthenticationError,ExpectationNotFoundError,EvaluationNotFoundError,InvalidExpectationError,IdempotencyConflictError,SQLAlchemyError):
+    for error in (ResourceNotFoundError,InvalidIntegrationError,AuthenticationError,ExpectationNotFoundError,EvaluationNotFoundError,InvalidExpectationError,IdempotencyConflictError,SQLAlchemyError,ProviderError):
         app.add_exception_handler(error,domain_error)
     app.add_exception_handler(RequestValidationError,validation_error)
     app.add_exception_handler(HTTPException,http_error)

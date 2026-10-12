@@ -5,6 +5,7 @@ from _common import run_cli
 def main() -> int:
     import httpx
     from sqlalchemy.orm import Session
+
     from app.core.config import get_settings
     from app.db.session import engine
     from db.scripts._demo import DEMO_NAME, configured_owner
@@ -21,9 +22,8 @@ def main() -> int:
                 owner = ensure_auth_user(client, settings)
         else:
             owner = configured_owner(settings)
-        with engine.begin() as connection:
-            with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
-                ensure_demo_profile(db, owner, verified_auth=cloud)
+        with engine.begin() as connection, Session(bind=connection, join_transaction_mode="create_savepoint") as db:
+            ensure_demo_profile(db, owner, verified_auth=cloud)
         print(f"Database target: {settings.database_target}")
         if cloud:
             print("Demo Auth user: ready")

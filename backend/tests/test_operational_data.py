@@ -1,9 +1,11 @@
 """PostgreSQL invariants, bounded queries, idempotency and atomic effects."""
-from uuid import UUID,uuid4
+from uuid import UUID, uuid4
+
 import pytest
-from sqlalchemy import func,select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from app.db.models import AuditEvent,Evidence,MonitoringJob,Notification
+
+from app.db.models import AuditEvent, Evidence, MonitoringJob, Notification
 from app.repositories.operations import ensure_job
 
 pytestmark=pytest.mark.integration
@@ -47,12 +49,11 @@ def test_acceptance_idempotency_and_atomic_effects(client,db,users,numeric_paylo
 @pytest.mark.parametrize('changes',[{'status':'invalid'},{'attempt_count':-1},{'user_id':'other'},{'status':'pending'}])
 def test_jobs_enforce_contract(client,db,users,numeric_payload,changes):
     eid=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
-    values=dict(expectation_id=eid,user_id=users[0].id,status='completed')
+    values={'expectation_id': eid,'user_id': users[0].id,'status': 'completed'}
     if changes.get('user_id')=='other':changes=dict(changes,user_id=users[1].id)
     values.update(changes)
-    with pytest.raises(IntegrityError):
-        with db.begin_nested():
-            db.add(MonitoringJob(**values));db.flush()
+    with pytest.raises(IntegrityError), db.begin_nested():
+        db.add(MonitoringJob(**values));db.flush()
 
 
 def test_pagination_and_filtering(client,numeric_payload,bill_payload):
@@ -77,7 +78,7 @@ def test_pagination_and_filtering(client,numeric_payload,bill_payload):
 
 
 def test_evaluation_selects_metric_before_pagination(client,db,numeric_payload):
-    from datetime import datetime,timezone
+    from datetime import datetime, timezone
     eid=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
     db.add_all([Evidence(expectation_id=eid,source='usage',metric='unrelated',value={'amount':999},observed_at=datetime(2030,1,1,tzinfo=timezone.utc)) for _ in range(105)])
     db.add(Evidence(expectation_id=eid,source='bill',metric='total_cost',value={'amount':130},observed_at=datetime(2026,1,1,tzinfo=timezone.utc)))
@@ -90,11 +91,13 @@ def test_evaluation_selects_metric_before_pagination(client,db,numeric_payload):
 
 def test_concurrent_evidence_retries_create_one_row(postgres_engine,bill_payload,numeric_payload):
     from concurrent.futures import ThreadPoolExecutor
+
     from sqlalchemy.orm import sessionmaker
-    from app.db.models import Expectation,Profile
-    from app.schemas.expectation import ExpectationCreate
+
+    from app.db.models import Profile
     from app.schemas.evidence import EvidenceCreate
-    from app.services import expectation_service,evidence_service
+    from app.schemas.expectation import ExpectationCreate
+    from app.services import evidence_service, expectation_service
     factory=sessionmaker(bind=postgres_engine,expire_on_commit=False)
     owner=uuid4()
     try:
@@ -128,8 +131,8 @@ def test_audit_failure_rolls_back_evidence(client,db,numeric_payload,bill_payloa
 
 
 def test_cleanup_preserves_other_records_for_same_owner(client,db,users,numeric_payload):
-    from db.scripts._cleanup import cleanup_expectations
     from app.db.models import Expectation
+    from db.scripts._cleanup import cleanup_expectations
     target=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
     other=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
     cleanup_expectations(db,users[0].id,[target])

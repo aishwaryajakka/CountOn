@@ -1,9 +1,10 @@
 """Nested HTTP endpoints for deterministic evaluation and history."""
 
+from hashlib import sha256
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_db
@@ -16,8 +17,10 @@ Database = Annotated[Session, Depends(get_db)]
 
 
 @router.post("/{expectation_id}/evaluate", response_model=EvaluationResponse, summary="Evaluate and persist a deterministic result")
-def evaluate_expectation(expectation_id: UUID, db: Database, user: CurrentUser) -> Evaluation:
-    return service.evaluate_expectation(db, expectation_id, user.id)
+def evaluate_expectation(expectation_id: UUID, db: Database, user: CurrentUser,
+    idempotency_key: Annotated[str | None, Header(min_length=1, max_length=128)] = None) -> Evaluation:
+    key = 'api:' + sha256(idempotency_key.encode()).hexdigest() if idempotency_key else None
+    return service.evaluate_expectation(db, expectation_id, user.id, idempotency_key=key)
 
 
 @router.get("/{expectation_id}/evaluations", response_model=list[EvaluationResponse], summary="Read evaluation history, newest first")

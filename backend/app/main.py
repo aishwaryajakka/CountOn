@@ -2,37 +2,75 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.core.config import get_settings
-from app.api.operations import OperationalMiddleware, ExplicitCORSMiddleware
-from app.api.errors import error_response, ErrorEnvelope
-from app.services.readiness import database_ready
 
-from app.api.errors import register_exception_handlers
+from app.api.errors import ErrorEnvelope, error_response, register_exception_handlers
+from app.api.operations import ExplicitCORSMiddleware, OperationalMiddleware
 from app.api.v1.router import router
+from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.session import get_db
+from app.services.readiness import database_ready
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
     from app.core.rate_limit import MemoryRateLimiter
+
     app.state.rate_limiter = MemoryRateLimiter(get_settings())
+    from app.agent.session import AgentSessionStore
+
+    app.state.agent_sessions = AgentSessionStore(
+        ttl_seconds=get_settings().clarification_ttl_seconds
+    )
+    from app.alexa.adapter import AlexaConversationStore
+
+    app.state.alexa_sessions = AlexaConversationStore(
+        ttl_seconds=get_settings().clarification_ttl_seconds
+    )
+    if get_settings().conversation_store_backend == 'postgres':
+        from app.conversations.persistence import Records
+        from app.conversations.stores import (
+            PostgresAgentSessionStore,
+            PostgresAlexaConversationStore,
+        )
+        key = get_settings().conversation_encryption_key
+        assert key is not None
+        records = Records(key.get_secret_value())
+        app.state.agent_sessions = PostgresAgentSessionStore(records, ttl_seconds=get_settings().clarification_ttl_seconds)
+        app.state.alexa_sessions = PostgresAlexaConversationStore(records, ttl_seconds=get_settings().clarification_ttl_seconds)
     yield
 
 
-app = FastAPI(title="CountOn API", version="0.1.0", lifespan=lifespan,
-    responses={status: {"model": ErrorEnvelope} for status in (400,401,404,405,409,422,429,500,503)})
+app = FastAPI(
+    title="CountOn API",
+    version="0.1.0",
+    lifespan=lifespan,
+    responses={
+        status: {"model": ErrorEnvelope}
+        for status in (400, 401, 404, 405, 409, 422, 429, 500, 503)
+    },
+)
 settings = get_settings()
-app.add_middleware(ExplicitCORSMiddleware,allow_origins=settings.allowed_origins,
-    allow_credentials=True,allow_methods=['GET','POST','PATCH','DELETE','OPTIONS'],
-    allow_headers=['Authorization','Content-Type','Idempotency-Key','X-Request-ID'],
-    expose_headers=['X-Request-ID','Retry-After'])
-app.add_middleware(OperationalMiddleware,settings=settings)
+from app.api.budgets import RequestBudgetMiddleware
+
+app.add_middleware(RequestBudgetMiddleware, settings=settings)
+app.add_middleware(
+    ExplicitCORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
+    expose_headers=["X-Request-ID", "Retry-After"],
+)
+app.add_middleware(OperationalMiddleware, settings=settings)
 register_exception_handlers(app)
 app.include_router(router, prefix="/api/v1")
+from app.api.metrics import router as metrics_router
+
+app.include_router(metrics_router)
 
 
 @app.get("/health", tags=["health"])
@@ -40,8 +78,8 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "counton-api"}
 
 
-@app.get('/ready',tags=['health'])
-def ready(db: Session = Depends(get_db)):
+@app.get("/ready", tags=["health"])
+def ready(db: Session = Depends(get_db)):  # noqa: B008 - FastAPI dependency declaration
     if not database_ready(db):
-        return error_response(503,'NOT_READY','Service dependencies are not ready')
-    return {'status':'ready','service':'counton-api'}
+        return error_response(503, "NOT_READY", "Service dependencies are not ready")
+    return {"status": "ready", "service": "counton-api"}

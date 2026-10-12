@@ -1,6 +1,7 @@
 """Remove only explicitly identified acceptance artifacts, including audit rows."""
-from sqlalchemy import delete,select
-from app.db.models import AuditEvent,Evidence,Evaluation,Expectation,Notification
+from sqlalchemy import delete, select
+
+from app.db.models import AuditEvent, Evaluation, Evidence, Expectation, Notification
 from app.services.expectation_service import delete_expectation
 
 

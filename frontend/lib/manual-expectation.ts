@@ -1,6 +1,6 @@
 import type { Comparison, ExpectationCreate, ExpectationType } from './types';
 
-// TODO: replace this explicit manual adapter with the future Bedrock compiler.
+// Explicit dashboard form adapter; conversational compilation runs through /alexa.
 // It never infers structured fields or invents a baseline from free text.
 export function manualExpectation(input: { claim: string; type: ExpectationType; metric: string; comparison: Comparison; target: string; sources: string; threshold: string }): ExpectationCreate {
   if (!input.claim.trim()) throw new Error('Tell us what you’re counting on.');

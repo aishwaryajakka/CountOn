@@ -315,6 +315,65 @@ dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .profile-heading .avatar { width: 54px; height: 54px; }
 .profile-heading p { margin-top: 5px; font-size: 13px; }
 .standalone { margin: 80px auto; width: min(650px,calc(100% - 32px)); }
+.alexa-page { min-height: 100dvh; background: radial-gradient(ellipse at top right,#edf3ff 0,transparent 48%),var(--color-bg-app); }
+.alexa-top { max-width: 1180px; margin: auto; padding: 28px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.alexa-main { width: min(980px,calc(100% - 64px)); margin: 32px auto 0; }
+.alexa-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.alexa-heading h1 { margin-top: 12px; font-size: clamp(28px,3vw,38px); }
+.alexa-heading p { margin-top: 12px; color: var(--color-text-secondary); }
+.alexa-connection { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--color-border); background: white; padding: 9px 12px; border-radius: 100px; font-size: 11px; white-space: nowrap; margin-top: 24px; }
+.alexa-connection.connected { color: var(--color-status-match); background: var(--color-soft-green); border-color: #d4eadf; }
+.alexa-connection.unavailable { color: var(--color-status-attention); background: var(--color-soft-orange); }
+.alexa-chat.card { padding: 0; overflow: hidden; box-shadow: 0 12px 45px #19375f08; }
+.alexa-chat-heading { display: flex; align-items: center; gap: 12px; padding: 22px 28px; border-bottom: 1px solid var(--color-border); }
+.alexa-chat-heading strong { font-family: var(--font-space),sans-serif; font-size: 17px; }
+.alexa-voice { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; border: 1px solid var(--color-border); border-radius: 8px; background: white; padding: 8px 10px; color: var(--color-text-secondary); cursor: pointer; }
+.alexa-voice.active { color: var(--color-brand-primary); background: var(--color-soft-blue); }
+.alexa-transcript { height: min(54dvh,590px); min-height: 330px; overflow-y: auto; overscroll-behavior: contain; padding: 28px; display: flex; flex-direction: column; gap: 22px; }
+.alexa-message { max-width: 88%; padding: 18px 22px; border-radius: 16px; overflow-wrap: anywhere; flex-shrink: 0; }
+.alexa-message.assistant { align-self: flex-start; background: var(--color-bg-secondary); border-radius: 4px 16px 16px 16px; }
+.alexa-message.user { align-self: flex-end; background: var(--color-brand-primary); color: white; border-radius: 16px 4px 16px 16px; }
+.alexa-speaker { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; font-weight: 600; }
+.alexa-message.assistant .alexa-speaker { color: var(--color-brand-primary); }
+.alexa-message p { line-height: 1.75; font-size: 14px; }
+.alexa-message.user p { color: inherit; }
+.alexa-message .caption { font-size: 11px; margin-top: 10px; }
+.alexa-message.is-error { background: var(--color-soft-orange); }
+.alexa-records { display: grid; gap: 10px; margin-top: 16px; }
+.alexa-record { background: white; border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; }
+.alexa-record strong { font-family: var(--font-space),sans-serif; font-size: 15px; display: block; }
+.alexa-record-status { display: inline-block; font-size: 10px; margin-top: 10px; color: var(--color-status-waiting); background: var(--color-bg-secondary); padding: 3px 9px; border-radius: 20px; text-transform: capitalize; }
+.alexa-record-status.fulfilled { color: var(--color-status-match); background: var(--color-soft-green); }
+.alexa-record-status.contradicted { color: var(--color-status-attention); background: var(--color-soft-orange); }
+.alexa-record-status.monitoring { color: var(--color-brand-primary); background: var(--color-soft-blue); }
+.alexa-record dl { margin: 12px 0 0; }
+.alexa-record dl > div { grid-template-columns: 65px minmax(0,1fr); padding: 4px 0; border: 0; gap: 12px; }
+.alexa-record dt,.alexa-record dd { font-size: 11px; }
+.alexa-trace { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--color-border); font-size: 10px; color: var(--color-text-secondary); }
+.alexa-trace summary { cursor: pointer; }
+.alexa-trace dl { margin: 10px 0 0; }
+.alexa-trace dl > div { padding: 4px 0; border: 0; grid-template-columns: 115px minmax(0,1fr); }
+.alexa-trace dt,.alexa-trace dd { font-size: 10px; }
+.alexa-saved { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-top: 16px; }
+.alexa-saved > span { display: flex; align-items: center; gap: 6px; color: var(--color-status-match); font-size: 12px; }
+.alexa-saved .button { font-size: 12px; }
+.alexa-working { font-size: 12px; color: var(--color-text-secondary); display: flex; gap: 8px; align-items: center; }
+.alexa-working .status-dot { color: var(--color-brand-accent); animation: alexa-pulse 1.2s ease-in-out infinite; }
+@keyframes alexa-pulse { 50% { opacity: .35; } }
+.alexa-compose-area { border-top: 1px solid var(--color-border); padding: 20px 28px; background: white; }
+.alexa-starters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.alexa-starters button { text-align: left; background: white; color: var(--color-text-secondary); border: 1px solid var(--color-control-border); border-radius: 20px; padding: 7px 12px; font-size: 11px; cursor: pointer; }
+.alexa-starters button:hover:not(:disabled) { background: var(--color-soft-blue); color: var(--color-brand-primary); border-color: var(--color-brand-primary); }
+.alexa-composer { display: flex; gap: 12px; align-items: flex-end; background: var(--color-bg-app); border: 1px solid var(--color-control-border); border-radius: 13px; padding: 10px; }
+.alexa-composer textarea { resize: none; background: transparent; border: 0; padding: 6px 8px; min-height: 56px; flex: 1; min-width: 0; font-family: inherit; font-size: 14px; }
+.alexa-composer .button { min-width: 44px; min-height: 44px; padding: 10px; margin: 0 2px 2px 0; }
+.alexa-compose-area > .caption { font-size: 10px; margin-top: 10px; }
+.alexa-auth-error { padding: 14px 28px; background: var(--color-soft-orange); color: var(--color-status-attention); }
+.alexa-how { margin-top: 22px; padding: 16px 22px; border: 1px solid var(--color-border); border-radius: 12px; background: #ffffffa6; color: var(--color-text-secondary); font-size: 12px; }
+.alexa-how summary { cursor: pointer; font-weight: 600; color: var(--color-text-primary); }
+.alexa-how p { margin-top: 12px; }
+.alexa-footer { text-align: center; padding: 30px; font-size: 11px; color: var(--color-text-secondary); }
+@media (max-width: 767px) { .alexa-top { padding: 20px; } .alexa-top .logo { font-size: 25px; } .alexa-top .text-link { font-size: 11px; } .alexa-main { width: calc(100% - 32px); margin-top: 18px; } .alexa-heading { flex-direction: column; gap: 8px; } .alexa-connection { margin-top: 4px; } .alexa-chat-heading,.alexa-compose-area { padding: 16px; } .alexa-transcript { padding: 16px; height: 50dvh; min-height: 300px; } .alexa-message { max-width: 96%; padding: 15px; } .alexa-message p { font-size: 13px; } .alexa-chat-heading .icon-box { display: none; } .alexa-voice { padding: 8px; font-size: 10px; } .alexa-starters button { min-height: 36px; } .alexa-saved { gap: 12px; } }
 .comparison strong,.evidence-card strong,.claim,.profile-heading > div { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 1023px) { .topbar .icon-button,.sidebar .icon-button { min-width: 44px; min-height: 44px; } }
 @media (min-width: 1440px) { .page-content { padding-top: 48px; } .login-story { padding-left: 64px; padding-right: 64px; } }

@@ -67,7 +67,7 @@ def test_comparisons(expectation, comparison, target, observed, result):
     assert output.reasoning["tolerance_kind"] == ("absolute" if target == 0 else "relative")
 
 
-@pytest.mark.parametrize("value", [{"amount": 130}, {"value": 130}, {"percentage": -18}, 130, Decimal("130")])
+@pytest.mark.parametrize("value", [{"amount": 130}, {"value": 130}, {"percentage": -18}, 130, Decimal(130)])
 def test_supported_numeric_shapes(expectation, value):
     assert evaluate(expectation, [observation(value)]).result == EvaluationResult.MATCH
 
@@ -100,7 +100,7 @@ def test_missing_target_is_unknown(expectation):
 
 
 def test_target_value_takes_precedence_even_when_zero(expectation):
-    expectation.target_value = Decimal("0")
+    expectation.target_value = Decimal(0)
     output = evaluate(expectation, [observation({"amount": 130})])
     assert output.expected["target"] == 0
     assert output.result == EvaluationResult.MISMATCH
@@ -134,7 +134,7 @@ def test_nonzero_low_confidence_is_preserved(expectation):
 
 def test_zero_threshold_requires_strict_directional_comparison(expectation):
     expectation.materiality_threshold = 0
-    expectation.baseline = Decimal("100")
+    expectation.baseline = Decimal(100)
     assert evaluate(expectation, [observation({"amount": 100})]).result == EvaluationResult.MISMATCH
     assert evaluate(expectation, [observation({"amount": 99.999})]).result == EvaluationResult.MATCH
 

@@ -3,9 +3,10 @@
 Revision ID: 4bc128091ea7
 Revises: 3a874e01bb52
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision='4bc128091ea7'
 down_revision='3a874e01bb52'

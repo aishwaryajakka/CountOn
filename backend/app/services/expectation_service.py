@@ -4,13 +4,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ExpectationNotFoundError, InvalidExpectationError
-from app.db.models import Expectation, ExpectationStatus, ExpectationType
+from app.db.models import Expectation, ExpectationStatus, ExpectationType, MonitoringJob
 from app.repositories import expectation as repository
-from app.repositories.profile import ensure_profile
 from app.repositories import operations
+from app.repositories.profile import ensure_profile
 from app.schemas.expectation import ExpectationCreate, ExpectationUpdate
 
 logger = logging.getLogger(__name__)
@@ -26,14 +27,17 @@ def validate_expectation(values: dict[str, Any]) -> None:
             raise InvalidExpectationError("Numeric expectations require a baseline or target_value")
 
 
-def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None) -> Expectation:
+def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None, commit: bool = True) -> Expectation:
     validate_expectation(payload.model_dump())
     try:
         ensure_profile(db, user_id)
         expectation = repository.create_expectation(db, payload, user_id, compiler_metadata)
         operations.ensure_job(db, expectation)
         operations.audit(db, expectation, "expectation.created")
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
     except Exception:
         db.rollback()
         raise
@@ -65,6 +69,15 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
     validate_expectation(values | changes)
     try:
         repository.update_expectation(db, expectation, changes)
+        if expectation.status in (ExpectationStatus.cancelled, ExpectationStatus.resolved):
+            db.execute(update(MonitoringJob).where(MonitoringJob.expectation_id == expectation_id,
+                MonitoringJob.user_id == user_id, MonitoringJob.status.in_(['pending','running','paused']))
+                .values(status='cancelled', lease_token=None, lease_expires_at=None))
+        elif any(field in changes for field in ('metric', 'comparison', 'baseline', 'target_value', 'deadline', 'materiality_threshold', 'evidence_sources', 'status')):
+            from datetime import datetime, timezone
+
+            from app.monitoring.sources import wake
+            wake(db, expectation, datetime.now(timezone.utc))
         operations.audit(db, expectation, "expectation.updated")
         db.commit()
     except Exception:

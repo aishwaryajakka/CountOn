@@ -3,21 +3,21 @@
 import logging
 from uuid import UUID
 
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from sqlalchemy import select, or_
-from app.db.models import Evidence, Expectation
-from app.core.exceptions import IdempotencyConflictError
 from app.core import observability
-from app.repositories import operations
+from app.core.exceptions import IdempotencyConflictError
+from app.db.models import Evidence, Expectation
 from app.repositories import evidence as repository
+from app.repositories import operations
 from app.schemas.evidence import EvidenceCreate
 from app.services.expectation_service import get_expectation
 
 logger = logging.getLogger(__name__)
 
 
-def add_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate, user_id: UUID, idempotency_key: str | None = None) -> Evidence:
+def add_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate, user_id: UUID, idempotency_key: str | None = None, *, commit: bool = True) -> Evidence:
     expectation = get_expectation(db, expectation_id, user_id)
     try:
         if idempotency_key or payload.external_event_id:
@@ -33,12 +33,20 @@ def add_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate, use
                     raise IdempotencyConflictError()
                 if idempotency_key and existing.idempotency_key != idempotency_key:
                     raise IdempotencyConflictError()
-                db.commit()
+                if commit:
+                    db.commit()
                 return existing
         evidence = repository.create_evidence(db, expectation_id, payload)
         evidence.idempotency_key = idempotency_key
         operations.audit(db, expectation, "evidence.ingested", evidence.id)
-        db.commit()
+        if commit:
+            from datetime import datetime, timezone
+
+            from app.monitoring.sources import wake
+            wake(db, expectation, datetime.now(timezone.utc))
+            db.commit()
+        else:
+            db.flush()
     except Exception:
         db.rollback()
         raise

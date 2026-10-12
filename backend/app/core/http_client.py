@@ -1,6 +1,8 @@
 """Reusable synchronous client; retry GET/HEAD only, never auth/validation errors."""
 import time
+
 import httpx
+
 from app.core.config import get_settings
 
 

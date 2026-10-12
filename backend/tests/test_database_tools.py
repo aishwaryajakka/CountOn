@@ -7,10 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db import session as application_database
-from app.db.models import Evidence, Evaluation, Expectation
-from app.schemas.expectation import ExpectationCreate
+from app.db.models import Evaluation, Evidence, Expectation
 from app.schemas.evidence import EvidenceCreate
-from app.services import evidence_service, evaluation_service, expectation_service
+from app.schemas.expectation import ExpectationCreate
+from app.services import evaluation_service, evidence_service, expectation_service
 from db.scripts._acceptance import run_acceptance
 from db.scripts._common import run_cli
 

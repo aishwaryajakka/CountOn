@@ -12,6 +12,7 @@ profiles
    ├── expectations → evidence / evaluations / notifications / monitoring_jobs
    ├── integration_connections
    └── audit_events
+Trusted backend → compilation_sessions (canonical clarification state and capture receipt)
 ```
 
 Expectation ownership is required and indexed. Child data cascades on parent
@@ -26,8 +27,9 @@ Monitoring jobs have `id`, `expectation_id`, `user_id`, `status`, `next_run_at`,
 `last_run_at`, `attempt_count`, `last_error`, and timestamps. Valid states are
 pending/running/paused/completed/failed/cancelled. Attempts cannot be negative;
 a partial unique index permits one pending/running/paused job per expectation.
-The status/due-time index supports future workers. `last_error` is reserved for
-safe error codes. Workers, leases, executions and external scheduling are absent.
+The status/due-time index supports the PostgreSQL worker. Jobs also carry recurrence,
+evidence windows, retry budgets, run keys and expiring lease tokens. `failed` rows
+are the durable dead-letter queue. See [monitoring operation](../../docs/monitoring.md).
 
 ## Migrations
 
@@ -38,6 +40,8 @@ safe error codes. Workers, leases, executions and external scheduling are absent
 | `3a874e01bb52` | Supabase Auth FK, RLS and grants |
 | `4bc128091ea7` | Operational tables, idempotency and ownership constraints |
 | `5d201f68ac90` | Connected accounts, expanded notifications/audits, provider IDs and demo tag |
+| `6e302a79bd01` | Durable compilation lifecycle and capture replay protection |
+| `7f413b80ce12` | Durable worker leases, evaluation/inbox deduplication and encrypted Microsoft OAuth |
 
 The ownership migration locks expectations and aborts if legacy rows require
 backfill; it never invents identities or deletes those rows. The operational
@@ -52,7 +56,8 @@ data. Plan backups, migration lock windows and restores before production change
 
 ## RLS
 
-All eight application tables have RLS on Supabase. `PUBLIC`/`anon` have no table
+The eight domain tables have RLS on Supabase; the additional
+`compilation_sessions` ledger enables RLS with no browser policies. `PUBLIC`/`anon` have no table
 grants. Authenticated clients can access only their own rows:
 
 | Table | Client permissions |
@@ -61,6 +66,7 @@ grants. Authenticated clients can access only their own rows:
 | expectations | SELECT, INSERT, UPDATE, DELETE |
 | evidence | SELECT, INSERT |
 | evaluations, notifications, monitoring_jobs, audit_events, integration_connections | SELECT |
+| compilation_sessions | None; trusted backend role only |
 
 Child policies check parent ownership. Backend-only writes produce evaluations,
 notifications, jobs, audit events and integration writes. Read-only integration
@@ -140,14 +146,18 @@ and owned by the administrative verification tool.
 `integration_connections` stores owner, provider/type, optional external account
 ID/display name, status, scopes, safe JSONB metadata, sync time and timestamps.
 There is no one-account-per-provider uniqueness rule. Owner/filter indexes support
-bounded API queries. Live OAuth and encrypted credentials are not implemented;
-raw access/refresh tokens are rejected by the metadata API contract.
+bounded API queries. Microsoft OAuth stores authenticated-encrypted tokens in the
+separate backend-only `integration_credentials` table, and one-time PKCE material
+in `provider_oauth_states`. The metadata API still rejects token/credential input.
+Live Microsoft consent/mailbox validation requires real application credentials.
 
 Notifications now have a required profile/expectation owner pair, type/channel,
 message, metadata, sent time and pending/read/sent/failed/dismissed states. Existing
 rows receive their actual parent owner in migration; no identity is invented.
 The notification service persists MISMATCH notifications atomically and audits
-creation; clients may mark records read/dismissed through FastAPI. Delivery is absent.
+creation; clients may mark records read/dismissed through FastAPI, recording
+`acknowledged_at`. In-app persistence is delivery; external channels are not implemented.
+Monitoring additionally deduplicates repeated observations across polling runs.
 
 Audit events retain the existing `resource_id`, with the application alias
 `entity_id`, plus `entity_type`, safe metadata, owner, optional expectation link,
@@ -227,23 +237,46 @@ All files in `db/sql/` are read-only:
 | inspect_indexes.sql | Indexes |
 | sanity_report.sql | Per-expectation evidence/evaluation counts |
 
-Verification on 2026-10-02: local/Supabase upgrade and clean `alembic check`,
-disposable-local downgrade/re-upgrade, **227 tests**, real authenticated flows,
-duplicate evidence retries, operational persistence, cross-user/RLS regression
-and tagged cleanup all passed. Eight Supabase tables retain RLS; temporary Auth
-users were confirmed absent. Native PostgreSQL 17 was used locally.
+## Current verification scope
 
-Connected-account validation on 2026-10-02: revision `5d201f68ac90` applied
-to both targets; schemas match metadata. **227 tests passed**, including atomic
-seed rollback, owned CRUD, notification policy and source/event idempotency.
-Both targets reused the 6/5/10/5/1 demo counts on repeat seed and were cleared.
-Live integration/notification routes and eight-table RLS checks passed; all
-three temporary Auth users and their application artifacts were removed.
+Run the checks above against the selected database and current migration head.
+Historical local/Supabase checks do not prove the latest schema is deployed.
+`check_schema.py` checks all registered tables, required columns and the exact Alembic head; it includes backend-only OAuth/credential/conversation tables and emits safe failure codes;
+`alembic check` compares metadata. The compilation ledger is also covered by
+MCP lifecycle/integration tests on isolated PostgreSQL. Do not point tests or
+downgrade commands at production data.
 
-Canonical demo identity verified on 2026-10-02: Ashley Mccormick /
-`demo@counton.app`; local stable and explicitly configured UUIDs passed, real
-Supabase sign-in passed, and repeat seeds preserved 6/5/10/5/1 counts with all
-five expected results. Cleanup removed tagged data and retained the Auth account.
-The supplied credential remains only in ignored backend configuration; repository
-secret scanning passed. The complete backend suite passed **237 tests** with one
-existing Starlette/HTTPX deprecation warning. No frontend or evaluator changes.
+## Durable conversation security
+
+Revision `8a524c91df23` follows durable monitoring `7f413b80ce12` and adds
+backend-only encrypted `conversation_records` (profile cascade, lease fencing,
+fixed TTL). On Supabase it adds restrictive OAuth-client SQL policies while retaining
+existing web ownership policies. All schema changes still use Alembic. Rollback
+deletes conversation state and removes OAuth restrictions: revoke/disable linked
+clients before a production downgrade. See the [deployment/rollback runbook](../../docs/production-readiness.md).
+
+## Deployment diagnostics
+
+`python db/scripts/aws_preflight.py --verify-identity` checks the existing SDK
+credential chain/STS without model invocation or credential/identity output.
+`python db/scripts/deployment_probe.py --remote --api-url <HTTPS-origin>
+--mcp-url <HTTPS-/mcp> --frontend-origin <HTTPS-origin>` performs read-only remote
+API/MCP/CORS/owned-row checks. Supply a dedicated token privately; no data is created.
+Neither replaces the local `production_smoke.py` or full browser/worker/device
+acceptance. See [results and rollout boundaries](../../docs/production-readiness.md#deployment-investigation-follow-up-2026-10-11).
+
+### Isolated backup/restore smoke
+
+With `TEST_DATABASE_URL` privately set to a distinct loopback `*_test` database,
+matching `pg_dump`/`pg_restore` installed, local CREATEDB permission and no other
+test process using that database, run:
+
+```sh
+python db/scripts/backup_restore_smoke.py --local-test
+```
+
+The script creates one tagged fixture, restores an archive into a generated local
+database, verifies schema and evidence-linked evaluation/notification history,
+then removes only its fixture and generated database. It rejects remote targets,
+the application database and URL options, and never prints credentials or rows.
+It is not a production backup, role/RLS or encryption-key recovery acceptance.

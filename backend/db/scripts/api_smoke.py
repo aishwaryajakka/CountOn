@@ -10,12 +10,12 @@ def main() -> int:
         return 1
 
     import httpx
+    from _token import access_token
     from sqlalchemy import func, select
+
+    from app.core.auth import get_token_verifier
     from app.db.models import Evaluation, Evidence, Expectation
     from app.db.session import SessionLocal, engine
-
-    from _token import access_token
-    from app.core.auth import get_token_verifier
     token = access_token()
     owner = get_token_verifier().verify(token).id
     ids: list[UUID] = []

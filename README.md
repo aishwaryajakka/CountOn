@@ -1,308 +1,235 @@
 # CountOn
 
-CountOn stores everyday expectations, ingests evidence and evaluates claims as
-`MATCH`, `MISMATCH` or `UNKNOWN`. For a bill expected below $142.10, an observed
-$162 produces `MISMATCH`; $130 produces `MATCH`; unrelated evidence produces
-`UNKNOWN`. Evaluators remain deterministic.
+CountOn records what you are counting on, compares real evidence against it, and
+calls attention to verified exceptions. **Calm monitoring. Clear signals.**
+
+## Product thesis
+
+**Expectation → Evidence → Evaluation → Exception**
+
+Expectations are claims, not evidence. Deterministic evaluation alone decides
+`MATCH`, `UNKNOWN` or `MISMATCH`: matched expectations stay quiet, unknown outcomes
+keep watching, and mismatches merit attention. Missing evidence is never success.
+Bedrock interprets language and explains grounded mismatches; it does not decide
+outcomes or invent observations.
 
 ## Architecture
 
 ```text
-Client → FastAPI → JWT authentication → Services → Repositories → SQLAlchemy → PostgreSQL
+Supabase Auth → current user's bearer token
+  Browser /alexa → Next.js /api/agent → JWT-authenticated FastAPI agent route
+    → controlled orchestrator/session → MCP SDK Streamable HTTP → Python MCP
+      → compiler / stateful clarification / grounded investigator
+      → owned CountOn services → repositories → PostgreSQL / Supabase
+  Browser dashboard → authenticated FastAPI → same services/database
+
+Real evidence → deterministic evaluator → persisted evaluation → in-app exception
 ```
 
-Application persistence lives in `backend/app/db/`. Developer SQL and verification
-scripts live in `backend/db/`. Alembic owns schema creation.
+The FastAPI and MCP processes must select the same database. Alembic owns schema
+creation. `backend/app/db/` contains application persistence; `backend/db/`
+contains developer checks and inspection SQL. Frontend application data is never
+written directly to Supabase.
 
-## Database target
+## Current Status
 
-Backend configuration comes from the gitignored `backend/.env.local`:
+| Status | Scope |
+| --- | --- |
+| **Done locally** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
+| **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
+| **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
+| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification, Ring and Bee ingestion; broader autonomous orchestration/shared session infrastructure. Metadata records alone do not prove live provider or device integrations. |
+
+The core MCP tools are `capture_expectation`, `get_expectation`, and
+`list_expectations`. The intelligence tools are `compile_expectation`,
+`continue_expectation_compilation`, and `explain_expectation_mismatch`.
+Every tool accepts exactly one top-level `request`. Bedrock is disabled by default
+and needs secure runtime AWS access; deterministic evaluation remains authoritative.
+Temporal interpretation is implemented. Monitoring can compare a real positive event
+observation against an explicit deadline; missing events remain UNKNOWN. The
+legacy manual temporal endpoint remains conservative. The web conversation is not an official Amazon simulator or Echo skill.
+
+See [component docs](#component-documentation) for the compiler, canonical
+clarification state/ledger, grounded evidence selection and Agent Skill details.
+
+## Quick local setup
+
+Prerequisites: Python with `venv`, Node.js/npm, Docker/PostgreSQL, and a Supabase
+project for authentication. Configure ignored `backend/.env.local`:
 
 ```env
-APP_NAME=CountOn
 ENVIRONMENT=development
-DATABASE_TARGET=supabase
+DATABASE_TARGET=local
 LOCAL_DATABASE_URL=postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton
-SUPABASE_DATABASE_URL=postgresql+psycopg://USERNAME:PASSWORD@HOST:5432/postgres?sslmode=require
-SUPABASE_URL=https://PROJECT.supabase.co
-SUPABASE_JWKS_URL=https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY
-LOG_LEVEL=INFO
-ALLOWED_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_REQUESTS=300
-RATE_LIMIT_WRITES=100
-RATE_LIMIT_WINDOW_SECONDS=60
+MCP_PUBLIC_URL=http://127.0.0.1:8003/mcp
 ```
 
-`settings.database_url` resolves only the explicitly selected target. Use a process
-override such as `DATABASE_TARGET=local alembic upgrade head` to switch a command
-without rewriting the file. Restart FastAPI after changing configuration.
+The database password above is the local Docker development value only. See
+[database setup and demo seeding](backend/db/README.md) for Supabase selection,
+JWT configuration, migrations and owned demo data. For conversational capture,
+configure the backend-only [Bedrock settings](backend/app/ai/README.md#configuration)
+and secure AWS credential provider; list/detail work without Bedrock.
+Set the same private `COUNTON_CLARIFICATION_SIGNING_KEY` in backend/MCP configuration
+for conversational compilation. Never put it in frontend variables.
 
-Frontend configuration belongs in `frontend/.env.local`, containing only
-`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-Database credentials and `SUPABASE_SECRET_KEY` stay backend-only; the latter is
-needed only by the optional administrative verification script.
-
-## Authentication
-
-Supabase Auth owns credentials. A verified user UUID maps to an idempotently
-created `profiles` row. All expectation, evidence, evaluation and notification
-routes require `Authorization: Bearer <Supabase access token>`. Clients cannot
-assign ownership in JSON. Services scope every parent lookup by owner, returning
-404 for missing or other users' resources.
-
-Sign in through Supabase Auth with the public URL/publishable key. In
-`http://localhost:8000/docs`, choose **Authorize** and enter the session's access
-token. API keys and refresh tokens do not authenticate CountOn API calls.
-
-JWT verification checks signature, expiry, issuer, audience and authenticated
-role. ES256/RS256 uses the project's JWKS; legacy HS256 additionally requires a
-successful Auth-server check. Public keys cache for up to ten minutes; asymmetric
-tokens remain valid until expiry. See [Supabase JWT guidance](https://supabase.com/docs/guides/auth/jwts).
-
-## Core schema
-
-| Table | Purpose |
-| --- | --- |
-| profiles | Auth UUID plus optional display name/timezone |
-| expectations | Required owner, claim, comparison and lifecycle status |
-| evidence | Observations, ordered by observation time; optional idempotency key |
-| evaluations | Persisted deterministic results |
-| notifications | Owned in-app mismatch records with message/status; no delivery |
-| monitoring_jobs | Persistent scheduling contract; one active job per expectation |
-| audit_events | Redacted entity/actions, metadata and request IDs |
-| integration_connections | Owned provider account metadata; no credential storage |
-
-Jobs are created with expectations; no worker executes them yet. Evidence and
-notifications derive ownership through expectations. Hard deletion removes an
-expectation's evidence, evaluations, notifications and jobs. Audit events retain
-resource UUIDs with their parent reference cleared; deleting the profile removes
-its audit records. No external integrations or legal retention policy currently
-require a soft-delete lifecycle.
-
-## Connected Accounts
-
-CountOn models Google and Microsoft email/calendar accounts, Ring cameras, Bee
-wearables, utility and delivery connections. Multiple accounts of the same
-provider/type are allowed. These are **metadata-only contracts**; OAuth, live
-provider APIs and encrypted credential storage are future work. Responses expose
-`credential_state=not_configured`. `connected` describes metadata state and does
-not prove a working provider authorization.
-
-Authenticated `/api/v1/integrations` supports list/create and read/patch/delete
-by ID. Lists filter by `provider`, `connection_type`, `status` and use bounded
-pagination. Metadata accepts only mock/demo/account-kind fields; token fields
-are rejected. Tokens must eventually live in a dedicated encrypted credential
-store, never JSONB metadata. In the future account-linking design, Alexa identifies
-the linked CountOn user; CountOn owns the selected provider accounts. Alexa does
-not supply arbitrary Gmail/Outlook content or act as their source of truth.
-
-## Notifications
-
-The evaluation service delegates notification persistence to a notification
-service. `MISMATCH` creates one in-app record per evaluation; `MATCH` and `UNKNOWN`
-are silent. No email/SMS/push delivery occurs. `/api/v1/notifications` lists owned
-records; `GET` and `PATCH /{id}` support reading and changing status to `read` or
-`dismissed`. Sent/failed states are reserved for future delivery code.
-
-## Audit / Request IDs
-
-Backend-controlled audits record profiles, expectations, evidence, evaluations,
-notifications and account changes in the same transaction as the write. Entity
-IDs, actions and safe metadata are stored, without credentials or source payloads.
-Existing action names `evidence.ingested` and `expectation.evaluated` are preserved.
-`X-Request-ID` accepts UUIDs or is generated, appears in errors and JSON logs, and
-correlates HTTP-originated audit records. CLI demo writes have no HTTP request ID.
-Audit tables have no client write grants; there is no public audit-write endpoint.
-
-## Demo Account
-
-The tagged Ashley Mccormick demo has six mocked connections, five expectations, ten
-evidence rows, five evaluations and one notification. Utility billing produces
-MISMATCH; delivery confirmation and a normalized appointment-confirmed boolean
-produce MATCH. Dentist calendar disagreement and the after-hours calendar scenario
-remain UNKNOWN because temporal semantics are intentionally unsupported.
-The package/plumber examples assert normalized confirmation; they do not infer
-calendar semantics from raw provider content.
-
-The dedicated account is **Ashley Mccormick**, **demo@counton.app**, in
-**America/Chicago**. The demo password is intentionally not stored in Git.
-For team access, obtain it through the team's secure shared channel.
-
-### How to Seed Demo Data
-
-From `backend`, with the virtual environment active:
-
-```sh
-DATABASE_TARGET=local python db/scripts/setup_demo_user.py
-DATABASE_TARGET=local python db/scripts/seed_demo_data.py
-```
-
-Local uses the existing stable UUID unless `COUNTON_DEMO_USER_ID` is configured;
-setup and seeding require no Supabase Auth access. For Supabase, configure the
-backend-only Auth Admin key and demo password in ignored `backend/.env.local`, then:
-
-```sh
-DATABASE_TARGET=supabase python db/scripts/setup_demo_user.py
-```
-
-Setup finds the account by email or creates it using the Auth Admin API. It
-reuses existing accounts without resetting passwords. Save the printed UUID as
-`COUNTON_DEMO_USER_ID` in that same ignored file, then run:
-
-```sh
-DATABASE_TARGET=supabase python db/scripts/seed_demo_data.py
-```
-
-Setup ensures Ashley's profile; seeding reuses tagged rows without overwriting
-them. An outer transaction and advisory lock prevent partial or concurrent
-duplicate seeds. All connections are mocked. See [demo setup details](backend/db/README.md#application-contracts-and-demo-data).
-
-### How to Clear Demo Data
-
-```sh
-DATABASE_TARGET=local python db/scripts/clear_demo_data.py
-DATABASE_TARGET=supabase python db/scripts/clear_demo_data.py
-```
-
-Use the same configured demo UUID. Cleanup requires both owner and demo markers,
-removes tagged audit artifacts and uses parent cascades. An empty tagged profile
-is removed; a profile with untagged expectations/accounts/audit history is retained.
-Supabase Auth users are never deleted by the demo scripts. No TRUNCATE or broad
-team-data deletion occurs. Successful verification leaves the demo cleared.
-
-## How to run
-
-From the repository root, start local PostgreSQL if using the local target:
+Terminal 1, from the repository root:
 
 ```sh
 docker compose up -d
 cd backend
+python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 DATABASE_TARGET=local alembic upgrade head
 DATABASE_TARGET=local uvicorn app.main:app --reload
 ```
 
-For Supabase, use `DATABASE_TARGET=supabase` for migration and server commands.
-`/health` reports process liveness. `/ready` checks database access, required tables
-and the current migration head, returning a safe 503 when unavailable.
-
-API errors use `{"error":{"code":"...","message":"...","request_id":"..."}}`
-and preserve HTTP status codes. Responses include `X-Request-ID`; an incoming
-UUID is accepted or a new UUID is generated. Lists use `limit` (1–100, default
-100) and `offset`; expectations filter by `status`/`type`, notifications by
-`status`. Evidence ingestion accepts an optional `external_event_id` in JSON or `Idempotency-Key` in headers: identical retries return
-the original record, conflicting payloads return 409. Provider events are unique
-within `(expectation_id, source, external_event_id)`, preventing cross-account
-collisions while allowing one event to support separate expectations. Unkeyed
-manual evidence remains supported. Each explicit evaluation
-creates history and a mismatch notification when appropriate.
-
-## How to test
-
-Use a separate loopback PostgreSQL database ending in `_test`:
-
-```sh
-TEST_DATABASE_URL='postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton_test' pytest
-DATABASE_TARGET=local python db/scripts/local_acceptance.py
-DATABASE_TARGET=supabase python db/scripts/check_schema.py
-DATABASE_TARGET=supabase python db/scripts/supabase_acceptance.py
-python db/scripts/operational_acceptance.py
-```
-
-Create `counton_test` once with your local PostgreSQL tools. Without
-`TEST_DATABASE_URL`, integration tests skip. Migration-cycle tests require
-CREATEDB and operate only on a newly created disposable local database.
-
-Authenticated acceptance scripts prompt for a real token with hidden input, or
-read `COUNTON_ACCESS_TOKEN` from the process environment. Never put credentials
-in command arguments or chat. `supabase_identity_check.py` optionally provisions
-three temporary confirmed Auth users without email delivery, tests both database
-targets and RLS, and removes only those users and their test artifacts. Run it
-with both databases migrated and FastAPI serving Supabase on port 8000.
-
-## Supabase deployment
-
-Store the PostgreSQL URL from **Supabase → Connect** in the backend file, then run:
-
-```sh
-DATABASE_TARGET=supabase alembic upgrade head
-DATABASE_TARGET=supabase python db/scripts/check_schema.py
-DATABASE_TARGET=supabase alembic check
-```
-
-Production configuration requires `ENVIRONMENT=production`, Supabase Auth
-configuration, a TLS database URL, explicit HTTPS `ALLOWED_ORIGINS`, and enabled
-rate limiting. Wildcard origins are rejected. Deploy with a supervised ASGI
-server without `--reload`, HTTPS ingress and correctly configured proxy handling.
-
-Supabase RLS/grants deny anonymous table access and isolate owners. The backend's
-privileged database role can bypass RLS, so backend ownership checks remain
-mandatory. See [database workflows and policies](backend/db/README.md).
-
-## Current capabilities
-
-Operational safeguards include database connection/pool/statement timeouts,
-explicit CORS, safe error envelopes, atomic audit writes, bounded lists and an
-in-memory rate limiter (300 requests/100 writes per client address per minute by
-default). The `RateLimiter` interface accepts a shared implementation; the current
-limiter is per process and **does not protect multiple workers or replicas with a
-shared budget**. Health/readiness and CORS preflights are exempt.
-
-Metrics hooks count requests, latency totals, 5xx responses, evaluation results,
-evidence ingestion and notification creation. The default sink is in-memory;
-configure a durable exporter and alerting for deployment. Logs contain route
-patterns, status, duration and request IDs, without headers or request bodies.
-
-The shared HTTP client has separate connect/read timeouts and bounded exponential
-backoff for GET/HEAD transport failures and 502/503/504 only. It never retries
-writes, authentication failures or validation failures. No external integrations
-use it yet. See [HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/).
-
-Known gaps: shared rate-limit storage and trusted ingress policy, metrics export,
-backup/restore operations, an explicit audit retention policy, and future worker
-claim/lease/retry and notification delivery logic. Bedrock, MCP, Ring, Bee,
-EventBridge and external notification delivery remain unimplemented. Temporal
-and event evaluation still returns `UNKNOWN`.
-
-Verified on 2026-10-02: **227 tests passed**, local and Supabase operational
-acceptance passed with real Auth tokens, and all eight application tables with Supabase RLS
-were exercised. Both schemas match metadata at revision `5d201f68ac90`; temporary
-users and test artifacts were removed. One non-failing Starlette/HTTPX
-deprecation warning remains. Local checks used native PostgreSQL 17 because
-Docker is unavailable on this machine.
-
-Canonical demo identity verified on 2026-10-02: Ashley Mccormick /
-`demo@counton.app`; local stable and explicitly configured UUIDs passed, real
-Supabase sign-in passed, and repeat seeds preserved 6/5/10/5/1 counts with all
-five expected results. Cleanup removed tagged data and retained the Auth account.
-The supplied credential remains only in ignored backend configuration; repository
-secret scanning passed. The complete backend suite passed **237 tests** with one
-existing Starlette/HTTPX deprecation warning. No frontend or evaluator changes.
-
-## Run the CountOn frontend
-
-The existing frontend directory now contains Next.js, React and TypeScript. It
-uses Supabase Auth and calls FastAPI for all application data.
-
-Backend terminal:
+Terminal 2, from the repository root:
 
 ```sh
 cd backend
 source .venv/bin/activate
-uvicorn app.main:app --reload
+DATABASE_TARGET=local python -m app.mcp
 ```
 
-Frontend terminal:
+Terminal 3, configure ignored `frontend/.env.local` using the public fields in
+[frontend/.env.example](frontend/.env.example), plus server-only
+`COUNTON_MCP_URL=http://127.0.0.1:8003/mcp`. Then:
 
 ```sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Configure the public API/Supabase values in ignored `frontend/.env.local`, then
-open **http://localhost:3000**. Teammate setup, routes, demo seeding, limitations
-and validation commands are in [frontend/README.md](frontend/README.md).
+Open `http://localhost:3000`; API docs are at `http://localhost:8000/docs`, and
+local MCP at `http://127.0.0.1:8003/mcp`. Both backend processes provide `/health`
+and `/ready`; those paths do not verify optional Bedrock model access.
+
+## Demo flow
+
+1. Sign in and open `/alexa`; initialize/discover MCP and list actual expectations.
+2. Ask “I'm counting on my bill being lower.” Answer which bill, the baseline,
+   and timing. Nothing is saved until compilation is complete.
+3. Follow the saved expectation into the normal dashboard and refresh. MCP and
+   FastAPI read the same row.
+4. Ask why a prepared, owned electricity expectation failed. Its latest
+   deterministic `MISMATCH` enables a grounded explanation; `MATCH`, `UNKNOWN`
+   and no evaluation skip the investigator. No matching row is reported honestly.
+
+Use real test evidence/evaluations, not a claim that capture generates them.
+[Acceptance checklist and timed demos](docs/hackathon-acceptance.md) cover repeatable
+checks, safe cleanup and deployment prerequisites.
+
+## Test commands
+
+From `backend`, activate `.venv`, then run `pytest`. For the full integration
+suite, privately set `TEST_DATABASE_URL` to a separate loopback PostgreSQL database
+ending in `_test` (for example `counton_test`); otherwise database tests skip.
+Migration-cycle tests require local CREATEDB permission. Never use production data.
+
+From `frontend`:
+
+```sh
+npm run test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+From `backend`, also run `ruff check app db/scripts tests alembic` and
+`mypy app --ignore-missing-imports`. From the root: `git diff --check`.
+Detailed AI/MCP strict mypy and opt-in smoke commands are in their component docs.
+The [repository audit](docs/repository-audit.md) records dependency snapshots,
+startup checks and validation limits. Mocked inference tests do not establish
+live model quality.
+
+## Deployment overview
+
+Deploy `frontend/` as Next.js on Vercel and run FastAPI and MCP separately behind
+HTTPS on Lightsail. Apply `alembic upgrade head` to the shared Supabase database
+before rolling out code that needs the compilation ledger and monitoring leases.
+Run the optional worker as a supervised backend process; see [monitoring setup](docs/monitoring.md). Configure public
+API/Supabase frontend values, server-only `COUNTON_MCP_URL`, explicit API CORS,
+and backend-only database/auth/AWS/signing secrets.
+
+Existing deployment addresses and required variables are documented in
+[frontend setup](frontend/README.md#vercel-production),
+[MCP deployment](docs/mcp.md#remote-deployment), and
+[Bedrock rollout and live checks](docs/bedrock-integration.md).
+Discover all six tools and run live acceptance before describing that deployment
+as current. Never commit credentials or put private keys in `NEXT_PUBLIC_*`.
+
+## Unfinished integrations
+
+Real Alexa+/Echo onboarding and account linking, compatible OAuth discovery,
+live Microsoft Graph consent/ingestion, Ring/Bee ingestion and external notification
+delivery remain incomplete. PostgreSQL monitoring, encrypted Outlook OAuth and
+in-app delivery are implemented locally; see [worker operation](docs/monitoring.md). Shared rate limiting, durable metrics export, backup/restore,
+and conversation/audit retention need operational work. `/alexa` uses constrained
+routing and a bounded owned-record search, not an autonomous agent.
+
+## Next-work priority
+
+1. Review and commit the clean current work (manual next step; this pass does not commit).
+2. Apply existing migrations and deploy MCP intelligence to Lightsail.
+3. Configure secure live Bedrock/model access on the MCP service.
+4. Run live Bedrock smoke on the trusted backend.
+5. Run live `/alexa` intelligence E2E, including clarification, shared persistence and Why.
+6. Import the traditional Alexa interaction model and deploy its signed HTTPS adapter.
+7. Provision compatible OAuth account linking/consent and verify the authenticated path.
+8. Test the Alexa Skills Kit simulator.
+9. Test real Alexa/Echo.
+10. Register the Microsoft app, consent a test mailbox and run live Outlook acceptance.
+11. Add Ring ingestion.
+12. Add Bee ingestion.
+13. Manually validate the minimal Trust Orchestrator source policy, receipts and audit delivery; validate the monitoring worker against live provider credentials before deployment.
+14. Complete final demo hardening.
+
+This order preserves the requested priorities. Runtime configuration and migrations
+must be provisioned before declaring a deployment ready; no current placeholder
+makes a provider, worker or Alexa device integration complete.
+
+## Component documentation
+
+- [CI failure investigation, fixes and executed validation](docs/ci-validation.md)
+- [Controlled orchestrator and Alexa session boundary](backend/app/agent/README.md)
+- [Traditional Alexa HTTPS adapter, interaction model and console/account-link setup](docs/traditional-alexa.md)
+- [MCP tools, auth, startup and remote smoke](docs/mcp.md)
+- [Bedrock integration and rollout](docs/bedrock-integration.md)
+- [Background monitoring and legacy Outlook setup](docs/monitoring.md)
+- [Gmail, Outlook, calendars and order evidence acceptance](docs/integrations-acceptance.md)
+- [Compiler/client semantics](backend/app/ai/README.md),
+  [clarification state machine](backend/app/ai/clarification.md), and
+  [grounded investigator](backend/app/ai/investigation.md)
+- [Database, RLS, migrations and demo data](backend/db/README.md)
+- [Frontend setup](frontend/README.md), [Alexa web demo](frontend/docs/alexa-demo.md),
+  and [Next.js MCP client](frontend/docs/mcp-client.md)
+- [Hackathon acceptance](docs/hackathon-acceptance.md) and
+  [Agent Skill inspection/consumption](docs/agent-skill.md)
+
+The minimal Trust Orchestrator now validates evidence-source permissions, creates
+backend-authored response receipts and records redacted runs in existing audit_events.
+The web simulator exposes an expandable safe provenance summary. See the
+[trust acceptance and exact manual runbook](docs/trust-orchestrator.md); implementation
+and local tests do not establish production Bedrock or Alexa/Echo acceptance.
+
+Production hardening adds native Supabase OAuth consent for ASK account linking,
+client-bound JWT verification, encrypted PostgreSQL conversation/replay state and
+explicit Alexa capture confirmation. The six MCP tool contracts and deterministic
+evaluator remain authoritative. See the [production readiness checklist and exact
+deployment/acceptance commands](docs/production-readiness.md). Live OAuth, AWS,
+ASK/Echo, Graph and deployed end-to-end acceptance remain required.
+
+Account sync now has local Google/Microsoft OAuth, official Gmail/Graph/calendar reads,
+encrypted durable checkpoints, push wake-ups and explicit source bindings. Provider
+credentials and live read-only acceptance remain required; see the integration guide.
+
+Automatic provider tracking now connects authenticated push/poll sync to the existing durable monitoring worker, deterministic evaluation and deduplicated inbox. Coverage-gated reply deadlines, calendar changes, predicted shipping warnings, tracking controls and opt-in email are implemented locally. Real provider/email acceptance remains pending. See [automatic tracking and operations](docs/automatic-tracking.md).
+
+The resumed [typed source orchestration](docs/orchestration.md) connects complete saved
+expectations to explicitly confirmed authorized sources and existing durable workers.
+[Current validation and release gates](docs/orchestration-validation.md) distinguish
+local automated results from human review, cloud/model and Alexa device acceptance.
