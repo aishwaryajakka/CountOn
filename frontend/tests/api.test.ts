@@ -109,3 +109,18 @@ describe('FastAPI client', () => {
     expect(fetcher.mock.calls[1][0]).toContain('/evaluations?limit=1');
   });
 });
+
+it.each(['ring', 'bee'] as const)('submits authorized %s simulator evidence and idempotent evaluation', async kind => {
+  const { generateRingEvent, ringEventToEvidence, generateBeeEvent, beeEventToEvidence } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? ringEventToEvidence(generateRingEvent('package_not_detected')) : beeEventToEvidence(generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false }));
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  await client.addEvidence(expectation.id, payload);
+  await client.evaluate(expectation.id, `simulation:${payload.external_event_id}`);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/expectations/${expectation.id}/evidence`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ source: `${kind}_simulator`, raw_data: { simulated: true } });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('Idempotency-Key')).toBe(`simulation:${payload.external_event_id}`);
+});

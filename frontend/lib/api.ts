@@ -87,7 +87,7 @@ export function createApiClient(deps: Dependencies) {
     updateExpectation: (id: string, payload: Partial<ExpectationUpdate>) => request<Expectation>(`/expectations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteExpectation: (id: string) => request<void>(`/expectations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     addEvidence: (id: string, payload: EvidenceCreate) => request<Evidence>(`/expectations/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(payload) }),
-    evaluate: (id: string) => request<Evaluation>(`/expectations/${encodeURIComponent(id)}/evaluate`, { method: 'POST' }),
+    evaluate: (id: string, idempotencyKey?: string) => request<Evaluation>(`/expectations/${encodeURIComponent(id)}/evaluate`, { method: 'POST', ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}) }),
     notifications: (signal?: AbortSignal) => all<Notification>('/notifications', signal),
     updateNotification: (id: string, status: 'read' | 'dismissed') => request<Notification>(`/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     integrations: (signal?: AbortSignal) => all<Integration>('/integrations', signal),

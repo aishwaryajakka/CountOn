@@ -7,24 +7,20 @@ from uuid import uuid4
 # Ensure backend directory is in path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db.models.expectation import Expectation, ExpectationType
 from app.db.models.evidence import Evidence
-from app.evaluators.boolean import evaluate as evaluate_boolean
+from app.db.models.expectation import Expectation, ExpectationType
 from app.evaluators.base import EvaluationResult
-from app.integrations.ring.adapter import ring_event_to_evidence
+from app.evaluators.boolean import evaluate as evaluate_boolean
+from app.integrations.bee.simulator import (
+    simulate_document_commitment,
+    simulate_plumber_cancelled,
+    simulate_plumber_confirmed,
+)
 from app.integrations.ring.simulator import (
-    simulate_package_delivery,
-    simulate_package_missing,
     simulate_doorbell_ring,
     simulate_motion,
-    generate_ring_event,
-)
-from app.integrations.bee.adapter import bee_event_to_evidence
-from app.integrations.bee.simulator import (
-    simulate_plumber_confirmed,
-    simulate_plumber_cancelled,
-    simulate_document_commitment,
-    generate_bee_event,
+    simulate_package_delivery,
+    simulate_package_missing,
 )
 
 
@@ -54,8 +50,8 @@ def _to_db_evidence(expectation_id, ev_create) -> Evidence:
 
 
 def test_ring_package_delivery_matches():
-    raw, ev_create = simulate_package_delivery(device="front_door", metric="package_detected")
-    assert ev_create.source == "ring"
+    _raw, ev_create = simulate_package_delivery(device="front_door", metric="package_detected")
+    assert ev_create.source == "ring_simulator"
     assert ev_create.metric == "package_detected"
     assert ev_create.value["value"] is True
     assert ev_create.value["detected"] is True
@@ -68,17 +64,18 @@ def test_ring_package_delivery_matches():
     assert output.observed["value"] is True
 
 
-def test_ring_package_missing_mismatches():
-    raw, ev_create = simulate_package_missing(device="front_door", metric="package_detected")
-    assert ev_create.source == "ring"
+def test_ring_package_missing_is_unknown():
+    _raw, ev_create = simulate_package_missing(device="front_door", metric="package_detected")
+    assert ev_create.source == "ring_simulator"
     assert ev_create.metric == "package_detected"
-    assert ev_create.value["value"] is False
+    assert "value" not in ev_create.value
+    assert ev_create.value["detected"] is False
 
     expectation = _mock_expectation("package_detected")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MISMATCH
-    assert output.observed["value"] is False
+    assert output.result == EvaluationResult.UNKNOWN
+    assert "value" not in output.observed
 
 
 def test_ring_doorbell_and_motion():
@@ -92,8 +89,8 @@ def test_ring_doorbell_and_motion():
 
 
 def test_bee_conversation_plumber_confirmed():
-    raw, ev_create = simulate_plumber_confirmed(metric="appointment_confirmed")
-    assert ev_create.source == "bee"
+    _raw, ev_create = simulate_plumber_confirmed(metric="appointment_confirmed")
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
     assert ev_create.value["value"] is True
     assert "Landlord" in ev_create.value["speaker"]
@@ -105,8 +102,8 @@ def test_bee_conversation_plumber_confirmed():
 
 
 def test_bee_conversation_plumber_cancelled():
-    raw, ev_create = simulate_plumber_cancelled(metric="appointment_confirmed")
-    assert ev_create.source == "bee"
+    _raw, ev_create = simulate_plumber_cancelled(metric="appointment_confirmed")
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
     assert ev_create.value["value"] is False
 
@@ -117,8 +114,8 @@ def test_bee_conversation_plumber_cancelled():
 
 
 def test_bee_document_commitment():
-    raw, ev_create = simulate_document_commitment()
-    assert ev_create.source == "bee"
+    _raw, ev_create = simulate_document_commitment()
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "conversation_mention"
     assert "Sarah" in ev_create.value["speaker"]
 
@@ -126,8 +123,8 @@ def test_bee_document_commitment():
 if __name__ == "__main__":
     test_ring_package_delivery_matches()
     print("PASS: test_ring_package_delivery_matches")
-    test_ring_package_missing_mismatches()
-    print("PASS: test_ring_package_missing_mismatches")
+    test_ring_package_missing_is_unknown()
+    print("PASS: test_ring_package_missing_is_unknown")
     test_ring_doorbell_and_motion()
     print("PASS: test_ring_doorbell_and_motion")
     test_bee_conversation_plumber_confirmed()

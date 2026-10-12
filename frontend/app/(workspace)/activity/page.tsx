@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
 import { EmptyState, ErrorState, Loading, PageHeader } from '@/components/ui';
@@ -13,18 +13,12 @@ import { useResource } from '@/hooks/use-resource';
 export default function Activity() {
   const board = useBoard();
   const { timeZone } = useIdentity();
-  const rows = board.data ?? [];
+  const rows = useMemo(() => board.data ?? [], [board.data]);
 
   const loadEvidence = useCallback(async (signal: AbortSignal): Promise<Evidence[]> => {
     if (!rows.length) return [];
     const results = await Promise.all(
-      rows.map(async (row) => {
-        try {
-          return await api.evidence(row.expectation.id, signal);
-        } catch {
-          return [];
-        }
-      })
+      rows.map(row => api.evidence(row.expectation.id, signal))
     );
     return results.flat();
   }, [rows]);

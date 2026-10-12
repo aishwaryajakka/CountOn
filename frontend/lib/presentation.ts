@@ -22,8 +22,12 @@ export function displayTitle(expectation: Expectation): string {
   if (/\bno meetings? after 5\s*(?:pm|p\.m\.)\b/.test(claim)) return 'No meetings after 5 PM';
   return expectation.claim.length > 65 ? `${expectation.claim.slice(0, 62)}…` : expectation.claim;
 }
-const sources: Record<string, string> = { utility_bill: 'Utility bill', utility_usage: 'Energy usage', tariff: 'Electricity rate', delivery: 'Delivery tracking', ring: 'Ring', bee: 'Bee wearable', gmail: 'Gmail', google_calendar: 'Google Calendar', outlook_calendar: 'Outlook Calendar', confirmation_email: 'Confirmation email' };
+const sources: Record<string, string> = { utility_bill: 'Utility bill', utility_usage: 'Energy usage', tariff: 'Electricity rate', delivery: 'Delivery tracking', ring_simulator: 'Ring · SIMULATED', bee_simulator: 'Bee · SIMULATED', ring: 'Ring', bee: 'Bee wearable', gmail: 'Gmail', google_calendar: 'Google Calendar', outlook_calendar: 'Outlook Calendar', confirmation_email: 'Confirmation email' };
 export const humanize = (value: string) => sources[value] ?? value.replaceAll('_', ' ').replace(/^./, char => char.toUpperCase());
+export function evidenceSourceLabel(item: Pick<Evidence, 'source' | 'raw_data'>): string {
+  const label = humanize(item.source);
+  return item.raw_data.simulated === true && !item.source.endsWith('_simulator') ? `${label} · SIMULATED` : label;
+}
 const currencies = new Set(Intl.supportedValuesOf('currency'));
 export function number(value: number, unit?: string | null) {
   if (unit && currencies.has(unit)) {

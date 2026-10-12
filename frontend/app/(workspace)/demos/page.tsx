@@ -4,34 +4,26 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  ArrowRight,
   Camera,
-  CheckCircle2,
-  Clock3,
-  FlaskConical,
   Lightbulb,
   Mic,
-  Package,
   Send,
-  ShieldCheck,
   Sparkles,
   Zap,
-  AlertTriangle,
 } from 'lucide-react';
 import { useBoard } from '@/components/app-shell';
 import { PageHeader, Badge, IconBox } from '@/components/ui';
 import { api } from '@/lib/api';
-import type { Result } from '@/lib/types';
+import type { Evaluation } from '@/lib/types';
 import {
   generateRingEvent,
   ringEventToEvidence,
   generateBeeEvent,
   beeEventToEvidence,
   createUtilityBillEvidence,
-  createUtilityUsageEvidence,
-  createTariffRateEvidence,
+  simulatorTargets,
+  simulatorTarget,
 } from '@/lib/simulators';
-import { number } from '@/lib/presentation';
 
 export default function DemosPage() {
   const board = useBoard();
@@ -43,16 +35,17 @@ export default function DemosPage() {
   // Status feedback
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [targetId, setTargetId] = useState('');
+  const [evaluations, setEvaluations] = useState<Partial<Record<'utility' | 'ring' | 'bee', Evaluation>>>({});
+  const targets = simulatorTargets(rows, activeTab);
+  const selectedTarget = targets.find(exp => exp.id === targetId) ?? (targets.length === 1 ? targets[0] : undefined);
 
   // ----------------------------------------------------
   // DEMO 1: ELECTRICITY BILL SIMULATOR STATE
   // ----------------------------------------------------
   const [billAmount, setBillAmount] = useState<number>(162.0);
   const baselineBill = 142.1;
-  const tolerancePct = 5;
-  const maxThreshold = baselineBill * (1 + tolerancePct / 100); // 149.205
-  const isBillMismatch = billAmount > baselineBill;
-  const billResult: Result = isBillMismatch ? 'MISMATCH' : 'MATCH';
+  const billResult = evaluations.utility?.result;
 
   // ----------------------------------------------------
   // DEMO 2: RING EVENT SIMULATOR STATE
@@ -62,16 +55,12 @@ export default function DemosPage() {
   const [ringConfidence, setRingConfidence] = useState<number>(0.95);
 
   const currentRingRaw = generateRingEvent(ringKind, {
+    ...(ringKind.startsWith('package_') ? { metric: selectedTarget?.metric ?? undefined } : {}),
     device: ringDevice,
     confidence: ringConfidence,
   });
   const currentRingEvidence = ringEventToEvidence(currentRingRaw);
-  const ringResult: Result =
-    ringKind === 'package_detected'
-      ? 'MATCH'
-      : ringKind === 'package_not_detected'
-      ? 'MISMATCH'
-      : 'UNKNOWN';
+  const ringResult = evaluations.ring?.result;
 
   // ----------------------------------------------------
   // DEMO 3: BEE CONTEXT SIMULATOR STATE
@@ -89,7 +78,7 @@ export default function DemosPage() {
     metric: 'appointment_confirmed',
   });
   const currentBeeEvidence = beeEventToEvidence(currentBeeRaw);
-  const beeResult: Result = beeConfirmed ? 'MATCH' : 'MISMATCH';
+  const beeResult = evaluations.bee?.result;
 
   // ----------------------------------------------------
   // BACKEND SUBMISSION HANDLER
@@ -99,50 +88,14 @@ export default function DemosPage() {
     setStatusMessage(null);
 
     try {
-      if (type === 'utility') {
-        const targetRow = rows.find(
-          (r) => r.expectation.metric === 'total_cost' || r.expectation.claim.toLowerCase().includes('bill')
-        ) ?? rows[0];
-
-        if (!targetRow) {
-          throw new Error('No active electricity bill expectation found. Create one first or seed demo data.');
-        }
-
-        const ev = createUtilityBillEvidence(billAmount);
-        await api.addEvidence(targetRow.expectation.id, ev);
-        await api.evaluate(targetRow.expectation.id);
-        setStatusMessage(`Utility bill of $${billAmount.toFixed(2)} recorded and evaluated as ${billResult}!`);
-      } else if (type === 'ring') {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'delivered' ||
-            r.expectation.metric === 'package_detected' ||
-            r.expectation.claim.toLowerCase().includes('package')
-        ) ?? rows[0];
-
-        if (!targetRow) {
-          throw new Error('No package delivery expectation found.');
-        }
-
-        await api.addEvidence(targetRow.expectation.id, currentRingEvidence);
-        await api.evaluate(targetRow.expectation.id);
-        setStatusMessage(`Ring event (${ringKind}) sent and evaluated as ${ringResult}!`);
-      } else {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'appointment_confirmed' ||
-            r.expectation.claim.toLowerCase().includes('plumber') ||
-            r.expectation.claim.toLowerCase().includes('landlord')
-        ) ?? rows[0];
-
-        if (!targetRow) {
-          throw new Error('No plumber appointment expectation found.');
-        }
-
-        await api.addEvidence(targetRow.expectation.id, currentBeeEvidence);
-        await api.evaluate(targetRow.expectation.id);
-        setStatusMessage(`Bee context conversation recorded and evaluated as ${beeResult}!`);
-      }
+      const target = simulatorTarget(rows, type, targetId);
+      const evidence = type === 'utility' ? createUtilityBillEvidence(billAmount) : type === 'ring'
+        ? ringEventToEvidence({ ...currentRingRaw, ...(ringKind.startsWith('package_') ? { metric: target.metric ?? undefined } : {}) })
+        : beeEventToEvidence({ ...currentBeeRaw, metric: target.metric ?? undefined });
+      await api.addEvidence(target.id, evidence);
+      const evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+      setEvaluations(previous => ({ ...previous, [type]: evaluation }));
+      setStatusMessage(`SIMULATED ${type} evidence recorded · Backend evaluation: ${evaluation.result}`);
 
       board.reload();
     } catch (err) {
@@ -162,7 +115,7 @@ export default function DemosPage() {
       <PageHeader
         eyebrow="Interactive Simulation Suite"
         title="Interactive Demos & Simulators"
-        description="Experience deterministic evaluations without physical Ring hardware, an iPhone, or Bee CLI."
+        description="SIMULATED evidence sent to your authenticated backend. Live Ring and Bee account integrations are unavailable."
       />
 
       {statusMessage && (
@@ -188,7 +141,7 @@ export default function DemosPage() {
       <div className="filters" aria-label="Demo scenarios" style={{ marginBottom: '1.5rem' }}>
         <button
           className={`filter ${activeTab === 'utility' ? 'selected' : ''}`}
-          onClick={() => setActiveTab('utility')}
+          onClick={() => { setActiveTab('utility'); setTargetId(''); }}
           aria-pressed={activeTab === 'utility'}
         >
           <Zap size={16} />
@@ -197,7 +150,7 @@ export default function DemosPage() {
 
         <button
           className={`filter ${activeTab === 'ring' ? 'selected' : ''}`}
-          onClick={() => setActiveTab('ring')}
+          onClick={() => { setActiveTab('ring'); setTargetId(''); }}
           aria-pressed={activeTab === 'ring'}
         >
           <Camera size={16} />
@@ -206,13 +159,16 @@ export default function DemosPage() {
 
         <button
           className={`filter ${activeTab === 'bee' ? 'selected' : ''}`}
-          onClick={() => setActiveTab('bee')}
+          onClick={() => { setActiveTab('bee'); setTargetId(''); }}
           aria-pressed={activeTab === 'bee'}
         >
           <Mic size={16} />
           Bee Wearable Simulator
         </button>
       </div>
+
+      <label>Expectation receiving SIMULATED evidence<select value={targetId || (targets.length === 1 ? targets[0].id : '')} onChange={event => setTargetId(event.target.value)}><option value="">Select a compatible expectation</option>{targets.map(exp => <option key={exp.id} value={exp.id}>{exp.claim}</option>)}</select></label>
+      <p className="caption">Badges show the last saved backend evaluation for each simulator. Only the backend decides the outcome. No package detection does not prove missed delivery. Simulations persist as tagged evidence.</p>
 
       {/* ========================================================
           DEMO 1: ELECTRICITY BILL INTERACTIVE DEMO
@@ -228,7 +184,7 @@ export default function DemosPage() {
                   Target baseline: Less than $142.10 (with 5% materiality tolerance).
                 </p>
               </div>
-              <Badge status={isBillMismatch ? 'attention' : 'match'} />
+              {billResult ? <Badge status={billResult === 'MISMATCH' ? 'attention' : billResult === 'MATCH' ? 'match' : 'waiting'} /> : <span>Not evaluated yet</span>}
             </div>
 
             {/* Interactive Bill Input / Slider */}
@@ -266,7 +222,7 @@ export default function DemosPage() {
                   onClick={() => setBillAmount(162.0)}
                   style={{ fontSize: '0.85rem' }}
                 >
-                  Preset: $162.00 (Tariff spike · MISMATCH)
+                  Preset: $162.00
                 </button>
                 <button
                   type="button"
@@ -274,7 +230,7 @@ export default function DemosPage() {
                   onClick={() => setBillAmount(130.0)}
                   style={{ fontSize: '0.85rem' }}
                 >
-                  Preset: $130.00 (Lower usage · MATCH)
+                  Preset: $130.00
                 </button>
               </div>
             </div>
@@ -284,13 +240,13 @@ export default function DemosPage() {
               <div className="comparison expected">
                 <span className="overline">Expected Threshold</span>
                 <strong>Less than $142.10</strong>
-                <p>Calculated from user's prior baseline criteria.</p>
+                <p>Sample preview baseline; use the selected expectation’s actual conditions.</p>
               </div>
 
-              <div className={`comparison observed ${isBillMismatch ? 'attention' : 'match'}`}>
+              <div className={`comparison observed ${billResult === 'MISMATCH' ? 'attention' : billResult === 'MATCH' ? 'match' : ''}`}>
                 <div className="section-heading">
-                  <span className="overline">Observed Amount</span>
-                  <Badge status={isBillMismatch ? 'attention' : 'match'} />
+                  <span className="overline">Simulated Input Amount</span>
+                  {billResult ? <Badge status={billResult === 'MISMATCH' ? 'attention' : billResult === 'MATCH' ? 'match' : 'waiting'} /> : <span>Not evaluated yet</span>}
                 </div>
                 <strong>${billAmount.toFixed(2)}</strong>
                 <p>
@@ -300,51 +256,12 @@ export default function DemosPage() {
               </div>
             </div>
 
-            {/* Deterministic Explanation Card */}
-            <div
-              className="explanation-card"
-              style={{
-                padding: '1.25rem',
-                borderRadius: '12px',
-                backgroundColor: isBillMismatch ? '#fff7ed' : '#f0fdf4',
-                border: `1px solid ${isBillMismatch ? '#fed7aa' : '#bbf7d0'}`,
-                marginBottom: '1.25rem',
-              }}
-            >
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                <IconBox icon={Lightbulb} tone={isBillMismatch ? 'orange' : 'green'} />
-                <div>
-                  <h3 style={{ margin: '0 0 0.4rem', color: isBillMismatch ? '#9a3412' : '#166534' }}>
-                    {isBillMismatch ? 'Why Reality Mismatched the Expectation' : 'Expectation Satisfied'}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '0.925rem', lineHeight: 1.5 }}>
-                    {isBillMismatch
-                      ? `The bill arrived at $${billAmount.toFixed(2)}, which is $${(
-                          billAmount - baselineBill
-                        ).toFixed(
-                          2
-                        )} higher than expected. Context signals show that while your energy consumption decreased by 18%, the utility tariff rate surged by 22%, explaining why the total bill increased despite your conservation effort.`
-                      : `The bill arrived at $${billAmount.toFixed(2)}, comfortably below the $${baselineBill.toFixed(
-                          2
-                        )} threshold. Your 18% lower AC usage translated directly into lower costs.`}
-                  </p>
-
-                  <div className="signal-chips" style={{ marginTop: '0.75rem' }}>
-                    <span className="down" style={{ fontSize: '0.8rem' }}>
-                      Energy usage: -18%
-                    </span>
-                    <span className="up" style={{ fontSize: '0.8rem' }}>
-                      Electricity rate: +22%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div className="soft-card"><IconBox icon={Lightbulb} tone="blue" /><p>This is an input preview, using a sample baseline of $142.10. The selected expectation’s saved conditions determine the backend evaluation. No usage or tariff explanation is inferred.</p>{billResult && <p>Last backend evaluation: {billResult}</p>}</div>
 
             <button
               className="button primary"
               onClick={() => submitDemoToBackend('utility')}
-              disabled={busy}
+              disabled={busy || !targets.length || (targets.length > 1 && !targetId)}
             >
               <Send size={16} />
               {busy ? 'Sending...' : 'Send Bill to CountOn Backend & Evaluate'}
@@ -367,7 +284,7 @@ export default function DemosPage() {
                   No physical Ring camera required. Generates raw camera events and converts them into CountOn evidence.
                 </p>
               </div>
-              <Badge status={ringResult === 'MATCH' ? 'match' : ringResult === 'MISMATCH' ? 'attention' : 'waiting'} />
+              {ringResult ? <Badge status={ringResult === 'MATCH' ? 'match' : ringResult === 'MISMATCH' ? 'attention' : 'waiting'} /> : <span>Not evaluated yet</span>}
             </div>
 
             {/* Presets */}
@@ -377,14 +294,14 @@ export default function DemosPage() {
                 className={`button ${ringKind === 'package_detected' ? 'primary' : 'secondary'}`}
                 onClick={() => setRingKind('package_detected')}
               >
-                Package Detected (MATCH)
+                Package Detected
               </button>
               <button
                 type="button"
                 className={`button ${ringKind === 'package_not_detected' ? 'primary' : 'secondary'}`}
                 onClick={() => setRingKind('package_not_detected')}
               >
-                Package Missing / Removed (MISMATCH)
+                No Package Detected
               </button>
               <button
                 type="button"
@@ -491,7 +408,7 @@ export default function DemosPage() {
             <button
               className="button primary"
               onClick={() => submitDemoToBackend('ring')}
-              disabled={busy}
+              disabled={busy || !targets.length || (targets.length > 1 && !targetId)}
             >
               <Send size={16} />
               {busy ? 'Sending...' : 'Send Ring Evidence to Backend & Evaluate'}
@@ -514,7 +431,7 @@ export default function DemosPage() {
                   Simulate voice conversations and commitments without an iPhone or Bee CLI.
                 </p>
               </div>
-              <Badge status={beeResult === 'MATCH' ? 'match' : 'attention'} />
+              {beeResult ? <Badge status={beeResult === 'MATCH' ? 'match' : beeResult === 'MISMATCH' ? 'attention' : 'waiting'} /> : <span>Not evaluated yet</span>}
             </div>
 
             {/* Presets */}
@@ -528,7 +445,7 @@ export default function DemosPage() {
                   setBeeConfirmed(true);
                 }}
               >
-                Plumber Confirmed (MATCH)
+                Plumber Confirmed
               </button>
               <button
                 type="button"
@@ -541,7 +458,7 @@ export default function DemosPage() {
                   setBeeConfirmed(false);
                 }}
               >
-                Plumber Rescheduled (MISMATCH)
+                Plumber Rescheduled
               </button>
               <button
                 type="button"
@@ -588,8 +505,8 @@ export default function DemosPage() {
                     onChange={(e) => setBeeConfirmed(e.target.value === 'yes')}
                     style={{ width: '100%', borderRadius: '8px', padding: '0.6rem' }}
                   >
-                    <option value="yes">Confirmed (True · MATCH)</option>
-                    <option value="no">Contradicted / Cancelled (False · MISMATCH)</option>
+                    <option value="yes">Confirmed (True)</option>
+                    <option value="no">Contradicted / Cancelled (False)</option>
                   </select>
                 </div>
               </div>
@@ -649,34 +566,12 @@ export default function DemosPage() {
               </div>
             </div>
 
-            {/* Mismatch Explanation when cancelled */}
-            {!beeConfirmed && (
-              <div
-                className="soft-card"
-                style={{
-                  padding: '1rem',
-                  marginBottom: '1.25rem',
-                  backgroundColor: '#fff7ed',
-                  border: '1px solid #fed7aa',
-                  color: '#9a3412',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-              >
-                <AlertTriangle size={18} />
-                <span>
-                  <strong>Mismatch Explanation: </strong>
-                  The wearable detected that the landlord cancelled the Friday plumber appointment due to an emergency.
-                  CountOn flags this as MISMATCH because the confirmed status is False.
-                </span>
-              </div>
-            )}
+            <p className="caption">This is a simulated conversation with an explicitly selected confirmation flag. It is not a live wearable observation or an explanation of causation.</p>
 
             <button
               className="button primary"
               onClick={() => submitDemoToBackend('bee')}
-              disabled={busy}
+              disabled={busy || !targets.length || (targets.length > 1 && !targetId)}
             >
               <Send size={16} />
               {busy ? 'Sending...' : 'Send Bee Context to Backend & Evaluate'}

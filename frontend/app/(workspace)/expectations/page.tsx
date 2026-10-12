@@ -18,13 +18,17 @@ const filters: { value: 'all' | PresentationStatus; label: string }[] = [
 
 export default function Expectations() {
   const board = useBoard();
+  const [provider, setProvider] = useState('all');
   const [filter, setFilter] = useState<'all' | PresentationStatus>('all');
   const [managingExp, setManagingExp] = useState<Expectation | null>(null);
 
   const rows = board.data ?? [];
   const filtered = rows.filter(
     (row) =>
-      filter === 'all' || getExpectationPresentationStatus(row.expectation, row.latest) === filter
+      (filter === 'all' || getExpectationPresentationStatus(row.expectation, row.latest) === filter) &&
+      (provider === 'all' || row.expectation.evidence_sources.some(source =>
+        provider === 'google' ? source.startsWith('google') || source.startsWith('gmail') :
+          source.startsWith('microsoft') || source.startsWith('outlook')))
   );
 
   return (
@@ -55,6 +59,8 @@ export default function Expectations() {
           </button>
         ))}
       </div>
+
+      <label>Filter by provider<select value={provider} onChange={event => setProvider(event.target.value)}><option value="all">All providers</option><option value="google">Google</option><option value="microsoft">Microsoft</option></select></label>
 
       {board.loading ? (
         <Loading />
@@ -116,12 +122,4 @@ export default function Expectations() {
       )}
     </>
   );
-  const board = useBoard(); const [filter, setFilter] = useState<'all' | PresentationStatus>('all');
-  const [provider, setProvider] = useState('all');
-  const rows = board.data ?? [];
-  const filtered = rows.filter(row => (filter === 'all' || getExpectationPresentationStatus(row.expectation, row.latest) === filter) && (provider === 'all' || row.expectation.evidence_sources.some(source => provider === 'google' ? source.startsWith('google') || source.startsWith('gmail') : source.startsWith('microsoft') || source.startsWith('outlook'))));
-  return <><PageHeader title="Expectations" description="Everything CountOn is currently watching for you." action={<NewExpectationLink />} /><div className="filters" aria-label="Filter expectations">{filters.map(item => <button className={`filter ${filter === item.value ? 'selected' : ''}`} key={item.value} onClick={() => setFilter(item.value)} aria-pressed={filter === item.value}>{item.label}<span>{item.value === 'all' ? rows.length : rows.filter(row => getExpectationPresentationStatus(row.expectation, row.latest) === item.value).length}</span></button>)}</div><label>Filter by provider<select value={provider} onChange={e => setProvider(e.target.value)}><option value="all">All providers</option><option value="google">Google</option><option value="microsoft">Microsoft</option></select></label>{board.loading ? <Loading /> : board.error ? <ErrorState error={board.error} retry={board.reload} /> : !rows.length ? <EmptyState title="You’re not counting on anything yet." description="Start with one thing you’d like a little more clarity on." action={<NewExpectationLink first />} /> : !filtered.length ? <EmptyState title="Nothing here right now." description="Your other expectations are still available under All." /> : <>{(['attention', 'monitoring', 'match', 'waiting', 'resolved', 'cancelled'] as PresentationStatus[]).map(status => {
-    const items = filtered.filter(row => getExpectationPresentationStatus(row.expectation, row.latest) === status);
-    return items.length ? <section className="section expectation-group" key={status}><div className="section-heading"><h2><span className={`group-dot ${status}`} />{statusLabels[status]}</h2><span className="caption">{items.length} expectation{items.length === 1 ? '' : 's'}</span></div><div className="grid two">{items.map(row => <ExpectationCard key={row.expectation.id} row={row} />)}</div></section> : null;
-  })}</>}</>;
 }

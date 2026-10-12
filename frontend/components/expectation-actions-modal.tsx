@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { Check, Edit3, Pause, Play, Trash2, X, AlertTriangle } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
-import type { Comparison, Expectation, ExpectationStatus, ExpectationUpdate } from '@/lib/types';
+import { useCallback, useState, type FormEvent } from 'react';
+import { Check, Pause, Play, X } from 'lucide-react';
+import { api } from '@/lib/api';
+import type { Comparison, Expectation, ExpectationUpdate } from '@/lib/types';
 import { comparisonLabels } from '@/lib/presentation';
+import { monitoring } from '@/lib/monitoring';
+import { useResource } from '@/hooks/use-resource';
 
 interface ExpectationActionsModalProps {
   expectation: Expectation;
@@ -29,9 +31,13 @@ export function ExpectationActionsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadTracking = useCallback((signal: AbortSignal) => monitoring.get(expectation.id, signal), [expectation.id]);
+  const tracking = useResource(loadTracking);
+
   if (!isOpen) return null;
 
-  const isPaused = expectation.status === 'cancelled';
+  const isPaused = tracking.data?.status === 'paused';
+  const isCancelled = expectation.status === 'cancelled';
   const isResolved = expectation.status === 'resolved';
 
   async function handleSave(event: FormEvent) {
@@ -39,10 +45,16 @@ export function ExpectationActionsModal({
     setBusy(true);
     setError(null);
 
+    if (!threshold.trim() || !Number.isFinite(Number(threshold)) || Number(threshold) < 0 || Number(threshold) > 100) {
+      setError('Enter a tolerance between 0 and 100 percent.');
+      setBusy(false);
+      return;
+    }
+
     const updatePayload: Partial<ExpectationUpdate> = {
       claim: claim.trim(),
       metric: metric.trim() || undefined,
-      materiality_threshold: Math.max(0, Math.min(100, Number(threshold) || 5)) / 100,
+      materiality_threshold: Math.max(0, Math.min(100, Number(threshold))) / 100,
     };
 
     if (expectation.type === 'numeric_comparison') {
@@ -64,9 +76,10 @@ export function ExpectationActionsModal({
   async function handleTogglePause() {
     setBusy(true);
     setError(null);
-    const newStatus: ExpectationStatus = isPaused ? 'monitoring' : 'cancelled';
     try {
-      await api.updateExpectation(expectation.id, { status: newStatus });
+      if (!tracking.data) throw new Error('Wait for the monitoring schedule before changing tracking.');
+      if (isCancelled) await api.updateExpectation(expectation.id, { status: 'monitoring' });
+      await monitoring.configure(expectation.id, tracking.data, isCancelled || isPaused ? 'pending' : 'paused');
       setBusy(false);
       onUpdated();
       onClose();
@@ -122,17 +135,19 @@ export function ExpectationActionsModal({
           </p>
         )}
 
+        {tracking.error && <p role="alert">Tracking could not load. Try reopening this dialog.</p>}
+
         {/* Quick Lifecycle Action Buttons */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <button
             type="button"
             className={`button ${isPaused ? 'primary' : 'secondary'}`}
             onClick={handleTogglePause}
-            disabled={busy || isResolved}
+            disabled={busy || isResolved || !tracking.data}
             style={{ flex: 1, minWidth: '130px' }}
           >
             {isPaused ? <Play size={16} /> : <Pause size={16} />}
-            {isPaused ? 'Resume Monitoring' : 'Pause Expectation'}
+            {isCancelled ? 'Reopen and Resume Monitoring' : isPaused ? 'Resume Monitoring' : 'Pause Expectation'}
           </button>
 
           {!isResolved && (
@@ -152,13 +167,17 @@ export function ExpectationActionsModal({
             <button
               type="button"
               className="button secondary"
-              onClick={() => {
-                setBusy(true);
-                api.updateExpectation(expectation.id, { status: 'monitoring' })
-                  .then(() => { setBusy(false); onUpdated(); onClose(); })
-                  .catch((err) => { setBusy(false); setError(err instanceof Error ? err.message : 'Error'); });
+              onClick={async () => {
+                setBusy(true); setError(null);
+                try {
+                  if (!tracking.data) throw new Error('Wait for the monitoring schedule before reopening.');
+                  await api.updateExpectation(expectation.id, { status: 'monitoring' });
+                  await monitoring.configure(expectation.id, tracking.data, 'pending');
+                  onUpdated(); onClose();
+                } catch (err) { setError(err instanceof Error ? err.message : 'Could not reopen expectation.'); }
+                finally { setBusy(false); }
               }}
-              disabled={busy}
+              disabled={busy || !tracking.data}
               style={{ flex: 1, minWidth: '130px' }}
             >
               <Play size={16} />

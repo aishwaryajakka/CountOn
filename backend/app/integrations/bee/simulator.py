@@ -1,8 +1,8 @@
 """Bee context simulator: simulates wearable conversations, notes, and commitments without an iPhone or Bee CLI."""
 
-from datetime import datetime, timezone
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from app.integrations.bee.adapter import bee_event_to_evidence
@@ -21,7 +21,7 @@ def generate_bee_event(
 ) -> dict[str, Any]:
     """Generate a realistic Bee wearable context event without an iPhone or physical device."""
     at = start_time or datetime.now(timezone.utc)
-    ev_id = event_id or f"bee_sim_{uuid.uuid4().hex[:8]}"
+    ev_id = event_id or f"bee_sim_{uuid.uuid4().hex}"
 
     payload: dict[str, Any] = {
         "id": ev_id,
@@ -38,6 +38,7 @@ def generate_bee_event(
         payload["confirmed"] = confirmed
     if extra:
         payload.update(extra)
+    payload["simulated"] = True  # Extra fields cannot disguise a simulation.
 
     return payload
 

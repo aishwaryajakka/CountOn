@@ -1,10 +1,9 @@
 """Bee adapter: turns raw Bee wearable conversations and context events into CountOn EvidenceCreate."""
 
-from datetime import datetime, timezone
-import re
+from datetime import timezone
 from typing import Any
 
-from pydantic import TypeAdapter, AwareDatetime
+from pydantic import AwareDatetime, TypeAdapter
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -14,23 +13,12 @@ SUPPORTED_BEE_TYPES = {"conversation", "note", "commitment", "mention", "transcr
 
 
 def _infer_confirmation(raw: dict[str, Any]) -> bool | None:
-    """Infer confirmation status from explicit keys or summary text."""
-    if "confirmed" in raw:
-        return bool(raw["confirmed"])
-    if "value" in raw and isinstance(raw["value"], bool):
+    """Read only explicit boolean confirmation; prose remains context."""
+    if isinstance(raw.get("confirmed"), bool):
+        return raw["confirmed"]
+    if isinstance(raw.get("value"), bool):
         return raw["value"]
-
-    summary = str(raw.get("summary", "")).lower()
-    if not summary:
-        return None
-
-    # Check for cancellation / rescheduling keywords
-    if any(k in summary for k in ["cancelled", "canceled", "rescheduled", "cannot make it", "won't make it", "emergency", "postponed"]):
-        return False
-    # Check for confirmation keywords
-    if any(k in summary for k in ["confirmed", "will come", "on track", "arriving", "booked", "scheduled"]):
-        return True
-
+    # Arbitrary conversation text is context, not a verified boolean fact.
     return None
 
 
@@ -48,10 +36,10 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     if raw_time:
         try:
             observed_at = _parse_time.validate_python(raw_time).astimezone(timezone.utc)
-        except Exception:
-            observed_at = datetime.now(timezone.utc)
+        except ValueError:
+            return None  # Invalid source time must not become fresh evidence.
     else:
-        observed_at = datetime.now(timezone.utc)
+        return None  # Missing source time cannot establish freshness.
 
     speaker = raw.get("speaker")
     summary = raw.get("summary") or raw.get("text", "")
@@ -70,8 +58,8 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         val_dict["value"] = inferred
 
     return EvidenceCreate(
-        external_event_id=str(raw.get("id") or raw.get("event_id") or ""),
-        source="bee",
+        external_event_id=raw.get("id") or raw.get("event_id") or None,
+        source="bee_simulator" if raw.get("simulated") is True else "bee",
         metric=metric,
         value=val_dict,
         observed_at=observed_at,

@@ -1,9 +1,9 @@
 """Ring adapter: turns raw Ring events (doorbell, motion, package delivery) into CountOn EvidenceCreate."""
 
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any
 
-from pydantic import TypeAdapter, AwareDatetime
+from pydantic import AwareDatetime, TypeAdapter
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -30,10 +30,10 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     if raw_time:
         try:
             observed_at = _parse_time.validate_python(raw_time).astimezone(timezone.utc)
-        except Exception:
-            observed_at = datetime.now(timezone.utc)
+        except ValueError:
+            return None  # Invalid source time must not become fresh evidence.
     else:
-        observed_at = datetime.now(timezone.utc)
+        return None  # Missing source time cannot establish freshness.
 
     device = raw.get("device", "front_door")
     confidence = float(raw.get("confidence", 0.9))
@@ -43,7 +43,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         metric = raw.get("metric", "package_detected")
         return EvidenceCreate(
             external_event_id=event_id,
-            source="ring",
+            source="ring_simulator" if raw.get("simulated") is True else "ring",
             metric=metric,
             value={"value": True, "detected": True, "kind": kind, "device": device},
             observed_at=observed_at,
@@ -55,9 +55,9 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         metric = raw.get("metric", "package_detected")
         return EvidenceCreate(
             external_event_id=event_id,
-            source="ring",
+            source="ring_simulator" if raw.get("simulated") is True else "ring",
             metric=metric,
-            value={"value": False, "detected": False, "kind": kind, "device": device},
+            value={"detected": False, "kind": kind, "device": device},
             observed_at=observed_at,
             confidence=confidence,
             raw_data=raw,
@@ -67,7 +67,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         metric = raw.get("metric", "doorbell_pressed")
         return EvidenceCreate(
             external_event_id=event_id,
-            source="ring",
+            source="ring_simulator" if raw.get("simulated") is True else "ring",
             metric=metric,
             value={"value": True, "event": "doorbell_ding", "kind": kind, "device": device},
             observed_at=observed_at,
@@ -79,7 +79,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         metric = raw.get("metric", "motion_detected")
         return EvidenceCreate(
             external_event_id=event_id,
-            source="ring",
+            source="ring_simulator" if raw.get("simulated") is True else "ring",
             metric=metric,
             value={"value": True, "event": "motion_detected", "kind": kind, "device": device},
             observed_at=observed_at,

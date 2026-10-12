@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Bell,
@@ -10,7 +10,6 @@ import {
   Sparkles,
   FlaskConical,
   ArrowRight,
-  Radio,
 } from 'lucide-react';
 import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
@@ -27,12 +26,13 @@ import {
   ringEventToEvidence,
   generateBeeEvent,
   beeEventToEvidence,
+  simulatorTarget,
 } from '@/lib/simulators';
 
 export default function Dashboard() {
   const board = useBoard();
   const { firstName } = useIdentity();
-  const rows = board.data ?? [];
+  const rows = useMemo(() => board.data ?? [], [board.data]);
   const counts = summary(rows);
 
   const [managingExp, setManagingExp] = useState<Expectation | null>(null);
@@ -40,14 +40,16 @@ export default function Dashboard() {
   const [simMessage, setSimMessage] = useState<string | null>(null);
   const [simBusy, setSimBusy] = useState(false);
 
+  const reloadBoard = board.reload;
+
   // Auto-refresh poll every 8 seconds for real-time MATCH, UNKNOWN, MISMATCH updates
   useEffect(() => {
     const timer = setInterval(() => {
-      board.reload();
+      reloadBoard();
       setLastUpdated(new Date());
     }, 8000);
     return () => clearInterval(timer);
-  }, [board]);
+  }, [reloadBoard]);
 
   const attention = rows.filter(
     (row) => getExpectationPresentationStatus(row.expectation, row.latest) === 'attention'
@@ -68,13 +70,7 @@ export default function Dashboard() {
       if (!rows.length) return [];
       const sampled = rows.slice(0, 6);
       const results = await Promise.all(
-        sampled.map(async (row) => {
-          try {
-            return await api.evidence(row.expectation.id, signal);
-          } catch {
-            return [];
-          }
-        })
+        sampled.map(row => api.evidence(row.expectation.id, signal))
       );
       return results.flat();
     },
@@ -89,42 +85,18 @@ export default function Dashboard() {
 
     try {
       if (scenario === 'ring_delivery' || scenario === 'ring_missing') {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'delivered' ||
-            r.expectation.metric === 'package_detected' ||
-            r.expectation.claim.toLowerCase().includes('package')
-        ) ?? rows[0];
-
-        if (!targetRow) {
-          setSimMessage('No expectation found to attach Ring evidence to.');
-          return;
-        }
+        const target = simulatorTarget(rows, 'ring');
 
         const kind = scenario === 'ring_delivery' ? 'package_detected' : 'package_not_detected';
         const raw = generateRingEvent(kind, {
-          metric: targetRow.expectation.metric ?? 'package_detected',
+          metric: target.metric ?? 'package_detected',
         });
         const ev = ringEventToEvidence(raw);
-        await api.addEvidence(targetRow.expectation.id, ev);
-        await api.evaluate(targetRow.expectation.id);
-        setSimMessage(
-          scenario === 'ring_delivery'
-            ? 'Ring package delivery simulated -> Evaluated as MATCH'
-            : 'Ring package missing simulated -> Evaluated as MISMATCH'
-        );
+        await api.addEvidence(target.id, ev);
+        const evaluation = await api.evaluate(target.id, `simulation:${ev.external_event_id}`);
+        setSimMessage(`SIMULATED Ring event · Backend evaluation: ${evaluation.result}`);
       } else {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'appointment_confirmed' ||
-            r.expectation.claim.toLowerCase().includes('plumber') ||
-            r.expectation.claim.toLowerCase().includes('landlord')
-        ) ?? rows[0];
-
-        if (!targetRow) {
-          setSimMessage('No expectation found to attach Bee context to.');
-          return;
-        }
+        const target = simulatorTarget(rows, 'bee');
 
         const isConfirm = scenario === 'bee_confirm';
         const raw = generateBeeEvent({
@@ -132,17 +104,13 @@ export default function Dashboard() {
           summary: isConfirm
             ? 'Spoke with landlord: Plumber confirmed for Friday 10:00 AM.'
             : 'Spoke with landlord: Plumber cancelled Friday due to an emergency.',
-          metric: targetRow.expectation.metric ?? 'appointment_confirmed',
+          metric: target.metric ?? 'appointment_confirmed',
           confirmed: isConfirm,
         });
         const ev = beeEventToEvidence(raw);
-        await api.addEvidence(targetRow.expectation.id, ev);
-        await api.evaluate(targetRow.expectation.id);
-        setSimMessage(
-          isConfirm
-            ? 'Bee context simulated: Plumber confirmed -> Evaluated as MATCH'
-            : 'Bee context simulated: Plumber cancelled -> Evaluated as MISMATCH'
-        );
+        await api.addEvidence(target.id, ev);
+        const evaluation = await api.evaluate(target.id, `simulation:${ev.external_event_id}`);
+        setSimMessage(`SIMULATED Bee event · Backend evaluation: ${evaluation.result}`);
       }
 
       board.reload();
@@ -218,7 +186,7 @@ export default function Dashboard() {
               boxShadow: '0 0 0 2px rgba(22, 163, 74, 0.2)',
             }}
           />
-          <strong style={{ color: '#0f172a' }}>Real-time updates active</strong>
+          <strong style={{ color: '#0f172a' }}>Updates every 8 seconds</strong>
           <span>· Watching evaluations and evidence</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -331,7 +299,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FlaskConical size={18} color="var(--primary, #2563eb)" />
                 <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Simulator Quick Actions</h3>
-                <span className="caption">Test Ring & Bee context without physical devices</span>
+                <span className="caption">SIMULATED evidence · live Ring/Bee connections unavailable</span>
               </div>
               <Link href="/demos" className="text-link" style={{ fontSize: '0.85rem' }}>
                 Full interactive demos <ArrowRight size={14} />
@@ -345,7 +313,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Ring: Package Delivered (MATCH)
+                Ring: Package Detected · SIMULATED
               </button>
               <button
                 className="button ghost"
@@ -353,7 +321,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Ring: Package Missing (MISMATCH)
+                Ring: No Package Detected · SIMULATED
               </button>
               <button
                 className="button secondary"
@@ -361,7 +329,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Bee: Plumber Confirmed (MATCH)
+                Bee: Plumber Confirmed · SIMULATED
               </button>
               <button
                 className="button ghost"
@@ -369,7 +337,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Bee: Plumber Cancelled (MISMATCH)
+                Bee: Plumber Cancelled · SIMULATED
               </button>
             </div>
           </section>
