@@ -7,9 +7,10 @@ from uuid import uuid4
 # Ensure backend directory is in path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db.models.expectation import Expectation, ExpectationType
+from app.db.models.expectation import Expectation, ExpectationType, ComparisonType
 from app.db.models.evidence import Evidence
 from app.evaluators.boolean import evaluate as evaluate_boolean
+from app.evaluators.numeric import evaluate as evaluate_numeric
 from app.evaluators.base import EvaluationResult
 from app.integrations.ring.adapter import ring_event_to_evidence
 from app.integrations.ring.simulator import (
@@ -123,6 +124,85 @@ def test_bee_document_commitment():
     assert "Sarah" in ev_create.value["speaker"]
 
 
+def test_utility_bill_within_tolerance_evaluates_to_match():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    # $148.00 exceeds $142.10 baseline by $5.90, but deviation is 4.15% which is within the 5% tolerance
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 148.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MATCH
+    assert output.reasoning["reason"] == "deviation_below_materiality_threshold"
+    assert output.observed["value"] == 148.00
+
+
+def test_utility_bill_exceeding_tolerance_evaluates_to_mismatch():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    # $162.00 exceeds baseline by $19.90, deviation 14.0% > 5% tolerance
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 162.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MISMATCH
+    assert output.reasoning["reason"] == "observed_value_failed_comparison"
+    assert output.observed["value"] == 162.00
+
+
+def test_utility_bill_below_baseline_evaluates_to_match():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 130.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MATCH
+    assert output.reasoning["reason"] == "comparison_satisfied"
+
+
 if __name__ == "__main__":
     test_ring_package_delivery_matches()
     print("PASS: test_ring_package_delivery_matches")
@@ -136,5 +216,11 @@ if __name__ == "__main__":
     print("PASS: test_bee_conversation_plumber_cancelled")
     test_bee_document_commitment()
     print("PASS: test_bee_document_commitment")
+    test_utility_bill_within_tolerance_evaluates_to_match()
+    print("PASS: test_utility_bill_within_tolerance_evaluates_to_match")
+    test_utility_bill_exceeding_tolerance_evaluates_to_mismatch()
+    print("PASS: test_utility_bill_exceeding_tolerance_evaluates_to_mismatch")
+    test_utility_bill_below_baseline_evaluates_to_match()
+    print("PASS: test_utility_bill_below_baseline_evaluates_to_match")
     print("\nALL ADAPTER & SIMULATOR TESTS PASSED!")
 

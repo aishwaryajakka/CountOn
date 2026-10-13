@@ -2,13 +2,14 @@
 
 import { use, useCallback, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Edit3, FlaskConical, Link2, Pause, Play, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, FlaskConical, Link2, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui';
 import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline } from '@/components/expectation';
 import { displayTitle, getExpectationPresentationStatus, humanize } from '@/lib/presentation';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
+import type { EvidenceCreate } from '@/lib/types';
 import {
   generateRingEvent,
   ringEventToEvidence,
@@ -42,15 +43,16 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
     const exp = state.data.expectation;
 
     try {
-      let evidencePayload;
+      let label = '';
+      let evidencePayload: EvidenceCreate;
       if (type === 'ring_match') {
         const raw = generateRingEvent('package_detected', { metric: exp.metric ?? 'package_detected' });
         evidencePayload = ringEventToEvidence(raw);
-        setSimMessage('Simulated Ring package delivery (MATCH)');
+        label = 'Ring package delivery event';
       } else if (type === 'ring_mismatch') {
         const raw = generateRingEvent('package_not_detected', { metric: exp.metric ?? 'package_detected' });
         evidencePayload = ringEventToEvidence(raw);
-        setSimMessage('Simulated Ring no package present (MISMATCH)');
+        label = 'Ring no package detected event';
       } else if (type === 'bee_confirm') {
         const raw = generateBeeEvent({
           speaker: 'Landlord',
@@ -59,7 +61,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
           confirmed: true,
         });
         evidencePayload = beeEventToEvidence(raw);
-        setSimMessage('Simulated Bee conversation confirmation (MATCH)');
+        label = 'Bee plumber confirmed conversation';
       } else if (type === 'bee_cancel') {
         const raw = generateBeeEvent({
           speaker: 'Landlord',
@@ -68,17 +70,18 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
           confirmed: false,
         });
         evidencePayload = beeEventToEvidence(raw);
-        setSimMessage('Simulated Bee conversation cancellation (MISMATCH)');
+        label = 'Bee plumber cancelled conversation';
       } else if (type === 'utility_high') {
         evidencePayload = createUtilityBillEvidence(162);
-        setSimMessage('Simulated utility bill of $162.00 (MISMATCH)');
+        label = 'Utility bill of $162.00';
       } else {
         evidencePayload = createUtilityBillEvidence(130);
-        setSimMessage('Simulated utility bill of $130.00 (MATCH)');
+        label = 'Utility bill of $130.00';
       }
 
       await api.addEvidence(exp.id, evidencePayload);
-      await api.evaluate(exp.id);
+      const evalResult = await api.evaluate(exp.id);
+      setSimMessage(`${label} ingested. Backend evaluated expectation as ${evalResult.result}!`);
       state.reload();
     } catch (err) {
       setSimMessage(err instanceof Error ? `Simulation error: ${err.message}` : 'Failed to simulate');

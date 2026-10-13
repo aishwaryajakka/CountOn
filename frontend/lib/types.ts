@@ -56,6 +56,24 @@ export interface Notification {
   message: string; metadata: JsonObject; sent_at: string | null; created_at: string;
 }
 
+export interface IntegrationCreate {
+  provider: 'google' | 'microsoft' | 'ring' | 'bee' | 'utility' | 'delivery';
+  connection_type: 'email' | 'calendar' | 'camera' | 'wearable' | 'utility' | 'delivery';
+  external_account_id?: string | null;
+  display_name?: string | null;
+  status?: 'pending' | 'connected' | 'disconnected' | 'error';
+  scopes?: string[];
+  metadata?: { mock?: boolean; demo?: boolean; demo_tag?: string | null; account_kind?: 'personal' | 'work' | 'family' | null };
+}
+
+export interface IntegrationUpdate {
+  display_name?: string | null;
+  external_account_id?: string | null;
+  status?: 'pending' | 'connected' | 'disconnected' | 'error';
+  scopes?: string[];
+  metadata?: { mock?: boolean; demo?: boolean; demo_tag?: string | null; account_kind?: 'personal' | 'work' | 'family' | null };
+}
+
 export interface Integration {
   id: string; user_id: string; provider: 'google' | 'microsoft' | 'ring' | 'bee' | 'utility' | 'delivery';
   connection_type: 'email' | 'calendar' | 'camera' | 'wearable' | 'utility' | 'delivery';

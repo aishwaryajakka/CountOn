@@ -84,6 +84,9 @@ export function createApiClient(deps: Dependencies) {
     notifications: (signal?: AbortSignal) => all<Notification>('/notifications', signal),
     updateNotification: (id: string, status: 'read' | 'dismissed') => request<Notification>(`/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     integrations: (signal?: AbortSignal) => all<Integration>('/integrations', signal),
+    createIntegration: (payload: import('./types').IntegrationCreate) => request<Integration>('/integrations', { method: 'POST', body: JSON.stringify(payload) }),
+    updateIntegration: (id: string, payload: import('./types').IntegrationUpdate) => request<Integration>(`/integrations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteIntegration: (id: string) => request<void>(`/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     async board(signal?: AbortSignal): Promise<WatchedExpectation[]> {
       const expectations = await all<Expectation>('/expectations', signal);
       const rows: WatchedExpectation[] = [];

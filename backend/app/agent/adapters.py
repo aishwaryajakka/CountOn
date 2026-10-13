@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Protocol
 from urllib.parse import urlsplit
 
-import httpx2
+import httpx
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel, SecretStr, ValidationError
@@ -181,14 +181,14 @@ class StreamableMcpAdapter(CountOnMcpAdapter):
         ):
             raise CapabilityError(FailureCode.UNAVAILABLE)
 
-        async def check_status(response: httpx2.Response) -> None:
+        async def check_status(response: httpx.Response) -> None:
             if response.status_code in (401, 403):
                 raise CapabilityError(FailureCode.UNAUTHORIZED)
             if response.is_redirect:
                 raise CapabilityError(FailureCode.UNAVAILABLE)
 
         async with (
-            httpx2.AsyncClient(
+            httpx.AsyncClient(
                 headers={"Authorization": "Bearer " + self._token.get_secret_value()},
                 follow_redirects=False,
                 timeout=180,

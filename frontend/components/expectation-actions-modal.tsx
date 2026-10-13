@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Check, Edit3, Pause, Play, Trash2, X, AlertTriangle } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
+import { Check, Pause, Play, X } from 'lucide-react';
+import { api } from '@/lib/api';
 import type { Comparison, Expectation, ExpectationStatus, ExpectationUpdate } from '@/lib/types';
 import { comparisonLabels } from '@/lib/presentation';
 

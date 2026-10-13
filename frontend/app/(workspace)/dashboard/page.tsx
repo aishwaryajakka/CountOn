@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Bell,
@@ -10,13 +10,13 @@ import {
   Sparkles,
   FlaskConical,
   ArrowRight,
-  Radio,
 } from 'lucide-react';
 import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
 import { AttentionCard, ExpectationCard, HealthyCard } from '@/components/expectation';
 import { EvidenceTimeline } from '@/components/evidence-timeline';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
+import { AiRecommendations } from '@/components/ai-recommendations';
 import { Badge, EmptyState, ErrorState, IconBox, Loading, NewExpectationLink, PageHeader, QuietNote } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Evidence, Expectation } from '@/lib/types';
@@ -32,7 +32,7 @@ import {
 export default function Dashboard() {
   const board = useBoard();
   const { firstName } = useIdentity();
-  const rows = board.data ?? [];
+  const rows = useMemo(() => board.data ?? [], [board.data]);
   const counts = summary(rows);
 
   const [managingExp, setManagingExp] = useState<Expectation | null>(null);
@@ -62,13 +62,12 @@ export default function Dashboard() {
   );
   const priorityEvidence = useResource(loadPriorityEvidence);
 
-  // Load multi-source evidence across active expectations for the Evidence Timeline
+  // Load multi-source evidence across ALL active expectations for the complete Evidence Timeline
   const loadTimelineEvidence = useCallback(
     async (signal: AbortSignal): Promise<Evidence[]> => {
       if (!rows.length) return [];
-      const sampled = rows.slice(0, 6);
       const results = await Promise.all(
-        sampled.map(async (row) => {
+        rows.map(async (row) => {
           try {
             return await api.evidence(row.expectation.id, signal);
           } catch {
@@ -93,11 +92,12 @@ export default function Dashboard() {
           (r) =>
             r.expectation.metric === 'delivered' ||
             r.expectation.metric === 'package_detected' ||
-            r.expectation.claim.toLowerCase().includes('package')
-        ) ?? rows[0];
+            r.expectation.claim.toLowerCase().includes('package') ||
+            r.expectation.claim.toLowerCase().includes('delivery')
+        );
 
         if (!targetRow) {
-          setSimMessage('No expectation found to attach Ring evidence to.');
+          setSimMessage('No package delivery expectation found. Create a package expectation first to test Ring simulation.');
           return;
         }
 
@@ -107,22 +107,21 @@ export default function Dashboard() {
         });
         const ev = ringEventToEvidence(raw);
         await api.addEvidence(targetRow.expectation.id, ev);
-        await api.evaluate(targetRow.expectation.id);
+        const evalResult = await api.evaluate(targetRow.expectation.id);
         setSimMessage(
-          scenario === 'ring_delivery'
-            ? 'Ring package delivery simulated -> Evaluated as MATCH'
-            : 'Ring package missing simulated -> Evaluated as MISMATCH'
+          `Ring simulated event (${kind}) sent -> Backend evaluated expectation as ${evalResult.result}`
         );
       } else {
         const targetRow = rows.find(
           (r) =>
             r.expectation.metric === 'appointment_confirmed' ||
             r.expectation.claim.toLowerCase().includes('plumber') ||
+            r.expectation.claim.toLowerCase().includes('appointment') ||
             r.expectation.claim.toLowerCase().includes('landlord')
-        ) ?? rows[0];
+        );
 
         if (!targetRow) {
-          setSimMessage('No expectation found to attach Bee context to.');
+          setSimMessage('No plumber or appointment expectation found. Create an appointment expectation first to test Bee simulation.');
           return;
         }
 
@@ -137,11 +136,9 @@ export default function Dashboard() {
         });
         const ev = beeEventToEvidence(raw);
         await api.addEvidence(targetRow.expectation.id, ev);
-        await api.evaluate(targetRow.expectation.id);
+        const evalResult = await api.evaluate(targetRow.expectation.id);
         setSimMessage(
-          isConfirm
-            ? 'Bee context simulated: Plumber confirmed -> Evaluated as MATCH'
-            : 'Bee context simulated: Plumber cancelled -> Evaluated as MISMATCH'
+          `Bee simulated context (${isConfirm ? 'confirmed' : 'cancelled'}) sent -> Backend evaluated expectation as ${evalResult.result}`
         );
       }
 
@@ -307,6 +304,9 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+
+          {/* AI Recommended Expectations Review */}
+          <AiRecommendations onAccepted={() => board.reload()} />
 
           {/* Quick Simulation Bar */}
           <section
