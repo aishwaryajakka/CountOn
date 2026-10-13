@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Clock3, Home, Link2, ListChecks, LogOut, Menu, Settings, Sparkles, X } from 'lucide-react';
+import { Bell, Clock3, Home, Link2, ListChecks, LogOut, Menu, MessageCircle, Settings, Sparkles, X } from 'lucide-react';
 import { useAuth, useIdentity } from './auth-provider';
 import { getSupabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
@@ -18,6 +18,7 @@ const navigation = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/expectations', label: 'Expectations', icon: ListChecks },
   { href: '/demos', label: 'Interactive Demos', icon: Sparkles },
+  { href: '/alexa', label: 'Alexa+ MCP Demo', icon: MessageCircle },
   { href: '/integrations', label: 'Connected Accounts', icon: Link2 },
   { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/activity', label: 'Activity', icon: Clock3 },

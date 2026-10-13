@@ -1,7 +1,26 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, createApiClient } from '@/lib/api';
 import { expectation } from './fixtures';
 describe('FastAPI client', () => {
+  beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  it('logs network diagnostics without credentials, query values or upstream details', async () => {
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), baseUrl: 'https://api.test', fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError('private provider detail')) });
+    await expect(api.request('/expectations?private=value')).rejects.toMatchObject({ status: 0 });
+    expect(console.warn).toHaveBeenCalledWith('CountOn API request failed', expect.objectContaining({ failure: 'network', status: 0, origin: 'https://api.test', route: '/api/v1/expectations', method: 'GET' }));
+    const logged = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(logged).not.toContain('private-token');
+    expect(logged).not.toContain('private=value');
+    expect(logged).not.toContain('private provider detail');
+  });
+  it('logs HTTP status and request reference without response or request payloads', async () => {
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response('{"error":{"message":"private SQL detail"}}', { status: 503, headers: { 'X-Request-ID': 'support-reference' } })) });
+    await expect(api.request('/expectations', { method: 'POST', body: '{"claim":"private claim"}' })).rejects.toMatchObject({ status: 503 });
+    expect(console.warn).toHaveBeenCalledWith('CountOn API request failed', expect.objectContaining({ failure: 'http', status: 503, requestId: 'support-reference', method: 'POST' }));
+    const logged = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(logged).not.toContain('private SQL detail');
+    expect(logged).not.toContain('private claim');
+    expect(logged).not.toContain('private-token');
+  });
   it('explains rate limits without silently retrying requests', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 429 }));
     const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });

@@ -1,2 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.coverage
+htmlcov/
+
+# Local env / secrets
 .env
 .env.*
+# Retain the frontend's broader local-env rule.
+frontend/.env*
+# Credential-free example/sample templates remain trackable.
+!.env.example
+!*.env.example
+!.env.sample
+!*.env.sample
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# Test/build output
+coverage/
+test-results/
+playwright-report/
+.nyc_output/
+
+# OS / editor
+.DS_Store
+__MACOSX/
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
