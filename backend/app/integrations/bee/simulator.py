@@ -1,8 +1,8 @@
 """Bee context simulator: simulates wearable conversations, notes, and commitments without an iPhone or Bee CLI."""
 
-from datetime import datetime, timezone
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from app.integrations.bee.adapter import bee_event_to_evidence

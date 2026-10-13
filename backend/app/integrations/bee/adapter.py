@@ -1,10 +1,9 @@
 """Bee adapter: turns raw Bee wearable conversations and context events into CountOn EvidenceCreate."""
 
 from datetime import datetime, timezone
-import re
 from typing import Any
 
-from pydantic import TypeAdapter, AwareDatetime
+from pydantic import AwareDatetime, TypeAdapter, ValidationError
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -48,7 +47,7 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     if raw_time:
         try:
             observed_at = _parse_time.validate_python(raw_time).astimezone(timezone.utc)
-        except Exception:
+        except (ValueError, TypeError, ValidationError):
             observed_at = datetime.now(timezone.utc)
     else:
         observed_at = datetime.now(timezone.utc)

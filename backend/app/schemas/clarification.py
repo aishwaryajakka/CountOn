@@ -84,7 +84,7 @@ class PartialInterpretation(BaseModel):
         result: dict[str, JsonValue] = {}
         for name, value in values.items():
             field = ExpectationCreate.model_fields[name]
-            adapter: TypeAdapter[Any] = TypeAdapter(Annotated[field.annotation, field])
+            adapter: TypeAdapter[Any] = TypeAdapter(Annotated[field.annotation, field])  # type: ignore[arg-type]
             validated = adapter.validate_json(json.dumps(value), strict=True)
             result[name] = adapter.dump_python(validated, mode="json")
         return result
