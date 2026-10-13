@@ -228,7 +228,7 @@ def test_abandoned_leases_exhaust_attempts(scenario):
     ],
 )
 def test_evidence_quality_unknown(scenario, kind, reason):
-    sessions, (_, eid, _, now) = scenario
+    sessions, (_, eid, jid, now) = scenario
     if kind == "stale":
         with sessions() as db:
             db.get(Expectation, eid).created_at = now - timedelta(days=3)
@@ -249,6 +249,8 @@ def test_evidence_quality_unknown(scenario, kind, reason):
     with sessions() as db:
         row = db.scalar(select(Evaluation).where(Evaluation.expectation_id == eid))
         assert row.result.value == "UNKNOWN" and row.reasoning["reason"] == reason
+        assert db.get(Expectation, eid).status.value == "monitoring"
+        assert db.get(MonitoringJob, jid).status == "pending"
     assert counts(sessions, eid)[2] == 0
 
 

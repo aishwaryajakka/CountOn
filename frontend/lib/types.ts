@@ -62,7 +62,19 @@ export interface Integration {
   external_account_id: string | null; display_name: string | null;
   status: 'pending' | 'connected' | 'disconnected' | 'error'; scopes: string[];
   metadata: { mock: boolean; demo: boolean; demo_tag: string | null; account_kind: string | null };
-  last_synced_at: string | null; created_at: string; updated_at: string; credential_state: 'not_configured' | 'configured';
+  last_synced_at: string | null; connected_at: string | null; revoked_at: string | null;
+  failure_status: string | null; created_at: string; updated_at: string; credential_state: 'not_configured' | 'configured';
+}
+
+export interface AuditEvent {
+  audit_event_id: string; counton_user_id: string; expectation_id: string | null;
+  event_type: string; occurred_at: string; source_provider: string | null;
+  source_type: string | null; source_provenance: string | null; source_reference: string | null;
+  evidence_id: string | null; evaluation_id: string | null; result_status: Result | null;
+  action_taken: string; actor_type: 'USER' | 'SYSTEM' | 'PROVIDER';
+  action_metadata: JsonObject; request_id: string | null;
+  expectation: { id: string; claim: string; status: string } | null;
+  evidence: { id: string; source: string; metric: string | null; value: JsonObject; unit: string | null; observed_at: string } | null;
 }
 
 export interface WatchedExpectation { expectation: Expectation; latest: Evaluation | null }
@@ -86,4 +98,20 @@ export interface BeeSimEvent {
   start_time: string;
   metric?: string;
   confirmed?: boolean;
+}
+
+export interface BeeCliStatus {
+  simulator_available: true;
+  state: 'not_paired' | 'paired' | 'import_enabled' | 'disconnected' | 'error';
+  connection_id: string | null;
+  cli_version: string | null;
+  last_sync_at: string | null;
+  last_error: string | null;
+  pending_candidates: number;
+}
+
+export interface BeeImportCandidate {
+  id: string; connection_id: string; external_id: string;
+  category: 'fact' | 'todo' | 'conversation' | 'journal'; summary: string;
+  observed_at: string; confidence: number; status: 'pending' | 'imported' | 'rejected';
 }

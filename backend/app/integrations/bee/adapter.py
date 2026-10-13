@@ -13,12 +13,9 @@ SUPPORTED_BEE_TYPES = {"conversation", "note", "commitment", "mention", "transcr
 
 
 def _infer_confirmation(raw: dict[str, Any]) -> bool | None:
-    """Read only explicit boolean confirmation; prose remains context."""
-    if isinstance(raw.get("confirmed"), bool):
-        return raw["confirmed"]
-    if isinstance(raw.get("value"), bool):
+    """Read only an explicitly observed outcome; a confirmed promise is context."""
+    if raw.get("outcome_observed") is True and isinstance(raw.get("value"), bool):
         return raw["value"]
-    # Arbitrary conversation text is context, not a verified boolean fact.
     return None
 
 
@@ -52,10 +49,15 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         "summary": summary,
         "type": event_type,
     }
+    if isinstance(raw.get("confirmed"), bool):
+        val_dict["commitment_confirmed"] = raw["confirmed"]
+        val_dict["context_only"] = True
 
     inferred = _infer_confirmation(raw)
     if inferred is not None:
         val_dict["value"] = inferred
+
+    raw_data = {**raw, "provenance": "SIMULATED_BEE"} if raw.get("simulated") is True else raw
 
     return EvidenceCreate(
         external_event_id=raw.get("id") or raw.get("event_id") or None,
@@ -64,5 +66,5 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
         value=val_dict,
         observed_at=observed_at,
         confidence=confidence,
-        raw_data=raw,
+        raw_data=raw_data,
     )

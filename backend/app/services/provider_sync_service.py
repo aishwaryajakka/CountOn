@@ -22,6 +22,7 @@ from app.db.models import (
 from app.db.models.integration import IntegrationCredential, ProviderOAuthState
 from app.integrations.accounts import account_oauth
 from app.integrations.adapters import AccountAdapter
+from app.integrations.normalization import version
 from app.integrations.provider import ProviderError
 from app.repositories import audit
 from app.services import integration_service
@@ -150,7 +151,18 @@ def bind(db, expectation_id, user_id, payload, *, commit=True):
         datetime.now(timezone.utc),
         uuid4(),
     )
-    audit.record(db, user_id, "expectation", expectation_id, "provider.source_bound")
+    audit.record(
+        db, user_id, "expectation", expectation_id, "provider.source_bound",
+        expectation_id, {}, actor_type="USER",
+        source_provider=connection.provider.upper(),
+        source_type=connection.connection_type.upper(),
+        source_provenance="AUTHORIZED_CONNECTION",
+        source_reference=connection.external_account_id,
+        idempotency_key=(
+            f"SOURCE_AUTHORIZED:{expectation_id}:{item.id}:"
+            f"{version(rule.model_dump(mode='json'))[:24]}"
+        ),
+    )
     db.flush()
     # A full account binding replaces the legacy per-job Mail.ReadBasic fetch.
     for job in db.scalars(
@@ -217,6 +229,8 @@ def disconnect(db, settings, connection_id, user_id, payload):
         [],
         None,
     )
+    connection.revoked_at = datetime.now(timezone.utc)
+    connection.failure_status = None
     for model in (ProviderOAuthState, IntegrationCredential, ProviderSyncState):
         db.execute(delete(model).where(model.connection_id == connection.id))
     if payload.erase_evidence:
@@ -228,7 +242,14 @@ def disconnect(db, settings, connection_id, user_id, payload):
                 ),
             )
         )
-    audit.record(db, user_id, "integration", connection.id, "provider.disconnected")
+    audit.record(
+        db, user_id, "integration", connection.id, "provider.disconnected",
+        actor_type="USER", source_provider=connection.provider.upper(),
+        source_type=connection.connection_type.upper(),
+        source_provenance="OFFICIAL_OAUTH",
+        source_reference=connection.external_account_id,
+        idempotency_key=f"SOURCE_DISCONNECTED:{connection.id}:{connection.revoked_at.isoformat()}",
+    )
     db.commit()
     for provider, external_id, secret in registrations:
         try:

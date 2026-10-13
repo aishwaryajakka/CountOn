@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase';
-import type { Evidence, EvidenceCreate, Evaluation, Expectation, ExpectationCreate, ExpectationUpdate, Integration, Notification, WatchedExpectation } from './types';
+import type { AuditEvent, BeeSimEvent, Evidence, EvidenceCreate, Evaluation, Expectation, ExpectationCreate, ExpectationUpdate, Integration, Notification, RingSimEvent, WatchedExpectation } from './types';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public requestId?: string) { super(message); this.name = 'ApiError'; }
@@ -88,9 +88,20 @@ export function createApiClient(deps: Dependencies) {
     deleteExpectation: (id: string) => request<void>(`/expectations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     addEvidence: (id: string, payload: EvidenceCreate) => request<Evidence>(`/expectations/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(payload) }),
     evaluate: (id: string, idempotencyKey?: string) => request<Evaluation>(`/expectations/${encodeURIComponent(id)}/evaluate`, { method: 'POST', ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}) }),
+    simulateRing: (id: string, event: RingSimEvent) => request<{ evidence: Evidence; evaluation: Evaluation }>(`/simulators/ring/expectations/${encodeURIComponent(id)}/events`, { method: 'POST', body: JSON.stringify(event) }),
+    simulateBee: (id: string, event: BeeSimEvent) => request<{ evidence: Evidence; evaluation: Evaluation }>(`/simulators/bee/expectations/${encodeURIComponent(id)}/events`, { method: 'POST', body: JSON.stringify(event) }),
     notifications: (signal?: AbortSignal) => all<Notification>('/notifications', signal),
     updateNotification: (id: string, status: 'read' | 'dismissed') => request<Notification>(`/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     integrations: (signal?: AbortSignal) => all<Integration>('/integrations', signal),
+    auditEvents: (filters: { expectationId?: string; source?: string; result?: string; after?: string; before?: string } = {}, signal?: AbortSignal) => {
+      const query = new URLSearchParams();
+      if (filters.expectationId) query.set('expectation_id', filters.expectationId);
+      if (filters.source) query.set('source_provider', filters.source);
+      if (filters.result) query.set('result_status', filters.result);
+      if (filters.after) query.set('occurred_after', filters.after);
+      if (filters.before) query.set('occurred_before', filters.before);
+      return all<AuditEvent>(`/audit-events${query.size ? `?${query}` : ''}`, signal);
+    },
     async board(signal?: AbortSignal): Promise<WatchedExpectation[]> {
       const expectations = await all<Expectation>('/expectations', signal);
       const rows: WatchedExpectation[] = [];

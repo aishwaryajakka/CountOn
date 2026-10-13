@@ -19,6 +19,7 @@ from app.db.models import (
     Evidence,
     Expectation,
     ExpectationSourceBinding,
+    IntegrationConnection,
     ProviderSourceEvent,
     ProviderSyncState,
 )
@@ -26,6 +27,7 @@ from app.integrations.accounts import account_oauth
 from app.integrations.adapters import AccountAdapter
 from app.integrations.normalization import version
 from app.integrations.provider import ProviderError
+from app.repositories import audit
 from app.schemas.evidence import EvidenceCreate
 from app.schemas.provider_sync import SourceRule
 from app.services import evidence_service, integration_service
@@ -356,6 +358,16 @@ class SyncWorker:
                             stored.observed_at, stored.seen_round = now, item.round_id
                     self.publish(db, item, connection, oauth, now)
                     item.last_success_at, connection.last_synced_at = now, now
+                    connection.failure_status = None
+                    audit.record(
+                        db, item.user_id, "integration", connection.id,
+                        "provider.sync_completed", actor_type="PROVIDER",
+                        source_provider=connection.provider.upper(),
+                        source_type=connection.connection_type.upper(),
+                        source_provenance="OFFICIAL_API",
+                        source_reference=connection.external_account_id,
+                        idempotency_key=f"SYNC_COMPLETED:{item.id}:{item.round_id}",
+                    )
                     item.round_id = uuid4()
                     item.round_started_at = None
                 item.encrypted_checkpoint = oauth.encrypt(page.checkpoint, id)
@@ -438,6 +450,14 @@ class SyncWorker:
                 )
                 if item is not None and item.lease_token == lease:
                     item.last_error = safe.code
+                    connection = db.scalar(
+                        select(IntegrationConnection).where(
+                            IntegrationConnection.id == item.connection_id,
+                            IntegrationConnection.user_id == item.user_id,
+                        )
+                    )
+                    if connection is not None:
+                        connection.failure_status = safe.code
                     item.status = (
                         "auth_required"
                         if safe.code

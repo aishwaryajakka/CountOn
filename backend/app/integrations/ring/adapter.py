@@ -38,6 +38,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     device = raw.get("device", "front_door")
     confidence = float(raw.get("confidence", 0.9))
     event_id = raw.get("event_id") or raw.get("id")
+    raw_data = {**raw, "provenance": "SIMULATED_RING"} if raw.get("simulated") is True else raw
 
     if kind in PACKAGE_DETECTED_KINDS:
         metric = raw.get("metric", "package_detected")
@@ -48,7 +49,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
             value={"value": True, "detected": True, "kind": kind, "device": device},
             observed_at=observed_at,
             confidence=confidence,
-            raw_data=raw,
+            raw_data=raw_data,
         )
 
     if kind in PACKAGE_REMOVED_KINDS:
@@ -60,7 +61,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
             value={"detected": False, "kind": kind, "device": device},
             observed_at=observed_at,
             confidence=confidence,
-            raw_data=raw,
+            raw_data=raw_data,
         )
 
     if kind in DOORBELL_KINDS:
@@ -72,7 +73,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
             value={"value": True, "event": "doorbell_ding", "kind": kind, "device": device},
             observed_at=observed_at,
             confidence=confidence,
-            raw_data=raw,
+            raw_data=raw_data,
         )
 
     if kind in MOTION_KINDS:
@@ -84,7 +85,7 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
             value={"value": True, "event": "motion_detected", "kind": kind, "device": device},
             observed_at=observed_at,
             confidence=confidence,
-            raw_data=raw,
+            raw_data=raw_data,
         )
 
     return None

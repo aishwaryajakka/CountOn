@@ -436,10 +436,17 @@ class AccountOAuth(MicrosoftOAuth):
             tokens["account_id"],
             "connected",
         )
+        item.connected_at, item.revoked_at, item.failure_status = now, None, None
         item.__dict__["_credential_state"] = "configured"
         from app.repositories.audit import record
 
-        record(db, user_id, "integration", item.id, "provider.authorized")
+        record(
+            db, user_id, "integration", item.id, "provider.authorized",
+            actor_type="USER", source_provider=item.provider.upper(),
+            source_type=item.connection_type.upper(), source_provenance="OFFICIAL_OAUTH",
+            source_reference=item.external_account_id,
+            idempotency_key=f"SOURCE_AUTHORIZED:{item.id}:{digest}",
+        )
         db.commit()
         return item
 
@@ -477,6 +484,7 @@ class AccountOAuth(MicrosoftOAuth):
             except ProviderError as error:
                 if not error.retryable:
                     item.status = "error"
+                    item.failure_status = error.code
                     db.delete(stored)
                     db.commit()
                 raise

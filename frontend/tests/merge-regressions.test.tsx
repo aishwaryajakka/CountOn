@@ -8,7 +8,7 @@ import { expectation, evaluation } from './fixtures';
 const mocks = vi.hoisted(() => ({
   board: { data: null as WatchedExpectation[] | null, error: null as Error | null, loading: true, reload: vi.fn() },
   tracking: { get: vi.fn(), configure: vi.fn() },
-  api: { board: vi.fn(), expectation: vi.fn(), evidence: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), addEvidence: vi.fn(), evaluate: vi.fn(), updateExpectation: vi.fn() },
+  api: { board: vi.fn(), expectation: vi.fn(), evidence: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), auditEvents: vi.fn(), addEvidence: vi.fn(), evaluate: vi.fn(), simulateRing: vi.fn(), simulateBee: vi.fn(), updateExpectation: vi.fn() },
 }));
 vi.mock('@/lib/monitoring', () => ({ monitoring: mocks.tracking }));
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api: mocks.api }));
@@ -41,8 +41,11 @@ beforeEach(() => {
   mocks.api.evidence.mockResolvedValue([]);
   mocks.api.evaluations.mockResolvedValue([evaluation]);
   mocks.api.latest.mockResolvedValue(evaluation);
+  mocks.api.auditEvents.mockResolvedValue([]);
   mocks.api.addEvidence.mockResolvedValue({});
   mocks.api.evaluate.mockResolvedValue({ ...evaluation, result: 'UNKNOWN' });
+  mocks.api.simulateRing.mockResolvedValue({ evidence: {}, evaluation: { ...evaluation, result: 'UNKNOWN' } });
+  mocks.api.simulateBee.mockResolvedValue({ evidence: {}, evaluation: { ...evaluation, result: 'UNKNOWN' } });
   mocks.api.updateExpectation.mockResolvedValue(expectation);
   mocks.tracking.get.mockResolvedValue({ status: 'pending', interval_seconds: 3600 });
   mocks.tracking.configure.mockResolvedValue({ status: 'paused' });
@@ -75,13 +78,12 @@ it.each([['ring', ring, 'Ring Delivery Simulator', 'Send Ring Evidence'], ['bee'
     Object.assign(mocks.board, { loading: false, data: rows(exp) });
     render(<Demos />);
     await userEvent.click(screen.getByRole('button', { name: tab }));
-    expect(screen.getByText(/Live Ring and Bee account integrations are unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/Ring remains simulated/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: new RegExp(submit) }));
-    await waitFor(() => expect(mocks.api.evaluate).toHaveBeenCalledOnce());
-    const payload = mocks.api.addEvidence.mock.calls[0][1];
-    expect(mocks.api.addEvidence.mock.calls[0][0]).toBe(exp.id);
-    expect(payload).toMatchObject({ source: `${kind}_simulator`, raw_data: { simulated: true } });
-    expect(mocks.api.evaluate).toHaveBeenCalledWith(exp.id, `simulation:${payload.external_event_id}`);
+    const method = kind === 'ring' ? mocks.api.simulateRing : mocks.api.simulateBee;
+    await waitFor(() => expect(method).toHaveBeenCalledOnce());
+    expect(method.mock.calls[0][0]).toBe(exp.id);
+    expect(method.mock.calls[0][1]).toMatchObject({ simulated: true });
     expect(await screen.findByText(/Backend evaluation: UNKNOWN/)).toBeInTheDocument();
   }
 );
@@ -95,7 +97,7 @@ it('requires exact selection when multiple compatible expectations exist', async
   expect(submit).toBeDisabled();
   await userEvent.selectOptions(screen.getByLabelText('Expectation receiving SIMULATED evidence'), second.id);
   await userEvent.click(submit);
-  await waitFor(() => expect(mocks.api.addEvidence).toHaveBeenCalledWith(second.id, expect.any(Object)));
+  await waitFor(() => expect(mocks.api.simulateRing).toHaveBeenCalledWith(second.id, expect.any(Object)));
 });
 
 it('never attaches a quick simulator event to an unrelated first row', async () => {

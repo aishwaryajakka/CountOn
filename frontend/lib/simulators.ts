@@ -39,7 +39,7 @@ export function ringEventToEvidence(raw: RingSimEvent): EvidenceCreate {
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: { ...raw, simulated: true },
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
@@ -51,7 +51,7 @@ export function ringEventToEvidence(raw: RingSimEvent): EvidenceCreate {
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: { ...raw, simulated: true },
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
@@ -63,7 +63,7 @@ export function ringEventToEvidence(raw: RingSimEvent): EvidenceCreate {
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: { ...raw, simulated: true },
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
@@ -75,7 +75,7 @@ export function ringEventToEvidence(raw: RingSimEvent): EvidenceCreate {
     observed_at,
     confidence,
     external_event_id: raw.event_id,
-    raw_data: { ...raw, simulated: true },
+    raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
   };
 }
 
@@ -113,7 +113,8 @@ export function beeEventToEvidence(raw: BeeSimEvent): EvidenceCreate {
   };
 
   if (raw.confirmed !== undefined) {
-    valDict.value = raw.confirmed;
+    valDict.commitment_confirmed = raw.confirmed;
+    valDict.context_only = true;
   }
 
   return {
@@ -123,7 +124,7 @@ export function beeEventToEvidence(raw: BeeSimEvent): EvidenceCreate {
     observed_at,
     confidence: 0.85,
     external_event_id: raw.id,
-    raw_data: { ...raw, simulated: true },
+    raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_BEE' },
   };
 }
 

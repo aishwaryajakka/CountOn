@@ -14,6 +14,8 @@ import {
 import { getSupabase } from '@/lib/supabase';
 import { useAuth } from '@/components/auth-provider';
 import { Logo } from '@/components/ui';
+import { AmazonSignIn } from '@/components/amazon-sign-in';
+import { authMessage, callbackUrl } from '@/lib/auth/config';
 
 export default function Register() {
   const { session, loading, error: configError } = useAuth();
@@ -38,6 +40,7 @@ export default function Register() {
 
   async function signUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
 
     setError(null);
     setSuccess(null);
@@ -47,8 +50,8 @@ export default function Register() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters.');
       return;
     }
 
@@ -58,10 +61,11 @@ export default function Register() {
       const result = await getSupabase().auth.signUp({
         email: email.trim(),
         password,
+        options: { emailRedirectTo: callbackUrl() },
       });
 
       if (result.error) {
-        setError(result.error.message);
+        setError(authMessage(result.error, 'Signup could not be completed. Please try again later.'));
         setBusy(false);
         return;
       }
@@ -72,7 +76,7 @@ export default function Register() {
        */
       if (!result.data.session) {
         setSuccess(
-          'Account created! Please check your email to confirm your account.'
+          'If signup can proceed, check your email for a confirmation link. Existing accounts are preserved.'
         );
         setBusy(false);
         setPassword('');
@@ -299,6 +303,8 @@ export default function Register() {
                 <ArrowRight size={18} />
               </button>
             </form>
+
+            <AmazonSignIn />
 
             <div className="login-reassurance">
               <ShieldCheck size={17} />

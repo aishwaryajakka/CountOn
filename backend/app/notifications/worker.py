@@ -12,12 +12,14 @@ from sqlalchemy import or_, select
 from app.core.config import get_settings
 from app.core.observability import record
 from app.db.models import (
+    Evaluation,
     Expectation,
     Notification,
     NotificationDelivery,
     NotificationPreference,
 )
 from app.notifications.delivery import EmailChannel, decrypt, encrypt, ready_at
+from app.repositories import audit
 from app.services.notification_service import enabled
 
 logger = logging.getLogger(__name__)
@@ -166,6 +168,17 @@ class DeliveryWorker:
                 )
             else:
                 item.status, item.sent_at, item.last_error = "sent", self.now(), None
+                notification = db.get(Notification, item.notification_id)
+                if notification is not None:
+                    evaluation = db.get(Evaluation, notification.evaluation_id) if notification.evaluation_id else None
+                    audit.record(
+                        db, item.user_id, "notification", notification.id,
+                        "notification.sent", notification.expectation_id, {},
+                        actor_type="SYSTEM",
+                        evaluation_id=notification.evaluation_id,
+                        result_status=evaluation.result.value if evaluation else None,
+                        idempotency_key=f"NOTIFICATION_SENT:{item.id}",
+                    )
             item.lease_token = item.lease_expires_at = None
             db.commit()
         logger.info(

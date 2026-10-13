@@ -92,25 +92,27 @@ def test_bee_conversation_plumber_confirmed():
     _raw, ev_create = simulate_plumber_confirmed(metric="appointment_confirmed")
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
-    assert ev_create.value["value"] is True
+    assert ev_create.value["commitment_confirmed"] is True
+    assert "value" not in ev_create.value
     assert "Landlord" in ev_create.value["speaker"]
 
     expectation = _mock_expectation("appointment_confirmed")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MATCH
+    assert output.result == EvaluationResult.UNKNOWN
 
 
 def test_bee_conversation_plumber_cancelled():
     _raw, ev_create = simulate_plumber_cancelled(metric="appointment_confirmed")
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
-    assert ev_create.value["value"] is False
+    assert ev_create.value["commitment_confirmed"] is False
+    assert "value" not in ev_create.value
 
     expectation = _mock_expectation("appointment_confirmed")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MISMATCH
+    assert output.result == EvaluationResult.UNKNOWN
 
 
 def test_bee_document_commitment():
@@ -134,4 +136,3 @@ if __name__ == "__main__":
     test_bee_document_commitment()
     print("PASS: test_bee_document_commitment")
     print("\nALL ADAPTER & SIMULATOR TESTS PASSED!")
-

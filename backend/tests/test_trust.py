@@ -295,3 +295,22 @@ async def test_mismatch_receipt_audit_tracks_actual_allowed_and_denied_sources(
     ]
     assert len(denied) == 1 and denied[0]["source"] == "Ring"
     assert denied[0]["evidence_id"] not in metadata["evidence_ids"]
+    explanation_event = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.event_type == "EXPLANATION_GENERATED",
+            AuditEvent.expectation_id == row.id,
+        )
+    )
+    assert explanation_event is not None
+    assert explanation_event.evaluation_id == evaluation.id
+    assert explanation_event.result_status == "MISMATCH"
+    assert explanation_event.actor_type == "SYSTEM"
+    assert explanation_event.source_type == "GROUNDED_EXPLANATION"
+    assert explanation_event.source_provenance == "DETERMINISTIC_FALLBACK"
+    assert explanation_event.evidence_id in trust.evidence_ids
+    encoded = json.dumps(explanation_event.audit_metadata)
+    assert "electricity bill" not in encoded
+    assert all(
+        private not in encoded
+        for private in ("prompt", "transcript", "Authorization", "raw_data")
+    )

@@ -2,13 +2,14 @@
 
 from datetime import timedelta
 from typing import Protocol
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.exceptions import ResourceNotFoundError
-from app.db.models import Evaluation, Notification, NotificationPreference
+from app.db.models import Evaluation, Evidence, Notification, NotificationPreference
 from app.integrations.normalization import version
 from app.repositories import audit
 from app.repositories import notification as repository
@@ -25,6 +26,19 @@ class InAppChannel:
         return repository.create_mismatch(
             db, expectation, evaluation, dedupe_key=dedupe_key
         )
+
+
+def audit_context(db, evaluation):
+    raw = evaluation.reasoning.get("evidence_ids", []) if evaluation else []
+    if evaluation and not raw and evaluation.observed.get("evidence_id"):
+        raw = [evaluation.observed["evidence_id"]]
+    evidence = None
+    if raw:
+        try:
+            evidence = db.get(Evidence, UUID(str(raw[0])))
+        except (ValueError, TypeError):
+            pass
+    return evidence, audit.evidence_source(evidence) if evidence else {}
 
 
 def preference(db, user_id):
@@ -129,6 +143,7 @@ def for_evaluation(db, expectation, evaluation, *, dedupe_key=None):
             for k, v in expectation.compiler_metadata.items()
             if k in ("demo", "demo_tag")
         }
+        evidence, source = audit_context(db, evaluation)
         audit.record(
             db,
             expectation.user_id,
@@ -137,6 +152,12 @@ def for_evaluation(db, expectation, evaluation, *, dedupe_key=None):
             "notification.created",
             expectation.id,
             metadata,
+            actor_type="SYSTEM",
+            evidence_id=evidence.id if evidence else None,
+            evaluation_id=evaluation.id,
+            result_status=evaluation.result.value,
+            idempotency_key=f"NOTIFICATION_CREATED:{item.id}",
+            **source,
         )
         enqueue_email(db, item)
     return item if created else None
@@ -168,6 +189,7 @@ def notice(db, expectation, kind, message, identity, *, evaluation=None, metadat
         return None
     item = db.get(Notification, id)
     enqueue_email(db, item)
+    evidence, source = audit_context(db, evaluation)
     audit.record(
         db,
         expectation.user_id,
@@ -176,6 +198,12 @@ def notice(db, expectation, kind, message, identity, *, evaluation=None, metadat
         "notification.created",
         expectation.id,
         {},
+        actor_type="SYSTEM",
+        evidence_id=evidence.id if evidence else None,
+        evaluation_id=evaluation.id if evaluation else None,
+        result_status=evaluation.result.value if evaluation else None,
+        idempotency_key=f"NOTIFICATION_CREATED:{id}",
+        **source,
     )
     return item
 
@@ -268,18 +296,26 @@ def update(db, id, status, user_id):
         return item
     try:
         repository.update_status(db, item, status)
+        evaluation = db.get(Evaluation, item.evaluation_id) if item.evaluation_id else None
+        evidence, source = audit_context(db, evaluation)
         audit.record(
             db,
             user_id,
             "notification",
             item.id,
-            "notification.updated",
+            "notification.acknowledged",
             item.expectation_id,
             {
                 k: v
                 for k, v in item.notification_metadata.items()
                 if k in ("demo", "demo_tag")
             },
+            actor_type="USER",
+            evidence_id=evidence.id if evidence else None,
+            evaluation_id=item.evaluation_id,
+            result_status=evaluation.result.value if evaluation else None,
+            idempotency_key=f"NOTIFICATION_ACKNOWLEDGED:{item.id}",
+            **source,
         )
         db.commit()
         db.refresh(item)

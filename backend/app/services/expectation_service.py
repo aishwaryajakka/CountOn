@@ -33,7 +33,10 @@ def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *
         ensure_profile(db, user_id)
         expectation = repository.create_expectation(db, payload, user_id, compiler_metadata)
         operations.ensure_job(db, expectation)
-        operations.audit(db, expectation, "expectation.created")
+        operations.audit(
+            db, expectation, "expectation.created", actor_type="USER",
+            idempotency_key=f"EXPECTATION_CREATED:{expectation.id}",
+        )
         if commit:
             db.commit()
         else:
@@ -78,7 +81,16 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
 
             from app.monitoring.sources import wake
             wake(db, expectation, datetime.now(timezone.utc))
-        operations.audit(db, expectation, "expectation.updated")
+        action = (
+            "expectation.cancelled"
+            if expectation.status == ExpectationStatus.cancelled
+            else "expectation.updated"
+        )
+        operations.audit(
+            db, expectation, action, actor_type="USER",
+            idempotency_key=f"EXPECTATION_CANCELLED:{expectation.id}"
+            if action == "expectation.cancelled" else None,
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -90,7 +102,10 @@ def update_expectation(db: Session, expectation_id: UUID, payload: ExpectationUp
 def delete_expectation(db: Session, expectation_id: UUID, user_id: UUID) -> None:
     expectation = get_expectation(db, expectation_id, user_id)
     try:
-        operations.audit(db, expectation, "expectation.deleted")
+        operations.audit(
+            db, expectation, "expectation.deleted", actor_type="USER",
+            idempotency_key=f"EXPECTATION_CANCELLED:{expectation.id}",
+        )
         db.flush()
         repository.delete_expectation(db, expectation)
         db.commit()

@@ -89,11 +89,16 @@ export default function DemosPage() {
 
     try {
       const target = simulatorTarget(rows, type, targetId);
-      const evidence = type === 'utility' ? createUtilityBillEvidence(billAmount) : type === 'ring'
-        ? ringEventToEvidence({ ...currentRingRaw, ...(ringKind.startsWith('package_') ? { metric: target.metric ?? undefined } : {}) })
-        : beeEventToEvidence({ ...currentBeeRaw, metric: target.metric ?? undefined });
-      await api.addEvidence(target.id, evidence);
-      const evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+      let evaluation: Evaluation;
+      if (type === 'utility') {
+        const evidence = createUtilityBillEvidence(billAmount);
+        await api.addEvidence(target.id, evidence);
+        evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+      } else if (type === 'ring') {
+        evaluation = (await api.simulateRing(target.id, { ...currentRingRaw, ...(ringKind.startsWith('package_') ? { metric: target.metric ?? undefined } : {}) })).evaluation;
+      } else {
+        evaluation = (await api.simulateBee(target.id, { ...currentBeeRaw, metric: target.metric ?? undefined })).evaluation;
+      }
       setEvaluations(previous => ({ ...previous, [type]: evaluation }));
       setStatusMessage(`SIMULATED ${type} evidence recorded · Backend evaluation: ${evaluation.result}`);
 
@@ -115,7 +120,7 @@ export default function DemosPage() {
       <PageHeader
         eyebrow="Interactive Simulation Suite"
         title="Interactive Demos & Simulators"
-        description="SIMULATED evidence sent to your authenticated backend. Live Ring and Bee account integrations are unavailable."
+        description="SIMULATED evidence sent to your authenticated backend. Ring remains simulated; optional Bee CLI imports are managed under Connected Accounts."
       />
 
       {statusMessage && (

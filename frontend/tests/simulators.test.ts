@@ -57,7 +57,9 @@ describe('Bee Context Simulator & Adapter', () => {
     const ev = beeEventToEvidence(raw);
     expect(ev.source).toBe('bee_simulator');
     expect(ev.metric).toBe('appointment_confirmed');
-    expect(ev.value.value).toBe(true);
+    expect(ev.value.commitment_confirmed).toBe(true);
+    expect(ev.value.context_only).toBe(true);
+    expect(ev.value).not.toHaveProperty('value');
     expect(ev.value.speaker).toBe('Landlord');
     expect(ev.value.summary).toContain('confirmed');
   });
@@ -72,7 +74,9 @@ describe('Bee Context Simulator & Adapter', () => {
 
     const ev = beeEventToEvidence(raw);
     expect(ev.source).toBe('bee_simulator');
-    expect(ev.value.value).toBe(false);
+    expect(ev.value.commitment_confirmed).toBe(false);
+    expect(ev.value.context_only).toBe(true);
+    expect(ev.value).not.toHaveProperty('value');
   });
 
   it('keeps conversation text as context without inventing a boolean', () => {

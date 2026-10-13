@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useState } from 'react';
 import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
 import { EmptyState, ErrorState, Loading, PageHeader } from '@/components/ui';
 import { EvidenceTimeline } from '@/components/evidence-timeline';
-import { displayTitle, evaluationLabels, formatDate } from '@/lib/presentation';
+import { displayTitle, evaluationLabels, formatDate, humanize } from '@/lib/presentation';
 import { api } from '@/lib/api';
-import type { Evidence } from '@/lib/types';
+import type { AuditEvent, Evidence } from '@/lib/types';
 import { useResource } from '@/hooks/use-resource';
 
 export default function Activity() {
@@ -24,6 +26,22 @@ export default function Activity() {
   }, [rows]);
 
   const evidenceState = useResource(loadEvidence);
+  const [expectationFilter, setExpectationFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [resultFilter, setResultFilter] = useState('');
+  const [afterFilter, setAfterFilter] = useState('');
+  const [beforeFilter, setBeforeFilter] = useState('');
+  const loadAudit = useCallback(
+    (signal: AbortSignal): Promise<AuditEvent[]> => api.auditEvents({
+      expectationId: expectationFilter || undefined,
+      source: sourceFilter || undefined,
+      result: resultFilter || undefined,
+      after: afterFilter ? `${afterFilter}T00:00:00Z` : undefined,
+      before: beforeFilter ? `${beforeFilter}T23:59:59.999Z` : undefined,
+    }, signal),
+    [expectationFilter, sourceFilter, resultFilter, afterFilter, beforeFilter],
+  );
+  const auditState = useResource(loadAudit);
 
   const events = rows
     .flatMap((row) => [
@@ -74,6 +92,46 @@ export default function Activity() {
               subtitle="All observations recorded across Ring, Bee, email, and utility providers"
             />
           )}
+
+          <section className="section">
+            <div className="section-heading">
+              <h2>Audit History</h2>
+              <span className="caption">Persisted, redacted account activity</span>
+            </div>
+            <div className="form-grid" aria-label="Audit history filters">
+              <label>Expectation<select value={expectationFilter} onChange={(event) => setExpectationFilter(event.target.value)}><option value="">All expectations</option>{rows.map(({ expectation }) => <option key={expectation.id} value={expectation.id}>{displayTitle(expectation)}</option>)}</select></label>
+              <label>Source<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">All sources</option>{['GMAIL','OUTLOOK','GOOGLE','MICROSOFT','RING','BEE'].map(source => <option key={source} value={source}>{humanize(source.toLowerCase())}</option>)}</select></label>
+              <label>Result<select value={resultFilter} onChange={(event) => setResultFilter(event.target.value)}><option value="">All results</option>{(['MATCH','UNKNOWN','MISMATCH'] as const).map(result => <option key={result} value={result}>{evaluationLabels[result]}</option>)}</select></label>
+              <label>From<input type="date" value={afterFilter} onChange={(event) => setAfterFilter(event.target.value)} /></label>
+              <label>Through<input type="date" value={beforeFilter} onChange={(event) => setBeforeFilter(event.target.value)} /></label>
+            </div>
+            {auditState.loading ? (
+              <Loading label="Loading audit history..." />
+            ) : auditState.error ? (
+              <ErrorState error={auditState.error} retry={auditState.reload} />
+            ) : auditState.data?.length ? (
+              <section className="card activity-list">
+                {auditState.data.map((event) => (
+                  <div key={event.audit_event_id}>
+                    <span className="status-dot" />
+                    <div>
+                      <strong>{humanize(event.event_type.toLowerCase())}</strong>
+                      <p>{event.expectation ? <Link href={`/expectations/${event.expectation.id}`}>{event.expectation.claim}</Link> : 'Account activity'} · {event.source_provider ? humanize(event.source_provider.toLowerCase()) : 'CountOn'}{event.evidence ? ` · ${Object.values(event.evidence.value).filter(value => ['string','number','boolean'].includes(typeof value)).slice(0, 2).join(' · ') || 'Evidence recorded'}` : ''}{event.result_status ? ` · ${evaluationLabels[event.result_status]}` : ''}</p>
+                      <span className="caption">{humanize(event.action_taken.replaceAll('.', '_'))}</span>
+                    </div>
+                    <time dateTime={event.evidence?.observed_at ?? event.occurred_at}>
+                      {formatDate(event.evidence?.observed_at ?? event.occurred_at, timeZone)}
+                    </time>
+                  </div>
+                ))}
+              </section>
+            ) : (
+              <EmptyState
+                title="No audit events yet."
+                description="Security-relevant and monitoring actions will appear here after they are persisted."
+              />
+            )}
+          </section>
 
           {/* Lifecycle Activity */}
           <section className="section">

@@ -320,6 +320,7 @@ class MicrosoftOAuth:
             connection.external_account_id = account
             connection.status = "connected"
             connection.scopes = list(SCOPES)
+            connection.connected_at, connection.revoked_at, connection.failure_status = current, None, None
             connection.__dict__["_credential_state"] = "configured"
             db.commit()
             return connection
@@ -367,6 +368,7 @@ class MicrosoftOAuth:
                 if not error.retryable:
                     db.delete(stored)
                     connection.status = "error"
+                    connection.failure_status = error.code
                     db.commit()
                 raise
             stored.encrypted_tokens = self.encrypt(refreshed, connection_id)
@@ -395,6 +397,8 @@ class MicrosoftOAuth:
         from app.db.models.provider_sync import ProviderSyncState
         db.execute(delete(ProviderSyncState).where(ProviderSyncState.connection_id == connection_id, ProviderSyncState.user_id == user_id))
         connection.status = "disconnected"
+        connection.revoked_at = datetime.now(timezone.utc)
+        connection.failure_status = None
         connection.oauth_generation = None
         connection.scopes = []
         connection.__dict__["_credential_state"] = "not_configured"

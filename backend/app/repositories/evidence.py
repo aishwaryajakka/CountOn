@@ -24,11 +24,18 @@ def list_evidence_for_expectation(db: Session, expectation_id: UUID, limit: int 
     return list(db.scalars(statement))
 
 
-def latest_relevant_evidence(db: Session, expectation_id: UUID, metric: str | None) -> list[Evidence]:
-    """Bound evaluator input without truncating before metric selection."""
+def latest_relevant_evidence(
+    db: Session,
+    expectation_id: UUID,
+    metric: str | None,
+    approved_sources: list[str] | None = None,
+) -> list[Evidence]:
+    """Select the latest exact metric from the expectation's approved sources."""
     statement=select(Evidence).where(Evidence.expectation_id==expectation_id)
     if metric is not None:
         statement=statement.where(Evidence.metric==metric)
+    if approved_sources:
+        statement = statement.where(Evidence.source.in_(approved_sources))
     statement=statement.order_by(Evidence.observed_at.desc(),Evidence.created_at.desc(),Evidence.id.desc()).limit(1)
     return list(db.scalars(statement))
 

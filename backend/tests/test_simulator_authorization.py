@@ -23,8 +23,8 @@ from app.main import app
 @pytest.mark.parametrize('factory,metric,result', [
     (simulate_package_delivery, 'package_detected', 'MATCH'),
     (simulate_package_missing, 'package_detected', 'UNKNOWN'),
-    (simulate_plumber_confirmed, 'appointment_confirmed', 'MATCH'),
-    (simulate_plumber_cancelled, 'appointment_confirmed', 'MISMATCH'),
+    (simulate_plumber_confirmed, 'appointment_confirmed', 'UNKNOWN'),
+    (simulate_plumber_cancelled, 'appointment_confirmed', 'UNKNOWN'),
 ])
 def test_authorized_simulation_persists_and_deduplicates(client, db, factory, metric, result):
     raw, payload = factory()
