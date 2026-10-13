@@ -72,7 +72,7 @@ def record_run(
         # Record the accepted explanation envelope, never its speech, prompt,
         # model response, or evidence values. The linked IDs and grounding flags
         # are sufficient for provenance and operational review.
-        audit.record(
+        audit.record(  # type: ignore[no-untyped-call]
             db,
             user_id=user.id,
             entity_type="explanation",
@@ -104,7 +104,7 @@ def record_run(
             idempotency_key=f"EXPLANATION_GENERATED:{trust.run_id}",
         )
     if result.captured and trust.expectation_id is not None:
-        audit.record(
+        audit.record(  # type: ignore[no-untyped-call]
             db, user.id, "expectation", trust.expectation_id,
             "expectation.confirmed", trust.expectation_id, {},
             actor_type="USER", source_provider=channel,
