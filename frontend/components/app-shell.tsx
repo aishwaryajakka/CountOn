@@ -17,6 +17,7 @@ export function useBoard() { const state = useContext(BoardContext); if (!state)
 const navigation = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/expectations', label: 'Expectations', icon: ListChecks },
+  { href: '/alexa', label: 'Alexa+ MCP Demo', icon: MessageCircle },
   { href: '/demos', label: 'Interactive Demos', icon: Sparkles },
   { href: '/alexa', label: 'Alexa+ MCP Demo', icon: MessageCircle },
   { href: '/integrations', label: 'Connected Accounts', icon: Link2 },

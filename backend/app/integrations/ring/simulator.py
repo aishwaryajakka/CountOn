@@ -20,7 +20,7 @@ def generate_ring_event(
 ) -> dict[str, Any]:
     """Generate a realistic Ring event payload without physical hardware."""
     at = timestamp or datetime.now(timezone.utc)
-    ev_id = event_id or f"ring_sim_{uuid.uuid4().hex[:8]}"
+    ev_id = event_id or f"ring_sim_{uuid.uuid4().hex}"
 
     payload: dict[str, Any] = {
         "event_id": ev_id,
@@ -34,6 +34,7 @@ def generate_ring_event(
         payload["metric"] = metric
     if extra:
         payload.update(extra)
+    payload["simulated"] = True  # Extra fields cannot disguise a simulation.
 
     return payload
 
@@ -61,7 +62,7 @@ def simulate_package_missing(
     confidence: float = 0.90,
     metric: str = "package_detected",
 ) -> tuple[dict[str, Any], EvidenceCreate]:
-    """Simulate a missed delivery or package removed event."""
+    """Simulate absence in a camera observation; this does not prove missed delivery."""
     raw = generate_ring_event(
         kind="package_not_detected",
         device=device,

@@ -18,13 +18,7 @@ export default function Activity() {
   const loadEvidence = useCallback(async (signal: AbortSignal): Promise<Evidence[]> => {
     if (!rows.length) return [];
     const results = await Promise.all(
-      rows.map(async (row) => {
-        try {
-          return await api.evidence(row.expectation.id, signal);
-        } catch {
-          return [];
-        }
-      })
+      rows.map(row => api.evidence(row.expectation.id, signal))
     );
     return results.flat();
   }, [rows]);

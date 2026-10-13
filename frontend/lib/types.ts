@@ -86,6 +86,7 @@ export interface Integration {
 export interface WatchedExpectation { expectation: Expectation; latest: Evaluation | null }
 
 export interface RingSimEvent {
+  simulated: true;
   event_id: string;
   kind: 'package_detected' | 'package_not_detected' | 'doorbell_ding' | 'motion_detected';
   device: string;
@@ -95,6 +96,7 @@ export interface RingSimEvent {
 }
 
 export interface BeeSimEvent {
+  simulated: true;
   id: string;
   type: 'conversation' | 'note' | 'commitment';
   speaker: string;

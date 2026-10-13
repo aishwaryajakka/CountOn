@@ -16,18 +16,18 @@ describe('Ring Event Simulator & Adapter', () => {
     expect(raw.device).toBe('front_door');
 
     const ev = ringEventToEvidence(raw);
-    expect(ev.source).toBe('ring');
+    expect(ev.source).toBe('ring_simulator');
     expect(ev.metric).toBe('package_detected');
     expect(ev.value.value).toBe(true);
     expect(ev.value.detected).toBe(true);
     expect(ev.confidence).toBe(0.95);
   });
 
-  it('generates a package not detected event and converts to MISMATCH-compatible evidence', () => {
+  it('generates a package not detected event and preserves absence without claiming failed delivery', () => {
     const raw = generateRingEvent('package_not_detected');
     const ev = ringEventToEvidence(raw);
-    expect(ev.source).toBe('ring');
-    expect(ev.value.value).toBe(false);
+    expect(ev.source).toBe('ring_simulator');
+    expect(ev.value).not.toHaveProperty('value');
     expect(ev.value.detected).toBe(false);
   });
 
@@ -55,7 +55,7 @@ describe('Bee Context Simulator & Adapter', () => {
     expect(raw.speaker).toBe('Landlord');
 
     const ev = beeEventToEvidence(raw);
-    expect(ev.source).toBe('bee');
+    expect(ev.source).toBe('bee_simulator');
     expect(ev.metric).toBe('appointment_confirmed');
     expect(ev.value.value).toBe(true);
     expect(ev.value.speaker).toBe('Landlord');
@@ -71,17 +71,17 @@ describe('Bee Context Simulator & Adapter', () => {
     });
 
     const ev = beeEventToEvidence(raw);
-    expect(ev.source).toBe('bee');
+    expect(ev.source).toBe('bee_simulator');
     expect(ev.value.value).toBe(false);
   });
 
-  it('infers cancellation from keywords when confirmation not explicitly provided', () => {
+  it('keeps conversation text as context without inventing a boolean', () => {
     const raw = generateBeeEvent({
       speaker: 'Doctor',
       summary: 'Doctor appointment cancelled due to doctor illness.',
     });
     const ev = beeEventToEvidence(raw);
-    expect(ev.value.value).toBe(false);
+    expect(ev.value).not.toHaveProperty('value');
   });
 });
 
@@ -103,4 +103,21 @@ describe('Utility Billing Simulators', () => {
     expect(tariff.metric).toBe('rate_change');
     expect(tariff.value.percentage).toBe(22);
   });
+});
+
+it('always marks simulator provenance, including utility evidence', () => {
+  expect(generateRingEvent('package_detected').simulated).toBe(true);
+  expect(generateBeeEvent({ summary: 'Fixture' }).simulated).toBe(true);
+  expect(createUtilityBillEvidence(142).raw_data?.simulated).toBe(true);
+});
+
+it('makes distinct event IDs even when two utility observations happen in the same millisecond', () => {
+  expect(createUtilityBillEvidence(142).external_event_id).not.toBe(createUtilityBillEvidence(142).external_event_id);
+});
+
+it('labels simulator evidence in normal evidence views without claiming a live account', async () => {
+  const { evidenceSourceLabel } = await import('@/lib/presentation');
+  expect(evidenceSourceLabel({ source: 'ring_simulator', raw_data: { simulated: true } })).toBe('Ring · SIMULATED');
+  expect(evidenceSourceLabel({ source: 'utility_bill', raw_data: { simulated: true } })).toBe('Utility bill · SIMULATED');
+  expect(evidenceSourceLabel({ source: 'ring', raw_data: {} })).toBe('Ring');
 });
