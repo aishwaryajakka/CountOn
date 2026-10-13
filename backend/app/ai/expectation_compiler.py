@@ -124,6 +124,12 @@ class BedrockExpectationCompiler:
         except (BedrockError, GroundingError) as error:
             raise CompilerError(intelligence_error_code(error)) from None
         finally:
+            from app.core.observability import record
+
+            record("compilation_results", outcome)
+            record(
+                "compilation_latency_seconds", outcome, max(0, monotonic() - started)
+            )
             logger.info(
                 "Expectation compilation completed",
                 extra={

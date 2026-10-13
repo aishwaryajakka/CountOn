@@ -5,12 +5,16 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from tests.test_auth import verifier, token
 from app.core.config import Settings
 from app.mcp import auth
 from app.mcp.server import create_app
-from db.scripts.mcp_smoke import CORE_TOOLS
 from db.scripts.mcp_remote_smoke import https_url, run
+from db.scripts.mcp_smoke import CORE_TOOLS
+from tests import test_auth
+from tests.test_auth import token
+
+# Explicit fixture re-export: pytest discovers it dynamically.
+verifier = test_auth.verifier
 
 
 def config(**kwargs):
@@ -56,10 +60,11 @@ def test_public_url_and_environment_overrides(monkeypatch):
 
 
 def production(**changes):
-    values = dict(_env_file=None, environment='production', database_target='supabase',
-        supabase_database_url='postgresql+psycopg://fixture@cloud.example/postgres?sslmode=require',
-        supabase_url='https://auth.example', supabase_publishable_key='public-fixture',
-        allowed_origins=['https://frontend.example'])
+    values = {'_env_file': None, 'environment': 'production', 'database_target': 'supabase',
+        'conversation_store_backend':'postgres','conversation_encryption_key':'dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHQ=',
+        'supabase_database_url': 'postgresql+psycopg://fixture@cloud.example/postgres?sslmode=require',
+        'supabase_url': 'https://auth.example', 'supabase_publishable_key': 'public-fixture',
+        'allowed_origins': ['https://frontend.example']}
     return Settings(**(values | changes))
 
 
@@ -137,8 +142,9 @@ def test_remote_smoke_rejects_insecure_urls(url):
 
 @pytest.mark.asyncio
 async def test_remote_read_only_without_cleanup_api(monkeypatch, capsys):
-    from db.scripts import mcp_remote_smoke as module
     from types import SimpleNamespace
+
+    from db.scripts import mcp_remote_smoke as module
     calls = []
     async def discover(url, token):
         calls.append('discover')

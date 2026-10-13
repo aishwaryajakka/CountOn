@@ -191,7 +191,12 @@ class StreamableMcpAdapter(CountOnMcpAdapter):
             httpx.AsyncClient(
                 headers={"Authorization": "Bearer " + self._token.get_secret_value()},
                 follow_redirects=False,
-                timeout=180,
+                timeout=httpx2.Timeout(
+                    connect=self._settings.http_connect_timeout,
+                    read=180,
+                    write=self._settings.http_read_timeout,
+                    pool=self._settings.http_connect_timeout,
+                ),
                 event_hooks={"response": [check_status]},
             ) as http,
             Client(

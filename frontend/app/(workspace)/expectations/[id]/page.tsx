@@ -3,6 +3,8 @@
 import { use, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Edit3, FlaskConical, Link2, ShieldCheck, Sparkles } from 'lucide-react';
+import { SourceBinding } from '@/components/source-binding';
+import { TrackingControls } from '@/components/tracking-controls';
 import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui';
@@ -275,6 +277,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
               </div>
 
               <aside className="detail-aside">
+                <TrackingControls key={id} expectation={state.data.expectation} refresh={state.reload} />
                 <section className="card">
                   <h2>
                     <Link2 size={19} />
@@ -293,6 +296,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   <Link className="button secondary full" href="/integrations">
                     View connected accounts
                   </Link>
+                  <SourceBinding expectationId={id} />
                 </section>
 
                 <section className="soft-card">

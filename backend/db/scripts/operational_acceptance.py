@@ -3,19 +3,28 @@
 Uses the exact FastAPI dependencies/services/engine and a real Auth access token.
 No global auth bypass or environment-file rewrites.
 """
-from uuid import UUID,uuid4
+from uuid import UUID, uuid4
+
 from _common import run_cli
 
 
 def main():
-    from fastapi.testclient import TestClient
-    from sqlalchemy import func,select
+    from _cleanup import cleanup_expectations, remove_audits
     from _token import access_token
-    from _cleanup import cleanup_expectations,remove_audits
+    from fastapi.testclient import TestClient
+    from sqlalchemy import func, select
+
     from app.core.auth import get_token_verifier
     from app.core.config import get_settings
-    from app.db.models import AuditEvent,Evidence,Expectation,MonitoringJob,Profile,IntegrationConnection
-    from app.db.session import SessionLocal,engine
+    from app.db.models import (
+        AuditEvent,
+        Evidence,
+        Expectation,
+        IntegrationConnection,
+        MonitoringJob,
+        Profile,
+    )
+    from app.db.session import SessionLocal, engine
     from app.main import app
     token=access_token()
     owner=get_token_verifier().verify(token).id

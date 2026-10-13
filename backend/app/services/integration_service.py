@@ -1,7 +1,9 @@
 """Metadata-only connections with atomic audit writes and ownership checks."""
 import logging
-from app.core.exceptions import ResourceNotFoundError,InvalidIntegrationError
-from app.repositories import integration as repository,audit
+
+from app.core.exceptions import InvalidIntegrationError, ResourceNotFoundError
+from app.repositories import audit
+from app.repositories import integration as repository
 from app.repositories.profile import ensure_profile
 
 logger=logging.getLogger(__name__)
@@ -36,7 +38,21 @@ def update(db,id,payload,user_id):
     changes=payload.model_dump(exclude_unset=True)
     if any(changes.get(k) is None for k in ('status','scopes','metadata') if k in changes):raise InvalidIntegrationError()
     try:
+        identity_changed = any(key in changes and changes[key] != getattr(item, key) for key in ('scopes', 'external_account_id', 'status'))
         repository.update(db,item,changes)
+        if item.provider in ('microsoft', 'google') and (identity_changed or changes.get('status') in ('disconnected','pending')):
+            from sqlalchemy import delete
+
+            from app.db.models.integration import (
+                IntegrationCredential,
+                ProviderOAuthState,
+            )
+            db.execute(delete(IntegrationCredential).where(IntegrationCredential.connection_id == item.id))
+            db.execute(delete(ProviderOAuthState).where(ProviderOAuthState.connection_id == item.id))
+            from app.db.models.provider_sync import ProviderSyncState
+            db.execute(delete(ProviderSyncState).where(ProviderSyncState.connection_id == item.id))
+            item.oauth_generation = None
+            item.__dict__['_credential_state'] = 'not_configured'
         audit.record(db,user_id,'integration',item.id,'integration.updated',metadata=demo_metadata(item))
         db.commit();db.refresh(item)
     except Exception:

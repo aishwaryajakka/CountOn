@@ -30,6 +30,17 @@ async def lifespan(app: FastAPI):
     app.state.alexa_sessions = AlexaConversationStore(
         ttl_seconds=get_settings().clarification_ttl_seconds
     )
+    if get_settings().conversation_store_backend == 'postgres':
+        from app.conversations.persistence import Records
+        from app.conversations.stores import (
+            PostgresAgentSessionStore,
+            PostgresAlexaConversationStore,
+        )
+        key = get_settings().conversation_encryption_key
+        assert key is not None
+        records = Records(key.get_secret_value())
+        app.state.agent_sessions = PostgresAgentSessionStore(records, ttl_seconds=get_settings().clarification_ttl_seconds)
+        app.state.alexa_sessions = PostgresAlexaConversationStore(records, ttl_seconds=get_settings().clarification_ttl_seconds)
     yield
 
 
@@ -43,17 +54,23 @@ app = FastAPI(
     },
 )
 settings = get_settings()
+from app.api.budgets import RequestBudgetMiddleware
+
+app.add_middleware(RequestBudgetMiddleware, settings=settings)
 app.add_middleware(
     ExplicitCORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
     expose_headers=["X-Request-ID", "Retry-After"],
 )
 app.add_middleware(OperationalMiddleware, settings=settings)
 register_exception_handlers(app)
 app.include_router(router, prefix="/api/v1")
+from app.api.metrics import router as metrics_router
+
+app.include_router(metrics_router)
 
 
 @app.get("/health", tags=["health"])

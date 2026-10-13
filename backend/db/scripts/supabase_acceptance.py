@@ -1,7 +1,7 @@
 """Use the same core logic when DATABASE_TARGET selects Supabase."""
 
-from _common import require_target, run_cli
 from _acceptance import run_acceptance
+from _common import require_target, run_cli
 
 
 def main() -> int:

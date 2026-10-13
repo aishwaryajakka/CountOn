@@ -295,10 +295,12 @@ class BedrockMismatchInvestigator:
                 result = explanation(facts, None)
         else:
             result = explanation(facts, None)
-        result = result.model_copy(update={
-            "bedrock_attempted": bool(facts.evidence),
-            "grounding_passed": grounding_passed,
-        })
+        result = result.model_copy(
+            update={
+                "bedrock_attempted": bool(facts.evidence),
+                "grounding_passed": grounding_passed,
+            }
+        )
         logger.info(
             "Mismatch investigation completed",
             extra={

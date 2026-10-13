@@ -1,8 +1,8 @@
 """Operational writes participate in the owning service transaction."""
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
-from app.db.models import AuditEvent, MonitoringJob, Notification, Expectation
-from app.core.observability import request_id
+
+from app.db.models import MonitoringJob
 
 
 def audit(db, expectation, action, resource_id=None):

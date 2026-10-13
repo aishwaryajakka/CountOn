@@ -2,6 +2,7 @@
 
 import json
 import re
+import threading
 import time
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol, Self, TypeVar
@@ -30,6 +31,13 @@ from app.ai.telemetry import CallTelemetry, safe_label
 from app.core.config import Settings, get_settings
 
 T = TypeVar("T", bound=BaseModel)
+_gate_lock = threading.Lock()
+_gates: dict[int, threading.BoundedSemaphore] = {}
+
+
+def call_gate(limit: int) -> threading.BoundedSemaphore:
+    with _gate_lock:
+        return _gates.setdefault(limit, threading.BoundedSemaphore(limit))
 
 
 class RuntimeClient(Protocol):
@@ -73,7 +81,7 @@ def _text(response: dict[str, Any]) -> str:
         ):
             raise BedrockResponseError()
         text = "".join(block["text"] for block in blocks).strip()
-        if not text:
+        if not text or len(text.encode()) > 262144:
             raise BedrockResponseError()
         return text
     except (KeyError, TypeError, AttributeError):
@@ -160,8 +168,35 @@ class BedrockClient:
     def _invoke(self, request: dict[str, Any], telemetry: CallTelemetry) -> str:
         runtime = self._get_runtime()
         for attempt in range(self.settings.bedrock_max_retries + 1):
+            remaining_tokens = (
+                self.settings.bedrock_max_total_tokens - telemetry.total_tokens
+            )
+            if remaining_tokens <= 0:
+                raise BedrockValidationError(("token_budget_exceeded",))
+            request["inferenceConfig"]["maxTokens"] = min(
+                request["inferenceConfig"]["maxTokens"], remaining_tokens
+            )
+            if (
+                time.monotonic() - telemetry.started
+                >= self.settings.bedrock_operation_timeout_seconds
+            ):
+                raise BedrockTimeoutError()
             try:
-                response = runtime.converse(**request)
+                gate = call_gate(self.settings.bedrock_max_concurrent_calls)
+                remaining = self.settings.bedrock_operation_timeout_seconds - (
+                    time.monotonic() - telemetry.started
+                )
+                if not gate.acquire(timeout=max(0, remaining)):
+                    raise BedrockTimeoutError()
+                try:
+                    if (
+                        time.monotonic() - telemetry.started
+                        >= self.settings.bedrock_operation_timeout_seconds
+                    ):
+                        raise BedrockTimeoutError()
+                    response = runtime.converse(**request)
+                finally:
+                    gate.release()
             except (BotoCoreError, ClientError) as error:
                 if isinstance(error, ClientError):
                     telemetry.aws_request_id = safe_label(
@@ -171,22 +206,42 @@ class BedrockClient:
                 if not retryable or attempt == self.settings.bedrock_max_retries:
                     raise mapped from None
                 telemetry.retry_count += 1
-                self._sleep(min(5.0, self.settings.http_backoff_seconds * (2**attempt)))
+                delay = min(5.0, self.settings.http_backoff_seconds * (2**attempt))
+                if (
+                    time.monotonic() - telemetry.started + delay
+                    >= self.settings.bedrock_operation_timeout_seconds
+                ):
+                    raise BedrockTimeoutError() from None
+                self._sleep(delay)
             else:
                 try:
                     telemetry.observe(response)
                 except (AttributeError, TypeError):
                     raise BedrockResponseError() from None
+                if telemetry.total_tokens > self.settings.bedrock_max_total_tokens:
+                    raise BedrockValidationError(("token_budget_exceeded",))
+                if (
+                    time.monotonic() - telemetry.started
+                    >= self.settings.bedrock_operation_timeout_seconds
+                ):
+                    raise BedrockTimeoutError()
                 return _text(response)
         raise BedrockUnavailableError()
 
     def _request(
-        self, system_prompt: str, user_content: str, temperature: float | None = None
+        self,
+        system_prompt: str,
+        user_content: str,
+        temperature: float | None = None,
+        *,
+        operation_name: str | None = None,
     ) -> dict[str, Any]:
+        if len(system_prompt.encode()) > 131072 or len(user_content.encode()) > 65536:
+            raise BedrockValidationError()
         if temperature is not None and not 0 <= temperature <= 1:
             raise ValueError("temperature must be between zero and one")
         return {
-            "modelId": self.settings.bedrock_model_id,
+            "modelId": self.model_for(operation_name),
             "system": [{"text": system_prompt}],
             "messages": [{"role": "user", "content": [{"text": user_content}]}],
             "inferenceConfig": {
@@ -197,13 +252,26 @@ class BedrockClient:
             },
         }
 
+    def model_for(self, operation_name: str | None) -> str:
+        if operation_name in ("expectation_compile", "clarification_continue"):
+            return (
+                self.settings.bedrock_compiler_model_id
+                or self.settings.bedrock_model_id
+            )
+        if operation_name == "mismatch_investigator":
+            return (
+                self.settings.bedrock_investigator_model_id
+                or self.settings.bedrock_model_id
+            )
+        return self.settings.bedrock_model_id
+
     def _telemetry(
         self, operation_name: str, metadata: Mapping[str, str] | None
     ) -> CallTelemetry:
         # Operation/version are developer-controlled labels, not utterances/user IDs.
         if safe_label(operation_name) is None:
             raise ValueError("operation_name must be a short operational label")
-        model = self.settings.bedrock_model_id
+        model = self.model_for(operation_name)
         # Prevent credential URLs or control characters from configuration entering logs.
         safe_model = (
             model
@@ -230,7 +298,12 @@ class BedrockClient:
         telemetry = self._telemetry(operation_name, metadata)
         success = False
         try:
-            result = self._invoke(self._request(system_prompt, user_content), telemetry)
+            result = self._invoke(
+                self._request(
+                    system_prompt, user_content, operation_name=operation_name
+                ),
+                telemetry,
+            )
             success = True
             return result
         finally:
@@ -257,6 +330,7 @@ class BedrockClient:
                 + schema,
                 user_content,
                 temperature,
+                operation_name=operation_name,
             )
             if self.settings.bedrock_native_structured_output:
                 request["outputConfig"] = {

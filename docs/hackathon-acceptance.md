@@ -42,9 +42,10 @@ grounding, not live Bedrock quality. The evaluator remains the only outcome auth
   deterministic summary/fallback, explicit uncertainty, no unsupported cause.
 
 Inspect safe traces only. Tokens must never be printed, returned or placed in
-artifacts. The browser forwards its current bearer to `/api/mcp`; the Node route
-forwards it to the real MCP server. No service-role key or parallel JWT verifier
-is part of this flow.
+artifacts. Conversation requests forward the current bearer to `/api/agent`,
+then the authenticated FastAPI orchestrator forwards it to the real MCP server.
+`/api/mcp` handles protocol discovery only. No service-role key or parallel JWT
+verifier is part of this flow.
 
 ## A. Remaining production prerequisites
 
@@ -53,8 +54,11 @@ current MCP/frontend code, configure backend Bedrock/model access and a private
 shared clarification signing key, then discover all six tools and run live
 intelligence acceptance. Repository code does not prove these steps were completed.
 Real Alexa+/Echo onboarding, compatible OAuth discovery/account linking and native
-device integration remain separate work. Speech-to-text, live provider ingestion,
-scheduling workers and notification delivery are not claimed.
+device integration remain separate work. Durable workers, encrypted delegated
+Outlook ingestion and in-app notification delivery are implemented and tested
+locally; [monitoring operation](monitoring.md) still requires live Microsoft
+consent and deployment verification. Speech-to-text and external notification
+delivery are not claimed.
 
 ## B. Vercel Production variables
 
@@ -93,8 +97,9 @@ Use the configured `https://counton-frontend.vercel.app/alexa` address after rol
 9. Repeat for MATCH, UNKNOWN and no evaluation: no mismatch investigator invocation.
 10. Test ambiguity, no match, expired state and another user; verify no duplicate
     capture on replay and no access across owners. Keep technical provenance out of speech.
-11. In DevTools, tool requests must go to `/api/mcp`, not direct browser MCP or
-    FastAPI CRUD. Inspect header presence only, never copy the bearer value.
+11. In DevTools, conversations must go to `/api/agent`, and discovery to
+    `/api/mcp`. No direct browser MCP or Supabase writes. Inspect header presence
+    only, never copy the bearer value.
 12. Confirm mobile layout/text and optional read-aloud. Deliberate user saves are
     real records; automated acceptance should use tagged data and exact-ID cleanup.
 
@@ -134,8 +139,11 @@ Prepare a signed-in, validated deployment and an owned evidence-backed mismatch.
 
 ```text
 Supabase Auth → browser session.access_token
-Browser /alexa --Bearer--> Next.js POST /api/mcp (Node)
-                           official MCP client
+Browser /alexa --Bearer--> Next.js POST /api/agent (Node)
+                             ↓
+                       FastAPI /api/v1/agent/converse
+                       existing JWT + bounded Trust Orchestrator
+                           official Python MCP client
                            initialize → tools/list → tools/call
                            Streamable HTTP + same Bearer
                              ↓
@@ -187,3 +195,12 @@ provenance. No new tools, tables or autonomous integrations were added.
 [Final trust acceptance](trust-orchestrator.md) lists the 18 security checks,
 Person 1/2 status tables, operational limits and exact manual test order.
 Automated local acceptance does not imply live AWS, ASK simulator or Echo acceptance.
+
+## Production hardening status
+
+The six contracts are unchanged. Native Supabase OAuth consent, client-bound linked
+JWTs, encrypted durable conversations, Alexa final confirmation, request budgets,
+private aggregate metrics and CI security gates are implemented locally. See the
+[dated production checklist](production-readiness.md) for actual commands/results,
+readiness 503 and AWS credential blockers, and required live account/device acceptance.
+No local/mock result establishes deployed Alexa+ or Echo integration.

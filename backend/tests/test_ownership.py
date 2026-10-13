@@ -5,10 +5,9 @@ import pytest
 from sqlalchemy import func, select
 
 from app.api.dependencies import get_current_user
-from app.db.models import Profile, AuditEvent
+from app.db.models import AuditEvent, Profile
 from app.main import app
 from app.services.profile_service import ensure_profile
-
 
 pytestmark=pytest.mark.integration
 
@@ -56,18 +55,20 @@ def test_profile_upsert_preserves_data(db,users):
 
 
 def test_verified_token_bootstraps_profile(client,db,monkeypatch,numeric_payload):
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from types import SimpleNamespace
     from time import time
+    from types import SimpleNamespace
     from uuid import uuid4
+
     import jwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     from app.core.auth import TokenVerifier
     from app.core.config import Settings
     verifier=TokenVerifier(Settings(_env_file=None,database_target='local',
         local_database_url='postgresql+psycopg://fixture@localhost/fixture',supabase_url='https://auth.example.test'))
     key=ec.generate_private_key(ec.SECP256R1())
     monkeypatch.setattr(verifier.jwks,'get_signing_key_from_jwt',lambda _:SimpleNamespace(key=key.public_key()))
-    claims=dict(sub=str(uuid4()),iss=verifier.issuer,aud='authenticated',role='authenticated',iat=int(time())-1,exp=int(time())+300)
+    claims={'sub': str(uuid4()),'iss': verifier.issuer,'aud': 'authenticated','role': 'authenticated','iat': int(time())-1,'exp': int(time())+300}
     encoded=jwt.encode(claims,key,algorithm='ES256',headers={'kid':'test-key'})
     monkeypatch.setattr('app.api.dependencies.get_token_verifier',lambda:verifier)
     app.dependency_overrides.pop(get_current_user)

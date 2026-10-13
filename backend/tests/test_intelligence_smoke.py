@@ -6,6 +6,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+
 from db.scripts import intelligence_smoke as script
 from db.scripts.mcp_smoke import SmokeFailure
 

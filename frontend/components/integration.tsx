@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { CalendarDays, Camera, Check, Link2, Mail, Package, Radio, Zap } from 'lucide-react';
-import type { Integration, IntegrationCreate } from '@/lib/types';
+import { providers, consentUrl } from '@/lib/providers';
+import { ProviderAccount } from './provider-account';
+import { CalendarDays, Camera, Link2, Mail, Package, Radio, Zap } from 'lucide-react';
+import type { Integration } from '@/lib/types';
 import { formatDate, humanize } from '@/lib/presentation';
 import { useIdentity } from './auth-provider';
 import { IconBox, Modal } from './ui';
@@ -27,11 +29,14 @@ const icons: Record<string, typeof Mail> = {
 
 export function IntegrationCard({
   item,
+  reload,
   onRefresh,
 }: {
   item: Integration;
+  reload?: () => void;
   onRefresh?: () => void;
 }) {
+  const triggerRefresh = reload ?? onRefresh;
   const { timeZone } = useIdentity();
   const demo = item.metadata.demo || item.metadata.mock;
   const isSimulated = item.provider === 'ring' || item.provider === 'bee';
@@ -145,93 +150,49 @@ export function IntegrationCard({
           {item.last_synced_at ? `Last synced ${formatDate(item.last_synced_at, timeZone)}` : 'No sync recorded'} ·{' '}
           {item.credential_state === 'not_configured' ? 'Live access not configured' : 'Active credentials'}
         </p>
-        {onRefresh && (
-          <button
-            type="button"
-            className="button subtle"
-            style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: 'var(--text-muted)' }}
-            onClick={async () => {
-              try {
-                await api.deleteIntegration(item.id);
-                onRefresh();
-              } catch (e) {
-                console.error('Failed to disconnect integration:', e);
-              }
-            }}
-          >
-            Disconnect
-          </button>
-        )}
       </div>
+
+      {!demo && ['google', 'microsoft'].includes(item.provider) ? (
+        <ProviderAccount item={item} reload={triggerRefresh ?? (() => {})} />
+      ) : (
+        triggerRefresh && (
+          <div style={{ marginTop: '0.6rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="button subtle"
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: 'var(--text-muted)' }}
+              onClick={async () => {
+                try {
+                  await api.deleteIntegration(item.id);
+                  triggerRefresh();
+                } catch (e) {
+                  console.error('Failed to disconnect integration:', e);
+                }
+              }}
+            >
+              Disconnect
+            </button>
+          </div>
+        )
+      )}
     </article>
   );
 }
 
-const supportedIntegrations: Array<{
-  id: string;
-  provider: 'google' | 'microsoft' | 'ring' | 'bee' | 'utility' | 'delivery';
-  connection_type: 'email' | 'calendar' | 'camera' | 'wearable' | 'utility' | 'delivery';
-  title: string;
-  category: string;
-  scopes: string[];
-  description: string;
-  isSimulated?: boolean;
-}> = [
+const simulatedSources = [
   {
-    id: 'google-gmail',
-    provider: 'google',
-    connection_type: 'email',
-    title: 'Google Gmail',
-    category: 'Email Receipts & Confirmations',
-    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
-    description: 'Read-only access to messages for shipping confirmations, receipts, and order updates.',
-  },
-  {
-    id: 'google-calendar',
-    provider: 'google',
-    connection_type: 'calendar',
-    title: 'Google Calendar',
-    category: 'Calendar & Appointments',
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-    description: 'View scheduled events, meeting times, and calendar appointments.',
-  },
-  {
-    id: 'ms-outlook',
-    provider: 'microsoft',
-    connection_type: 'email',
-    title: 'Microsoft Outlook',
-    category: 'Email Receipts & Confirmations',
-    scopes: ['Mail.Read'],
-    description: 'Read-only access to Outlook email receipts, bills, and confirmation notices.',
-  },
-  {
-    id: 'ms-calendar',
-    provider: 'microsoft',
-    connection_type: 'calendar',
-    title: 'Microsoft Calendar',
-    category: 'Calendar & Appointments',
-    scopes: ['Calendars.Read'],
-    description: 'Read-only access to Outlook calendar events and appointment schedules.',
-  },
-  {
-    id: 'ring-camera',
-    provider: 'ring',
-    connection_type: 'camera',
+    provider: 'ring' as const,
+    connection_type: 'camera' as const,
     title: 'Ring Video Doorbell',
-    category: 'Smart Home / Simulated Camera',
+    description: 'Simulated doorbell rings and motion events without live physical hardware.',
     scopes: ['devices.read', 'events.read'],
-    description: 'Simulated Ring camera for package detection, doorbell rings, and motion events.',
-    isSimulated: true,
   },
   {
-    id: 'bee-wearable',
-    provider: 'bee',
-    connection_type: 'wearable',
+    provider: 'bee' as const,
+    connection_type: 'wearable' as const,
     title: 'Bee AI Wearable',
-    category: 'Voice Context / Simulated Wearable',
+    description: 'Simulated audio context for spoken agreements and notes.',
     scopes: ['transcripts.read'],
-    description: 'Simulated audio context for spoken agreements, appointments, and conversation notes.',
-    isSimulated: true,
   },
 ];
 
@@ -242,115 +203,101 @@ export function ConnectAccountModal({
   onClose: () => void;
   onConnected?: () => void;
 }) {
-  const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  async function handleConnect(integration: typeof supportedIntegrations[number]) {
-    setConnectingId(integration.id);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+  async function connect(provider: 'google' | 'microsoft', kind: 'email' | 'calendar') {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
     try {
-      const payload: IntegrationCreate = {
-        provider: integration.provider,
-        connection_type: integration.connection_type,
-        display_name: integration.title,
-        status: 'connected',
-        scopes: integration.scopes,
-        metadata: {
-          mock: true,
-          demo: false,
-          account_kind: 'personal',
-        },
-      };
-
-      await api.createIntegration(payload);
-      setSuccessMessage(`Successfully connected ${integration.title}!`);
-      onConnected?.();
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to connect account');
+      const enabled = await providers.capabilities();
+      if (!enabled[provider]) throw new Error(`${providerLabels[provider]} authorization is not configured on this backend.`);
+      const connection = await providers.create(provider, kind);
+      const result = await providers.authorize(connection.id);
+      window.location.assign(consentUrl(result.authorization_url));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start authorization.');
     } finally {
-      setConnectingId(null);
+      setBusy(false);
+    }
+  }
+
+  async function connectSimulated(source: (typeof simulatedSources)[number]) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.createIntegration({
+        provider: source.provider,
+        connection_type: source.connection_type,
+        display_name: source.title,
+        status: 'connected',
+        scopes: source.scopes,
+        metadata: { mock: true, demo: false, account_kind: 'personal' },
+      });
+      setNotice(`Simulated ${source.title} added successfully.`);
+      onConnected?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add simulated source.');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <Modal title="Connect an Account or Source" onClose={onClose}>
-      <p style={{ margin: '0 0 1rem', fontSize: '0.925rem', color: '#475569' }}>
-        Connect your authorized email, calendar, or simulated devices. CountOn uses these sources to deterministically evaluate what you’re counting on.
-      </p>
+    <Modal title="Connect an account" onClose={onClose}>
+      <p>Authorize read-only access, then select a mailbox or calendar to synchronize. No messages or events are changed.</p>
+      
+      <div className="provider-list">
+        {([
+          ['google', 'email', 'Gmail'],
+          ['microsoft', 'email', 'Outlook'],
+          ['google', 'calendar', 'Google Calendar'],
+          ['microsoft', 'calendar', 'Microsoft Calendar'],
+        ] as const).map(([provider, kind, name]) => (
+          <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0' }}>
+            <strong>{name}</strong>
+            <button className="button secondary" disabled={busy} onClick={() => connect(provider, kind)}>
+              Connect
+            </button>
+          </div>
+        ))}
+      </div>
 
-      {successMessage && (
-        <div style={{ padding: '0.75rem', marginBottom: '1rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', color: '#166534', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-          <Check size={16} />
-          {successMessage}
+      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <strong style={{ fontSize: '0.875rem', color: '#475569' }}>Simulated Device Sources</strong>
+          <span className="demo-badge" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem' }}>
+            SIMULATED
+          </span>
         </div>
-      )}
-
-      {errorMessage && (
-        <div style={{ padding: '0.75rem', marginBottom: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '0.875rem' }}>
-          {errorMessage}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '380px', overflowY: 'auto' }}>
-        {supportedIntegrations.map((item) => {
-          const Icon = icons[item.connection_type] ?? Link2;
-          const isConnecting = connectingId === item.id;
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.875rem',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                backgroundColor: '#ffffff',
-                gap: '0.75rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <IconBox icon={Icon} tone={item.isSimulated ? 'orange' : 'blue'} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <strong style={{ fontSize: '0.95rem' }}>{item.title}</strong>
-                    {item.isSimulated && (
-                      <span className="demo-badge" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem' }}>
-                        SIMULATED
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                    {item.description}
-                  </p>
-                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                    Scopes: {item.scopes.map((s) => s.split('/').pop()).join(', ')}
-                  </span>
-                </div>
+        <div className="provider-list">
+          {simulatedSources.map((source) => (
+            <div key={source.title} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0' }}>
+              <div>
+                <strong>{source.title}</strong>
+                <p style={{ margin: '0.1rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>{source.description}</p>
               </div>
-
-              <button
-                className="button secondary"
-                onClick={() => handleConnect(item)}
-                disabled={isConnecting}
-                style={{ flexShrink: 0, fontSize: '0.85rem' }}
-              >
-                {isConnecting ? 'Connecting...' : '+ Connect'}
+              <button className="button secondary" disabled={busy} onClick={() => connectSimulated(source)}>
+                + Add Simulated
               </button>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="button primary" onClick={onClose}>
-          Done
-        </button>
-      </div>
+      <p className="caption" style={{ marginTop: '1rem' }}>
+        Utilities, carriers, Ring and Bee do not have live connectors here. Amazon order evidence uses authorized email or user-entered facts.
+      </p>
+
+      {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
+
+      <button className="button secondary full" style={{ marginTop: '0.75rem' }} onClick={onClose}>
+        Close
+      </button>
     </Modal>
   );
 }

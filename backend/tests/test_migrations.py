@@ -3,10 +3,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import DBAPIError
+
+from alembic import command
 
 pytestmark=pytest.mark.integration
 

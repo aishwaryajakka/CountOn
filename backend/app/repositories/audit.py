@@ -1,6 +1,6 @@
 """Backend-owned, redacted audit writes within the caller's transaction."""
-from app.db.models import AuditEvent
 from app.core.observability import request_id
+from app.db.models import AuditEvent
 
 
 def record(db,user_id,entity_type,entity_id,action,expectation_id=None,metadata=None):

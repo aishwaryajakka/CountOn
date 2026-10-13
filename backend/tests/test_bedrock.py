@@ -7,6 +7,14 @@ from enum import Enum
 from unittest.mock import Mock
 
 import pytest
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ReadTimeoutError,
+)
+from pydantic import BaseModel, ConfigDict, ValidationError
+
 from app.ai.bedrock_client import BedrockClient
 from app.ai.exceptions import (
     BedrockDisabledError,
@@ -20,13 +28,6 @@ from app.ai.prompts import compilation_input
 from app.core.config import Settings
 from app.core.logging import StructuredFormatter
 from app.core.observability import request_id
-from botocore.exceptions import (
-    ClientError,
-    EndpointConnectionError,
-    NoCredentialsError,
-    ReadTimeoutError,
-)
-from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 class Output(BaseModel):

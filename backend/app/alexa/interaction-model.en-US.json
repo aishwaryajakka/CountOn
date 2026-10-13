@@ -16,7 +16,12 @@
         },
         {
           "name": "GetExpectationIntent",
-          "slots": [{ "name": "text", "type": "AMAZON.SearchQuery" }],
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
             "tell me about {text}",
             "check {text}",
@@ -25,7 +30,12 @@
         },
         {
           "name": "CaptureExpectationIntent",
-          "slots": [{ "name": "text", "type": "AMAZON.SearchQuery" }],
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
             "I'm counting on {text}",
             "I'm expecting {text}",
@@ -36,7 +46,12 @@
         },
         {
           "name": "WhyExpectationIntent",
-          "slots": [{ "name": "text", "type": "AMAZON.SearchQuery" }],
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
             "why did it fail",
             "why didn't that match",
@@ -47,10 +62,30 @@
             "why was {text} higher"
           ]
         },
-        { "name": "AMAZON.HelpIntent", "samples": [] },
-        { "name": "AMAZON.CancelIntent", "samples": [] },
-        { "name": "AMAZON.StopIntent", "samples": [] },
-        { "name": "AMAZON.FallbackIntent", "samples": [] }
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
+        }
       ],
       "types": []
     },
@@ -66,7 +101,9 @@
               "type": "AMAZON.SearchQuery",
               "elicitationRequired": false,
               "confirmationRequired": false,
-              "prompts": { "elicitation": "CountOnClarification" }
+              "prompts": {
+                "elicitation": "CountOnClarification"
+              }
             }
           ]
         }
@@ -75,7 +112,12 @@
     "prompts": [
       {
         "id": "CountOnClarification",
-        "variations": [{ "type": "PlainText", "value": "What should I monitor?" }]
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What should I monitor?"
+          }
+        ]
       }
     ]
   }

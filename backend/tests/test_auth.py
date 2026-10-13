@@ -1,6 +1,6 @@
 """Verify real signatures and claims; auth overrides exist only inside tests."""
-from time import time
 from datetime import datetime, timezone
+from time import time
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -27,8 +27,8 @@ def verifier(monkeypatch):
 
 
 def token(verifier, key, **changes):
-    claims = dict(iss=verifier.issuer, aud='authenticated', sub=str(uuid4()), role='authenticated',
-                  iat=int(time())-1, exp=int(time())+300)
+    claims = {'iss': verifier.issuer, 'aud': 'authenticated', 'sub': str(uuid4()), 'role': 'authenticated',
+                  'iat': int(time())-1, 'exp': int(time())+300}
     claims.update(changes)
     return jwt.encode(claims, key, algorithm='ES256', headers={'kid':'test-key'}), claims
 
@@ -37,6 +37,37 @@ def test_valid_signature(verifier):
     verifier, key = verifier
     encoded, claims = token(verifier, key)
     assert str(verifier.verify(encoded).id) == claims['sub']
+
+
+def test_unconfigured_supabase_fails_closed_without_constructing_jwks(monkeypatch):
+    def unexpected_jwks(*args, **kwargs):
+        pytest.fail('An unconfigured verifier must not construct a JWKS client')
+    monkeypatch.setattr('app.core.auth.PyJWKClient', unexpected_jwks)
+    checked = TokenVerifier(Settings(
+        _env_file=None, database_target='local',
+        local_database_url='postgresql+psycopg://fixture@localhost/fixture',
+        supabase_url=None, supabase_jwks_url=None,
+    ))
+    assert checked.jwks is None
+    with pytest.raises(AuthenticationError):
+        checked.verify('invalid-token')
+
+
+def test_unconfigured_auth_returns_401_for_api_and_mcp(monkeypatch):
+    from app.mcp.auth import authenticated_user_from_header
+    checked = TokenVerifier(Settings(
+        _env_file=None, database_target='local',
+        local_database_url='postgresql+psycopg://fixture@localhost/fixture',
+        supabase_url=None, supabase_jwks_url=None,
+    ))
+    monkeypatch.setattr('app.api.dependencies.get_token_verifier', lambda: checked)
+    monkeypatch.setattr('app.mcp.auth.get_token_verifier', lambda: checked)
+    with TestClient(app) as client:
+        response = client.get('/api/v1/expectations', headers={'Authorization': 'Bearer invalid-token'})
+    assert response.status_code == 401
+    assert response.json()['error']['code'] == 'UNAUTHORIZED'
+    with pytest.raises(AuthenticationError):
+        authenticated_user_from_header('Bearer invalid-token')
 
 
 @pytest.fixture
@@ -71,7 +102,7 @@ def test_one_second_issuer_clock_skew(verifier, monkeypatch, fixed_jwt_clock, al
 @pytest.mark.parametrize('claim,offset', [('iat', 6), ('nbf', 6), ('exp', -6)])
 def test_clock_skew_window_is_bounded(verifier, monkeypatch, fixed_jwt_clock, algorithm, claim, offset):
     verifier, key = verifier
-    changes = dict(iat=fixed_jwt_clock-1, exp=fixed_jwt_clock+300)
+    changes = {'iat': fixed_jwt_clock-1, 'exp': fixed_jwt_clock+300}
     changes[claim] = fixed_jwt_clock+offset
     _, claims = token(verifier, key, **changes)
     if algorithm == 'HS256':
@@ -85,13 +116,17 @@ def test_clock_skew_window_is_bounded(verifier, monkeypatch, fixed_jwt_clock, al
 
 
 @pytest.mark.parametrize('changes', [
-    {'exp':int(time())-60}, {'iss':'https://other.example/auth/v1'}, {'aud':'other'},
-    {'sub':'not-a-uuid'}, {'role':'service_role'}, {'role':'anon'}, {'iat':int(time())+300},
-    {'nbf':int(time())+300},
+    {'exp':-60}, {'iss':'https://other.example/auth/v1'}, {'aud':'other'},
+    {'sub':'not-a-uuid'}, {'role':'service_role'}, {'role':'anon'}, {'iat':300},
+    {'nbf':300},
 ])
-def test_invalid_claims(verifier, changes):
+def test_invalid_claims(verifier, changes, fixed_jwt_clock):
     verifier, key = verifier
-    encoded, _ = token(verifier, key, **changes)
+    # NumericDate offsets use the verifier's frozen clock, never collection time.
+    claims = {'iat':fixed_jwt_clock-1, 'exp':fixed_jwt_clock+300}
+    claims.update({name: fixed_jwt_clock+value if name in ('exp','iat','nbf') else value
+                   for name, value in changes.items()})
+    encoded, _ = token(verifier, key, **claims)
     with pytest.raises(AuthenticationError):
         verifier.verify(encoded)
 
@@ -134,6 +169,21 @@ def test_legacy_hs256_requires_auth_server(verifier, monkeypatch, status, matchi
         assert str(verifier.verify(encoded).id)==claims['sub']
     else:
         with pytest.raises(AuthenticationError): verifier.verify(encoded)
+
+
+@pytest.mark.parametrize('body', [None, [], ['id'], 'unexpected', 42, {'id': None}])
+def test_legacy_auth_malformed_success_fails_closed(verifier, monkeypatch, body):
+    checked, key = verifier
+    _, claims = token(checked, key)
+    encoded = jwt.encode(claims, 'fixture-secret-at-least-32-characters', algorithm='HS256')
+    monkeypatch.setattr('app.core.auth.httpx.get', lambda *a, **k: SimpleNamespace(
+        status_code=200, json=lambda: body))
+    monkeypatch.setattr('app.api.dependencies.get_token_verifier', lambda: checked)
+    with TestClient(app) as client:
+        response = client.get('/api/v1/expectations', headers={'Authorization': f'Bearer {encoded}'})
+    assert response.status_code == 401
+    assert response.json()['error']['code'] == 'UNAUTHORIZED'
+    assert encoded not in response.text
 
 
 @pytest.mark.parametrize('headers', [{},{'Authorization':'Bearer invalid-token'},{'Authorization':'Basic invalid'}])

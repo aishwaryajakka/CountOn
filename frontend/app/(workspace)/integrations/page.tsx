@@ -5,7 +5,9 @@ import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { ConnectAccountModal, IntegrationCard } from '@/components/integration';
 import { EmptyState, ErrorState, IconBox, Loading, PageHeader } from '@/components/ui';
+
 const load = (signal: AbortSignal) => api.integrations(signal);
+
 export default function Integrations() {
   const state = useResource(load);
   const [modal, setModal] = useState(false);
@@ -27,7 +29,7 @@ export default function Integrations() {
         <div>
           <h2>Your sources. Your clarity.</h2>
           <p>
-            These account records describe where evidence can come from. Gmail, Google Calendar, Outlook, and Microsoft Calendar provide email & event context. Simulated Ring and Bee devices generate virtual hardware signals without live physical access.
+            Authorize a provider account, then select a source and synchronize it. Gmail, Google Calendar, Outlook, and Microsoft Calendar provide email & event context. Simulated Ring and Bee devices generate virtual hardware signals without live physical access.
           </p>
         </div>
       </div>
@@ -43,7 +45,12 @@ export default function Integrations() {
         ) : state.data?.length ? (
           <div className="grid two">
             {state.data.map((item) => (
-              <IntegrationCard item={item} key={item.id} onRefresh={state.reload} />
+              <IntegrationCard
+                item={item}
+                key={item.id}
+                reload={state.reload}
+                onRefresh={state.reload}
+              />
             ))}
           </div>
         ) : (
@@ -62,7 +69,7 @@ export default function Integrations() {
       <div className="soft-card connection-bottom">
         <h3>More context, thoughtfully connected.</h3>
         <p>
-          Email, calendars, utilities, deliveries and simulated sensors. CountOn accesses only authorized evidence relevant to your expectations.
+          Gmail, Outlook and calendars ask for permission first. Account authorization and successful synchronization are shown separately. Simulated Ring and Bee devices are labeled without physical hardware.
         </p>
         <button className="text-link" onClick={() => setModal(true)}>
           Explore supported providers →

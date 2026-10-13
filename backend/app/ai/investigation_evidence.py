@@ -20,7 +20,9 @@ from app.schemas.evidence import EvidenceResponse
 from app.schemas.expectation import ExpectationResponse
 from app.schemas.investigation import ExpectedValue, InvestigationContext, ObservedValue
 
-CONTRIBUTORS = {"total_cost": ("energy_usage_change", "rate_change")}
+CONTRIBUTORS: dict[str, tuple[str, ...]] = {
+    "total_cost": ("energy_usage_change", "rate_change")
+}
 REASONS = {
     "observed_value_failed_comparison",
     "comparison_satisfied",

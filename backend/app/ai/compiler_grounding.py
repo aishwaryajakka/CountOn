@@ -83,7 +83,7 @@ def metric_for(subject: str) -> str:
         value,
     ):
         return "total_cost"
-    if re.fullmatch(r"(?:my |the )?package", value):
+    if re.fullmatch(r"(?:my |the )?(?:amazon )?package", value):
         return "package_delivery"
     return re.sub(r"[^a-z0-9]+", "_", re.sub(r"^(my |the )", "", value)).strip("_")
 

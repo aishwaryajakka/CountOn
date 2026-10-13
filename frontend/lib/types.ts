@@ -51,7 +51,7 @@ export interface Evaluation {
 }
 
 export interface Notification {
-  id: string; user_id: string; expectation_id: string; evaluation_id: string;
+  id: string; user_id: string; expectation_id: string; evaluation_id: string | null;
   type: string; channel: string; status: 'pending' | 'read' | 'sent' | 'failed' | 'dismissed';
   message: string; metadata: JsonObject; sent_at: string | null; created_at: string;
 }
@@ -80,7 +80,7 @@ export interface Integration {
   external_account_id: string | null; display_name: string | null;
   status: 'pending' | 'connected' | 'disconnected' | 'error'; scopes: string[];
   metadata: { mock: boolean; demo: boolean; demo_tag: string | null; account_kind: string | null };
-  last_synced_at: string | null; created_at: string; updated_at: string; credential_state: 'not_configured';
+  last_synced_at: string | null; created_at: string; updated_at: string; credential_state: 'not_configured' | 'configured';
 }
 
 export interface WatchedExpectation { expectation: Expectation; latest: Evaluation | null }

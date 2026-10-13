@@ -6,8 +6,8 @@ Only literal booleans or booleans under the `value` key are supported.
 
 from math import isfinite
 
-from app.db.models.expectation import Expectation
 from app.db.models.evidence import Evidence
+from app.db.models.expectation import Expectation
 from app.evaluators.base import EvaluationOutput, EvaluationResult, latest_evidence
 
 
@@ -15,7 +15,7 @@ def evaluate(expectation: Expectation, evidence: list[Evidence]) -> EvaluationOu
     expected = {"metric": expectation.metric, "value": True}
     item = latest_evidence(evidence, expectation.metric)
     reason = "no_relevant_evidence"
-    observed = {}
+    observed: dict[str, object] = {}
     if item is not None:
         value = item.value.get("value") if isinstance(item.value, dict) else item.value
         observed = {"metric": item.metric, "evidence_id": str(item.id)}

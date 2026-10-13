@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Evidence, Evaluation
+from app.db.models import Evaluation, Evidence
 from app.schemas.evidence import EvidenceCreate
 
 
@@ -39,8 +39,11 @@ def investigation_evidence(db: Session, expectation_id: UUID, evaluation: Evalua
     Return pinned measurement, same-time conflicts, and latest contributor candidates.
     One extra candidate per metric allows the investigator to disclose truncation.
     """
-    from app.ai.investigation_evidence import CONTRIBUTORS
-    metric = evaluation.expected.get("metric") or evaluation.observed.get("metric")
+    from app.ai.investigation_evidence import CONTRIBUTORS, safe_metric
+    metric = safe_metric(evaluation.expected.get("metric") or evaluation.observed.get("metric"))
+    if metric is None:
+        # Malformed legacy JSON snapshots cannot safely select explanatory facts.
+        return []
     try:
         pinned_id = UUID(evaluation.observed.get("evidence_id", ""))
     except (ValueError, TypeError, AttributeError):

@@ -59,9 +59,10 @@ COUNTON_MCP_URL=https://counton-mcp.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.c
 
 On FastAPI, set `MCP_PUBLIC_URL` to that same endpoint. On **both Python services**,
 set the same secure `COUNTON_CLARIFICATION_SIGNING_KEY`; never put it in frontend
-variables. Use one API worker with the in-memory store. Production rollout needs
-API and frontend redeploys; no schema migration or MCP tool changes are required.
-Multi-worker deployments need shared atomic storage/sticky routing first.
+variables. Development may use memory state; production requires encrypted
+PostgreSQL state, current Alembic migrations, and the shared conversation key.
+API/frontend redeploys are required; all six MCP tool contracts are preserved.
+See [production acceptance](../../docs/production-readiness.md).
 
 For local development, start PostgreSQL and the API as documented in the root
 README. In another backend terminal, use the existing MCP startup command:

@@ -10,8 +10,8 @@ from decimal import Decimal
 from math import isfinite
 from typing import Any
 
-from app.db.models.expectation import ComparisonType, Expectation
 from app.db.models.evidence import Evidence
+from app.db.models.expectation import ComparisonType, Expectation
 from app.evaluators.base import EvaluationOutput, EvaluationResult, latest_evidence
 
 
@@ -56,7 +56,7 @@ def evaluate(expectation: Expectation, evidence: list[Evidence]) -> EvaluationOu
     item = latest_evidence(evidence, expectation.metric)
     if item is None:
         return unknown("no_relevant_evidence")
-    observed = {"metric": expectation.metric, "evidence_id": str(item.id)}
+    observed: dict[str, object] = {"metric": expectation.metric, "evidence_id": str(item.id)}
     amount = extract_numeric(item.value)
     if amount is None:
         return unknown("malformed_numeric_evidence", observed)

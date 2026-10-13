@@ -1,47 +1,251 @@
-# Python
+
+# ============================================================
+# CountOn — Root .gitignore
+# FastAPI | Python | Next.js | PostgreSQL | Supabase
+# AWS Bedrock | Alexa MCP | Gmail | Outlook | Google Calendar
+# ============================================================
+
+
+# ============================================================
+# 1. Python
+# ============================================================
+
 __pycache__/
 *.py[cod]
+*$py.class
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+
 .venv/
 venv/
-.coverage
-htmlcov/
+env/
+ENV/
 
-# Local env / secrets
+.tox/
+.nox/
+
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+dist/
+build/
+
+
+# ============================================================
+# 2. Environment Variables and Secrets
+# ============================================================
+
 .env
 .env.*
-# Retain the frontend's broader local-env rule.
-frontend/.env*
-# Credential-free example/sample templates remain trackable.
+*.env.local
+
+# Keep credential-free configuration templates
 !.env.example
 !*.env.example
 !.env.sample
 !*.env.sample
 
-# Node / Next.js
+# Sensitive local configuration
+.secrets/
+secrets/
+*.secret
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+
+# OAuth credentials and token caches
+*token-cache*
+*token_cache*
+*oauth-token*.json
+*oauth_token*.json
+*credentials*.json
+*service-account*.json
+*service_account*.json
+
+# Locally downloaded cloud credentials
+.aws/
+.gcloud/
+.aws-sam/
+
+
+# ============================================================
+# 3. Node.js / Next.js / Frontend
+# ============================================================
+
 node_modules/
 .next/
 out/
 .vercel/
+.turbo/
+
 *.tsbuildinfo
+*.tgz
 
-# Test/build output
-coverage/
-test-results/
-playwright-report/
-.nyc_output/
-
-# OS / editor
-.DS_Store
-__MACOSX/
-.vscode/
-.idea/
-
-# Logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+.pnpm-store/
+.npm/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+
+# ============================================================
+# 4. Databases and Runtime
+# ============================================================
+
+*.sqlite
+*.sqlite3
+*.db-journal
+
+*.pid
+*.pid.lock
+
+tmp/
+temp/
+
+# Local database dumps and backups
+*.dump
+*.backup
+*.sql.gz
+
+# IMPORTANT:
+# Keep SQL migrations, schemas, and seed scripts tracked.
+
+
+# ============================================================
+# 5. Tests and Coverage
+# ============================================================
+
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.nyc_output/
+
+allure-results/
+allure-report/
+
+junit.xml
+pytest-report.xml
+
+
+# ============================================================
+# 6. Logs and Debugging
+# ============================================================
+
+*.log
+logs/
+
+debug.log
+error.log
+
+*.trace
+*.prof
+*.profraw
+*.profdata
+
+
+# ============================================================
+# 7. Operating System Files
+# ============================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+__MACOSX/
+
+Thumbs.db
+Desktop.ini
+
+.Spotlight-V100
+.Trashes
+
+
+# ============================================================
+# 8. Editors and IDEs
+# ============================================================
+
+.vscode/
+.idea/
+
+*.swp
+*.swo
+*~
+
+.history/
+
+
+# ============================================================
+# 9. Local AI Agent State
+# ============================================================
+
+.codex/
+.claude/
+.agent/
+
+# Keep shared agent instructions and project skills tracked
+# unless they contain sensitive local configuration.
+
+
+# ============================================================
+# 10. Temporary and Backup Files
+# ============================================================
+
+*.bak
+*.tmp
+*.temp
+*.orig
+*.rej
+
+
+# ============================================================
+# 11. Local Development Artifacts
+# ============================================================
+
+.cache/
+.parcel-cache/
+
+*.local.db
+*.local.sqlite
+
+
+# ============================================================
+# IMPORTANT: KEEP THESE TRACKED
+# ============================================================
+
+# backend/alembic/
+# backend/app/
+# backend/tests/
+# backend/requirements.txt
+# backend/requirements-dev.txt
+# backend/providers.env.sample
+# backend/bedrock.env.sample
+# backend/notifications.env.sample
+# backend/production.env.sample
+# frontend/.env.example
+# frontend/package.json
+# frontend/package-lock.json
+# .github/workflows/
+# docs/
+# README.md
+# AGENTS.md

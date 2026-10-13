@@ -3,8 +3,9 @@
 from unittest.mock import Mock
 
 import pytest
-from app.core.config import Settings
 from botocore.exceptions import ClientError, NoCredentialsError
+
+from app.core.config import Settings
 from db.scripts import bedrock_smoke as smoke
 
 

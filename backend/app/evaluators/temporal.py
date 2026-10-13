@@ -1,7 +1,7 @@
 """Temporal and event semantics are deferred; never infer a contradiction."""
 
-from app.db.models.expectation import Expectation
 from app.db.models.evidence import Evidence
+from app.db.models.expectation import Expectation
 from app.evaluators.base import EvaluationOutput, EvaluationResult
 
 
