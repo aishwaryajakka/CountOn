@@ -124,3 +124,24 @@ def ingest_bee_event(
             status_code=422,
             detail=str(exc),
         ) from exc
+
+
+@router.post("/{expectation_id}/events/email", status_code=201)
+def ingest_email_event(
+    expectation_id: UUID,
+    db: Database,
+    user: CurrentUser,
+    event: dict = Body(...),
+):
+    try:
+        return integration_event_service.ingest_email_event(
+            db=db,
+            expectation_id=expectation_id,
+            user_id=user.id,
+            event=event,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
