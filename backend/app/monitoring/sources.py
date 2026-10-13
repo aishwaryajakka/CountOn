@@ -113,7 +113,6 @@ def context(db, expectation, now: datetime, max_age: int, *, binding_override=No
         "binding_id": str(binding.id),
         "binding_rule": version(binding.rule),
         "connection_id": str(connection.id),
-        "account_id": connection.external_account_id,
         "oauth_generation": str(connection.oauth_generation),
     }, None
 
@@ -132,9 +131,7 @@ def current_calendar_fact(db, expectation, evidence):
             ProviderSourceEvent.external_id == evidence.raw_data.get("source_event_id"),
         )
     )
-    return bool(
-        source and source.version == version(evidence.raw_data.get("facts", {}))
-    )
+    return bool(source and source.version == evidence.raw_data.get("source_version"))
 
 
 def absence_signature(identity: str) -> str:
@@ -296,8 +293,10 @@ def publish_absence(db, expectation, binding, sync, connection, relevant, now):
 
 def grounded_provider_fact(db, expectation, evidence):
     """Verify the evidence payload against the backend-only current projection."""
+    from app.core.config import get_settings
     from app.db.models import ProviderSourceEvent
     from app.evaluators.numeric import extract_numeric
+    from app.integrations.provider import ProviderError
     from app.integrations.worker import matches, value_for
     from app.schemas.provider_sync import SourceRule
     from app.services.provider_sync_service import source_name
@@ -315,8 +314,15 @@ def grounded_provider_fact(db, expectation, evidence):
             ProviderSourceEvent.external_id == evidence.raw_data.get("source_event_id"),
         )
     )
-    facts = evidence.raw_data.get("facts")
-    if not source or not isinstance(facts, dict) or version(facts) != source.version:
+    if not source or evidence.raw_data.get("source_version") != source.version:
+        return False
+    from app.integrations.accounts import account_oauth
+
+    try:
+        facts = account_oauth(get_settings(), connection).decrypt(
+            source.encrypted_facts, sync.id
+        )
+    except (ProviderError, ValueError, TypeError):
         return False
     rule = SourceRule.model_validate(binding.rule)
     if evidence.source != source_name(connection) or not matches(

@@ -45,8 +45,13 @@ it('renders persisted audit history from the backend', async () => {
     evidence: null,
   }]);
   render(<Activity />);
-  expect(await screen.findByText('Source authorized')).toBeInTheDocument();
+  expect(await screen.findByRole('table', { name: 'Audit History' })).toBeInTheDocument();
+  for (const heading of ['Expectation', 'Evidence', 'Source', 'Result', 'Action', 'Timestamp']) {
+    expect(screen.getByRole('columnheader', { name: heading })).toBeInTheDocument();
+  }
   expect(screen.getByText('Provider source bound')).toBeInTheDocument();
+  expect(screen.getByText('Gmail · Official oauth')).toBeInTheDocument();
+  expect(screen.queryByText('Source authorized')).not.toBeInTheDocument();
 });
 it('renders the login form and submits through Supabase Auth', async () => {
   mocks.signIn.mockResolvedValue({ data: { session: { access_token: 'fixture-token', user: { id: 'fixture-user' } } }, error: null });

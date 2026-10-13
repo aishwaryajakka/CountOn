@@ -1,6 +1,5 @@
 """Ring event simulator: simulates package deliveries, doorbell rings, and motion events without physical hardware."""
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -109,10 +108,7 @@ def simulate_motion(
 
 if __name__ == "__main__":
     import sys
+
     kind = sys.argv[1] if len(sys.argv) > 1 else "package_detected"
-    raw = generate_ring_event(kind=kind)
-    evidence = ring_event_to_evidence(raw)
-    print("Simulated Raw Ring Event:")
-    print(json.dumps(raw, indent=2))
-    print("\nConverted CountOn Evidence:")
-    print(evidence.model_dump_json(indent=2) if evidence else "None")
+    evidence = ring_event_to_evidence(generate_ring_event(kind=kind))
+    print("Ring simulation normalized" if evidence else "Unsupported Ring event")

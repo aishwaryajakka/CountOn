@@ -11,11 +11,13 @@ from app.db.models.evidence import Evidence
 from app.db.models.expectation import Expectation, ExpectationType
 from app.evaluators.base import EvaluationResult
 from app.evaluators.boolean import evaluate as evaluate_boolean
+from app.integrations.bee.adapter import bee_event_to_evidence
 from app.integrations.bee.simulator import (
     simulate_document_commitment,
     simulate_plumber_cancelled,
     simulate_plumber_confirmed,
 )
+from app.integrations.ring.adapter import ring_event_to_evidence
 from app.integrations.ring.simulator import (
     simulate_doorbell_ring,
     simulate_motion,
@@ -120,6 +122,40 @@ def test_bee_document_commitment():
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "conversation_mention"
     assert "Sarah" in ev_create.value["speaker"]
+
+
+def test_simulator_adapters_never_retain_media_or_transcripts():
+    ring = ring_event_to_evidence(
+        {
+            "simulated": True,
+            "event_id": "ring-private-payload",
+            "kind": "package_detected",
+            "timestamp": "2026-10-13T12:00:00Z",
+            "video_url": "https://private.invalid/video",
+            "provider_payload": {"private": "content"},
+        }
+    )
+    bee = bee_event_to_evidence(
+        {
+            "simulated": True,
+            "id": "bee-private-payload",
+            "type": "conversation",
+            "start_time": "2026-10-13T12:00:00Z",
+            "summary": "Only the approved summary",
+            "transcript": "private full conversation",
+            "audio_url": "https://private.invalid/audio",
+        }
+    )
+
+    assert ring is not None and ring.raw_data == {
+        "provenance": "SIMULATED_RING",
+        "simulated": True,
+    }
+    assert bee is not None and bee.raw_data == {
+        "provenance": "SIMULATED_BEE",
+        "simulated": True,
+        "category": "conversation",
+    }
 
 
 if __name__ == "__main__":

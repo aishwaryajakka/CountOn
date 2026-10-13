@@ -1,6 +1,7 @@
 """Durable PostgreSQL leases; provider I/O outside the atomic evaluation transaction."""
 
 import argparse
+import hashlib
 import logging
 import signal
 import threading
@@ -182,13 +183,22 @@ class Worker:
                     provider_identity = {
                         "provider": "microsoft_graph",
                         "connection_id": str(connection.id),
+                        "account_fingerprint": hashlib.sha256(
+                            (
+                                "counton-provider-account:"
+                                + connection.external_account_id
+                            ).encode()
+                        ).hexdigest(),
+                    }
+                    provider_claim = {
+                        **provider_identity,
                         "account_id": connection.external_account_id,
                     }
                     if any(
                         payload.source != "outlook_email"
                         or any(
                             payload.raw_data.get(k) != v
-                            for k, v in provider_identity.items()
+                            for k, v in provider_claim.items()
                         )
                         for payload in evidence
                     ):

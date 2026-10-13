@@ -95,10 +95,10 @@ def evaluate_sources(db, expectation, bindings, **kwargs):
                 ):
                     states = {
                         (
-                            bool(r.raw_data.get("facts", {}).get("cancelled")),
+                            bool(r.raw_data.get("correlation", {}).get("cancelled")),
                             None
-                            if r.raw_data.get("facts", {}).get("cancelled")
-                            else r.raw_data.get("facts", {}).get("start"),
+                            if r.raw_data.get("correlation", {}).get("cancelled")
+                            else r.raw_data.get("correlation", {}).get("start"),
                         )
                         for i, r in enumerate(rows)
                         if i in chosen and rules[i].kind == "calendar"

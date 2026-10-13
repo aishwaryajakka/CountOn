@@ -110,16 +110,42 @@ export default function Activity() {
             ) : auditState.error ? (
               <ErrorState error={auditState.error} retry={auditState.reload} />
             ) : auditState.data?.length ? (
-              <section className="card activity-list">
+              <section className="card" role="table" aria-label="Audit History" style={{ overflowX: 'auto' }}>
+                <div
+                  role="row"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.5fr 1.2fr 1fr .8fr 1.1fr 1fr',
+                    gap: '1rem',
+                    padding: '1rem',
+                    borderBottom: '1px solid var(--border-color, #e2e8f0)',
+                    minWidth: '52rem',
+                  }}
+                >
+                  {['Expectation', 'Evidence', 'Source', 'Result', 'Action', 'Timestamp'].map((label) => (
+                    <strong role="columnheader" key={label}>{label}</strong>
+                  ))}
+                </div>
                 {auditState.data.map((event) => (
-                  <div key={event.audit_event_id}>
-                    <span className="status-dot" />
-                    <div>
-                      <strong>{humanize(event.event_type.toLowerCase())}</strong>
-                      <p>{event.expectation ? <Link href={`/expectations/${event.expectation.id}`}>{event.expectation.claim}</Link> : 'Account activity'} · {event.source_provider ? humanize(event.source_provider.toLowerCase()) : 'CountOn'}{event.evidence ? ` · ${Object.values(event.evidence.value).filter(value => ['string','number','boolean'].includes(typeof value)).slice(0, 2).join(' · ') || 'Evidence recorded'}` : ''}{event.result_status ? ` · ${evaluationLabels[event.result_status]}` : ''}</p>
-                      <span className="caption">{humanize(event.action_taken.replaceAll('.', '_'))}</span>
-                    </div>
-                    <time dateTime={event.evidence?.observed_at ?? event.occurred_at}>
+                  <div
+                    key={event.audit_event_id}
+                    role="row"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.5fr 1.2fr 1fr .8fr 1.1fr 1fr',
+                      gap: '1rem',
+                      padding: '1rem',
+                      borderBottom: '1px solid var(--border-color, #e2e8f0)',
+                      alignItems: 'center',
+                      minWidth: '52rem',
+                    }}
+                  >
+                    <span role="cell">{event.expectation ? <Link href={`/expectations/${event.expectation.id}`}>{event.expectation.claim}</Link> : 'Account activity'}</span>
+                    <span role="cell">{event.evidence ? Object.values(event.evidence.value).filter(value => ['string','number','boolean'].includes(typeof value)).slice(0, 2).join(' · ') || 'Evidence recorded' : '—'}</span>
+                    <span role="cell">{event.source_provider ? `${humanize(event.source_provider.toLowerCase())}${event.source_provenance ? ` · ${humanize(event.source_provenance.toLowerCase())}` : ''}` : 'CountOn'}</span>
+                    <span role="cell">{event.result_status ? evaluationLabels[event.result_status] : '—'}</span>
+                    <span role="cell">{humanize(event.action_taken.replaceAll('.', '_'))}</span>
+                    <time role="cell" dateTime={event.evidence?.observed_at ?? event.occurred_at}>
                       {formatDate(event.evidence?.observed_at ?? event.occurred_at, timeZone)}
                     </time>
                   </div>

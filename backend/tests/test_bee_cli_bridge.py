@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.api.dependencies import get_current_user
-from app.db.models import BeeExpectationBinding, Evidence
+from app.db.models import BeeExpectationBinding, BeeImportCandidate, Evidence
 from app.integrations.bee import cli_bridge
 from app.main import app
 
@@ -106,10 +106,27 @@ def test_consent_import_dedup_checkpoint_and_cross_user_isolation(client, db, us
     assert promise["metric"] == "bee_context" and "value" not in promise["value"]
     assert db.scalar(select(func.count()).select_from(BeeExpectationBinding).where(BeeExpectationBinding.user_id == users[0].id)) == 1
     assert db.scalar(select(func.count()).select_from(Evidence).where(Evidence.expectation_id == UUID(expectation["id"]))) == 2
+    retained = list(
+        db.scalars(
+            select(BeeImportCandidate).where(
+                BeeImportCandidate.user_id == users[0].id
+            )
+        )
+    )
+    assert retained and all(row.summary == "" and row.fact == {} for row in retained)
     replay = client.post("/api/v1/integrations/bee-cli/imports", json={"expectation_id": expectation["id"], "candidate_ids": [candidates[0]["id"]], "consent": True, "confirm_source_binding": True})
     assert replay.status_code == 404
     disconnected = client.post("/api/v1/integrations/bee-cli/disconnect", json={"revoke": True})
     assert disconnected.status_code == 200
+    db.expire_all()
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(BeeImportCandidate)
+            .where(BeeImportCandidate.user_id == users[0].id)
+        )
+        == 0
+    )
     assert client.post("/api/v1/integrations/bee-cli/bridge/candidates", headers=headers, json=batch).status_code == 401
 
 

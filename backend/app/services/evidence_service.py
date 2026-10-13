@@ -12,6 +12,7 @@ from app.db.models import Evidence, Expectation
 from app.repositories import audit, operations
 from app.repositories import evidence as repository
 from app.schemas.evidence import EvidenceCreate
+from app.services.evidence_minimization import minimize_raw_data
 from app.services.expectation_service import get_expectation
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 def add_evidence(db: Session, expectation_id: UUID, payload: EvidenceCreate, user_id: UUID, idempotency_key: str | None = None, *, commit: bool = True) -> Evidence:
     expectation = get_expectation(db, expectation_id, user_id)
+    payload = payload.model_copy(
+        update={"raw_data": minimize_raw_data(payload.raw_data)}
+    )
     try:
         if idempotency_key or payload.external_event_id:
             db.scalar(select(Expectation).where(Expectation.id==expectation_id,Expectation.user_id==user_id).with_for_update())

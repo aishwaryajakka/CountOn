@@ -3,7 +3,7 @@
 from datetime import timezone
 from typing import Any
 
-from pydantic import AwareDatetime, TypeAdapter
+from pydantic import AwareDatetime, JsonValue, TypeAdapter
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -38,7 +38,11 @@ def ring_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     device = raw.get("device", "front_door")
     confidence = float(raw.get("confidence", 0.9))
     event_id = raw.get("event_id") or raw.get("id")
-    raw_data = {**raw, "provenance": "SIMULATED_RING"} if raw.get("simulated") is True else raw
+    simulated = raw.get("simulated") is True
+    raw_data: dict[str, JsonValue] = {
+        "provenance": "SIMULATED_RING" if simulated else "LIVE_RING",
+        "simulated": simulated,
+    }
 
     if kind in PACKAGE_DETECTED_KINDS:
         metric = raw.get("metric", "package_detected")

@@ -150,6 +150,44 @@ def value_for(
     return None  # no inference from silence, date strings, or arbitrary metrics
 
 
+def potential_candidate(facts: dict, metrics: set[str]) -> bool:
+    """Keep a minimal projection only when a confirmed expectation can use it."""
+    if facts.get("unavailable"):
+        return False
+    if facts.get("kind") == "calendar":
+        return bool(
+            metrics
+            & {
+                "event_cancelled",
+                "event_not_cancelled",
+                "event_scheduled",
+                "event_unchanged",
+            }
+        )
+    if facts.get("kind") != "email":
+        return False
+    return bool(
+        "total_cost" in metrics
+        and facts.get("currency") == "USD"
+        and "amount" in facts
+        or "reply_received" in metrics
+        and facts.get("sender")
+        and facts.get("thread_id")
+        or metrics & {"delivery_reported", "package_delivery", "order_update"}
+        and facts.get("order_id")
+        or metrics
+        & {
+            "commitment_confirmed",
+            "commitment_cancelled",
+            "event_cancelled",
+            "event_not_cancelled",
+            "event_scheduled",
+            "event_unchanged",
+        }
+        and (facts.get("commitment_status") or facts.get("calendar_uid"))
+    )
+
+
 class SyncWorker:
     def __init__(
         self,
@@ -280,6 +318,24 @@ class SyncWorker:
                 if item.round_started_at is None:
                     item.round_started_at = now
                 round_started = item.round_started_at
+                active_metrics = set(
+                    db.scalars(
+                        select(Expectation.metric).where(
+                            Expectation.user_id == item.user_id,
+                            Expectation.status.notin_(["cancelled", "resolved"]),
+                            Expectation.metric.is_not(None),
+                        )
+                    )
+                )
+                active_rules = [
+                    SourceRule.model_validate(rule)
+                    for rule in db.scalars(
+                        select(ExpectationSourceBinding.rule).where(
+                            ExpectationSourceBinding.sync_id == item.id,
+                            ExpectationSourceBinding.user_id == item.user_id,
+                        )
+                    )
+                ]
                 for external_id, facts in page.events:
                     if not external_id or len(external_id) > 512:
                         raise ProviderError(
@@ -291,6 +347,18 @@ class SyncWorker:
                             ProviderSourceEvent.external_id == external_id,
                         )
                     )
+                    if stored is None and not potential_candidate(
+                        facts, active_metrics
+                    ) and not (
+                        facts.get("unavailable")
+                        and any(
+                            rule.kind == "reply"
+                            or matches(facts, external_id, rule)
+                            for rule in active_rules
+                        )
+                    ):
+                        record("provider_records_discarded", "unrelated")
+                        continue
                     if stored is None:
                         stored = ProviderSourceEvent(
                             sync_id=id, user_id=item.user_id, external_id=external_id
@@ -614,7 +682,6 @@ class SyncWorker:
                         "binding_id": str(binding.id),
                         "binding_rule": version(binding.rule),
                         "oauth_generation": str(connection.oauth_generation),
-                        "account_id": connection.external_account_id,
                         "source_event_id": source.external_id,
                         "source_version": source.version,
                         "source_timestamp": source_timestamp,
@@ -624,13 +691,21 @@ class SyncWorker:
                         or source_timestamp,
                         "observed_at": observed.isoformat(),
                         "verified_at": now.isoformat(),
-                        "scopes": connection.scopes,
                         "provenance": "official_api",
                         "report_basis": facts.get("report_basis", "provider_event"),
                         "sender_authenticated": facts.get(
                             "sender_authenticated", False
                         ),
-                        "facts": facts,
+                        "source_category": (
+                            "amazon_order_email"
+                            if rule.kind == "order"
+                            else connection.connection_type
+                        ),
+                        "correlation": {
+                            key: facts[key]
+                            for key in ("cancelled", "start")
+                            if key in facts
+                        },
                     },
                 )
                 evidence_service.add_evidence(

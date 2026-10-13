@@ -3,7 +3,7 @@
 from datetime import timezone
 from typing import Any
 
-from pydantic import AwareDatetime, TypeAdapter
+from pydantic import AwareDatetime, JsonValue, TypeAdapter
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -57,7 +57,12 @@ def bee_event_to_evidence(raw: dict[str, Any]) -> EvidenceCreate | None:
     if inferred is not None:
         val_dict["value"] = inferred
 
-    raw_data = {**raw, "provenance": "SIMULATED_BEE"} if raw.get("simulated") is True else raw
+    simulated = raw.get("simulated") is True
+    raw_data: dict[str, JsonValue] = {
+        "provenance": "SIMULATED_BEE" if simulated else "LIVE_BEE",
+        "simulated": simulated,
+        "category": event_type,
+    }
 
     return EvidenceCreate(
         external_event_id=raw.get("id") or raw.get("event_id") or None,

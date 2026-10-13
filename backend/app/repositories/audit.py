@@ -61,15 +61,12 @@ def evidence_source(evidence) -> dict:
         "bee_simulator": ("BEE", "BEE_OBSERVATION"),
         "bee": ("BEE", "BEE_OBSERVATION"),
     }.get(source, (source.upper()[:30], "NORMALIZED_EVIDENCE"))
-    raw_facts = raw.get("facts")
-    facts: dict = raw_facts if isinstance(raw_facts, dict) else {}
     reference = (
-        facts.get("order_id")
-        or raw.get("provider_record_ref")
+        raw.get("provider_record_ref")
         or raw.get("source_event_id")
         or evidence.external_event_id
     )
-    if facts.get("order_id"):
+    if raw.get("source_category") == "amazon_order_email":
         source_type = "AMAZON_ORDER_EMAIL"
     return {
         "source_provider": provider,

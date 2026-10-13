@@ -16,6 +16,7 @@ from app.core.exceptions import ResourceNotFoundError
 from app.db.models import (
     Evidence,
     ExpectationSourceBinding,
+    ProviderSourceEvent,
     ProviderSyncState,
 )
 from app.db.models.integration import IntegrationCredential
@@ -27,7 +28,7 @@ from app.integrations.accounts import (
 from app.integrations.adapters import AccountAdapter, Page
 from app.integrations.normalization import calendar_facts, calendar_time, mail_facts
 from app.integrations.provider import ProviderError
-from app.integrations.worker import SyncWorker, matches, value_for
+from app.integrations.worker import SyncWorker, matches, potential_candidate, value_for
 from app.schemas.integration import IntegrationCreate
 from app.schemas.provider_sync import (
     BindingCreate,
@@ -143,7 +144,6 @@ def test_malicious_email_is_data_not_compilation_or_commands():
         "subject",
         "thread_id",
         "source_timestamp",
-        "attachments",
         "sender_authenticated",
         "report_basis",
         "amount",
@@ -216,6 +216,14 @@ def test_sender_thread_and_order_matching_is_exact():
     assert not matches({**facts, "thread_id": "thread2"}, "mail1", rule)
     assert not matches({**facts, "sender": "attacker@example.test"}, "mail1", rule)
     assert value_for(facts, rule, "arbitrary_metric") is None
+
+
+def test_provider_projection_requires_a_confirmed_expectation_metric():
+    unrelated = mail_facts(gmail(text="A general newsletter"), "google")
+    bill = mail_facts(gmail(text="Total due: $162.00"), "google")
+    assert not potential_candidate(unrelated, {"total_cost"})
+    assert potential_candidate(bill, {"total_cost"})
+    assert potential_candidate(unrelated, {"reply_received"})
 
 
 @pytest.mark.parametrize(
@@ -509,7 +517,19 @@ def test_sync_to_real_owned_evidence_duplicate_and_cross_user(scenario):
                     (
                         "mail1",
                         mail_facts(gmail(now=now - timedelta(minutes=1)), "google"),
-                    )
+                    ),
+                    (
+                        "unrelated-mail",
+                        mail_facts(
+                            gmail(
+                                now=now - timedelta(minutes=1),
+                                text="A general newsletter with no monitored fact",
+                                id="unrelated-mail",
+                                threadId="unrelated-thread",
+                            ),
+                            "google",
+                        ),
+                    ),
                 ],
                 {"history": "100"},
                 True,
@@ -538,6 +558,14 @@ def test_sync_to_real_owned_evidence_duplicate_and_cross_user(scenario):
         )
         assert row.value == {"amount": 162} and row.raw_data["connection_id"] == str(
             connection_id
+        )
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ProviderSourceEvent)
+                .where(ProviderSourceEvent.sync_id == sync_id)
+            )
+            == 1
         )
         assert db.get(ProviderSyncState, sync_id).last_success_at == now
         with pytest.raises(ResourceNotFoundError):

@@ -4,7 +4,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.core.exceptions import (
     AuthenticationError,
@@ -26,6 +26,7 @@ from app.services.expectation_service import get_expectation
 
 PAIR_TTL = timedelta(minutes=10)
 TOKEN_TTL = timedelta(days=90)
+CANDIDATE_TTL = timedelta(days=7)
 
 
 def _digest(value: str) -> str:
@@ -34,6 +35,7 @@ def _digest(value: str) -> str:
 
 def create_pairing(db, user_id):
     now = datetime.now(timezone.utc)
+    db.execute(delete(BeeCliPairing).where(BeeCliPairing.expires_at <= now))
     code = secrets.token_urlsafe(32)
     db.add(BeeCliPairing(user_id=user_id, code_digest=_digest(code), expires_at=now + PAIR_TTL))
     audit.record(db, user_id, "integration", user_id, "bee_cli.pairing_created")
@@ -124,6 +126,13 @@ def authenticate_connector(db, token: str):
 
 def stage(db, credential, payload):
     now = datetime.now(timezone.utc)
+    db.execute(
+        delete(BeeImportCandidate).where(
+            BeeImportCandidate.connection_id == credential.connection_id,
+            BeeImportCandidate.status == "pending",
+            BeeImportCandidate.created_at < now - CANDIDATE_TTL,
+        )
+    )
     accepted = 0
     for candidate in payload.candidates:
         row = db.scalar(select(BeeImportCandidate).where(BeeImportCandidate.connection_id == credential.connection_id, BeeImportCandidate.external_id == candidate.external_id))
@@ -155,8 +164,17 @@ def stage(db, credential, payload):
 
 
 def status(db, user_id):
+    now = datetime.now(timezone.utc)
+    db.execute(
+        delete(BeeImportCandidate).where(
+            BeeImportCandidate.user_id == user_id,
+            BeeImportCandidate.status == "pending",
+            BeeImportCandidate.created_at < now - CANDIDATE_TTL,
+        )
+    )
     connection = db.scalar(select(IntegrationConnection).where(IntegrationConnection.user_id == user_id, IntegrationConnection.provider == "bee", IntegrationConnection.connection_type == "wearable", IntegrationConnection.connection_metadata["demo"].astext != "true").order_by(IntegrationConnection.created_at.desc()))
     if connection is None:
+        db.commit()
         return {"simulator_available": True, "state": "not_paired", "pending_candidates": 0}
     credential = db.scalar(select(BeeCliCredential).where(BeeCliCredential.connection_id == connection.id, BeeCliCredential.user_id == user_id))
     pending = db.scalar(select(func.count()).select_from(BeeImportCandidate).where(BeeImportCandidate.connection_id == connection.id, BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending")) or 0
@@ -168,11 +186,23 @@ def status(db, user_id):
         state = "import_enabled"
     else:
         state = "paired"
-    return {"simulator_available": True, "state": state, "connection_id": connection.id, "cli_version": credential.cli_version if credential else None, "last_sync_at": credential.last_sync_at if credential else None, "last_error": credential.last_error if credential else None, "pending_candidates": pending}
+    result = {"simulator_available": True, "state": state, "connection_id": connection.id, "cli_version": credential.cli_version if credential else None, "last_sync_at": credential.last_sync_at if credential else None, "last_error": credential.last_error if credential else None, "pending_candidates": pending}
+    db.commit()
+    return result
 
 
 def candidates(db, user_id):
-    return list(db.scalars(select(BeeImportCandidate).where(BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending").order_by(BeeImportCandidate.observed_at.desc()).limit(100)))
+    now = datetime.now(timezone.utc)
+    db.execute(
+        delete(BeeImportCandidate).where(
+            BeeImportCandidate.user_id == user_id,
+            BeeImportCandidate.status == "pending",
+            BeeImportCandidate.created_at < now - CANDIDATE_TTL,
+        )
+    )
+    rows = list(db.scalars(select(BeeImportCandidate).where(BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending").order_by(BeeImportCandidate.observed_at.desc()).limit(100)))
+    db.commit()
+    return rows
 
 
 def import_candidates(db, user_id, payload):
@@ -215,8 +245,19 @@ def import_candidates(db, user_id, payload):
         imported += int(before is None)
         duplicate += int(before is not None)
         row.status, row.imported_at = "imported", now
-        evaluation = evaluation_service.evaluate_expectation(db, expectation.id, user_id, idempotency_key=f"bee-import:{row.id}:{row.version}", commit=False)
+        evaluation = evaluation_service.evaluate_expectation(
+            db,
+            expectation.id,
+            user_id,
+            idempotency_key=(
+                f"bee-import:{connection_id}:{row.external_id}:{row.version}"
+            ),
+            commit=False,
+        )
         evaluation_ids.append(evaluation.id)
+        # Keep a small replay tombstone while removing staged private text after
+        # the approved fact has become normalized CountOn evidence.
+        row.summary, row.fact = "", {}
     audit.record(db, user_id, "expectation", expectation.id, "bee_cli.evidence_imported", metadata={"count": imported, "connection_id": str(connection_id)})
     db.commit()
     return {"imported": imported, "duplicate": duplicate, "evaluation_ids": evaluation_ids, "binding_id": binding.id}
@@ -238,5 +279,11 @@ def disconnect(db, user_id):
                 source_reference=connection.external_account_id,
                 idempotency_key=f"SOURCE_DISCONNECTED:{connection.id}:{now.isoformat()}",
             )
+        db.execute(
+            delete(BeeImportCandidate).where(
+                BeeImportCandidate.connection_id == credential.connection_id,
+                BeeImportCandidate.user_id == user_id,
+            )
+        )
     db.commit()
     return {"disconnected": True, "local_action": "Run bee logout separately if you also want to revoke the Bee CLI's local Bee session."}
