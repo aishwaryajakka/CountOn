@@ -2,7 +2,7 @@
 
 import json
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -84,7 +84,7 @@ class PartialInterpretation(BaseModel):
         result: dict[str, JsonValue] = {}
         for name, value in values.items():
             field = ExpectationCreate.model_fields[name]
-            adapter: TypeAdapter[Any] = TypeAdapter(Annotated[field.annotation, field])  # type: ignore[arg-type]
+            adapter: TypeAdapter[Any] = TypeAdapter(cast(Any, Annotated[field.annotation, field]))
             validated = adapter.validate_json(json.dumps(value), strict=True)
             result[name] = adapter.dump_python(validated, mode="json")
         return result
