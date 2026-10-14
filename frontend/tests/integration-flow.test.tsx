@@ -108,7 +108,7 @@ describe('End-to-End Integration Flow: Expectation -> Simulation -> Evidence -> 
     const rawRingEvent = generateRingEvent('package_detected', { device: 'front_door', confidence: 0.98 });
     const evidencePayload = ringEventToEvidence(rawRingEvent);
 
-    expect(evidencePayload.source).toBe('ring');
+    expect(evidencePayload.source).toBe('ring_simulator');
     expect(evidencePayload.metric).toBe('package_detected');
     expect(evidencePayload.value.detected).toBe(true);
 
@@ -160,7 +160,7 @@ describe('End-to-End Integration Flow: Expectation -> Simulation -> Evidence -> 
     // Claim is rendered in expectation card and timeline event
     expect(screen.getAllByText(/Ring front door should detect packages/).length).toBeGreaterThanOrEqual(1);
     // Timeline contains the simulated event with Ring label
-    expect(await screen.findByText(/Package detected/i)).toBeInTheDocument();
+    expect(await screen.findByText('Package detected')).toBeInTheDocument();
   });
 
   it('proves mismatch flow with Bee wearable simulator and displays attention state', async () => {
@@ -191,7 +191,7 @@ describe('End-to-End Integration Flow: Expectation -> Simulation -> Evidence -> 
     });
     const beeEvidenceCreate = beeEventToEvidence(beeEvent);
 
-    expect(beeEvidenceCreate.source).toBe('bee');
+    expect(beeEvidenceCreate.source).toBe('bee_simulator');
     expect(beeEvidenceCreate.value.value).toBe(false);
 
     // 3. Backend evaluation returns MISMATCH with reasoning

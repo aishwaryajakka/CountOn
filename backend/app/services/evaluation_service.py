@@ -9,13 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.core import observability
 from app.core.exceptions import EvaluationNotFoundError
-from app.db.models import Evaluation, Expectation, ExpectationStatus, ExpectationType
+from app.db.models import (
+    Evaluation,
+    Evidence,
+    Expectation,
+    ExpectationStatus,
+    ExpectationType,
+)
 from app.evaluators import boolean, numeric, temporal
 from app.evaluators.base import EvaluationOutput, EvaluationResult
+from app.repositories import audit, operations
 from app.repositories import evaluation as repository
 from app.repositories import evidence as evidence_repository
 from app.repositories import expectation as expectation_repository
-from app.repositories import operations
 from app.services import notification_service
 from app.services.expectation_service import get_expectation
 
@@ -35,7 +41,16 @@ def evaluate_expectation(db: Session, expectation_id: UUID, user_id: UUID, *,
                                                      Evaluation.idempotency_key == idempotency_key))
         if existing is not None:
             return existing
-    evidence = [] if monitoring_at else evidence_repository.latest_relevant_evidence(db, expectation_id, expectation.metric)
+    evidence = (
+        []
+        if monitoring_at
+        else evidence_repository.latest_relevant_evidence(
+            db,
+            expectation_id,
+            expectation.metric,
+            expectation.evidence_sources,
+        )
+    )
     evaluator = {
         ExpectationType.numeric_comparison: numeric.evaluate,
         ExpectationType.boolean: boolean.evaluate,
@@ -65,7 +80,39 @@ def evaluate_expectation(db: Session, expectation_id: UUID, user_id: UUID, *,
         db.flush()
         if status != expectation.status:
             expectation_repository.update_expectation(db, expectation, {"status": status})
-        operations.audit(db, expectation, "expectation.evaluated", persisted.id)
+        raw_ids = output.reasoning.get("evidence_ids", [])
+        if not raw_ids and output.observed.get("evidence_id"):
+            raw_ids = [output.observed["evidence_id"]]
+        linked_evidence = None
+        for raw_id in raw_ids[:1]:
+            try:
+                linked_evidence = db.get(Evidence, UUID(str(raw_id)))
+            except (ValueError, TypeError):
+                linked_evidence = None
+        source = audit.evidence_source(linked_evidence) if linked_evidence else {}
+        metadata = {
+            "reason": output.reasoning.get("reason"),
+            "evidence_ids": [str(value) for value in raw_ids[:20]],
+        }
+        operations.audit(
+            db, expectation, "expectation.evaluated", persisted.id,
+            evaluation_id=persisted.id,
+            evidence_id=linked_evidence.id if linked_evidence else None,
+            result_status=output.result.value,
+            idempotency_key=f"EVALUATION_COMPLETED:{persisted.id}",
+            metadata=metadata,
+            **source,
+        )
+        if output.result == EvaluationResult.MISMATCH:
+            operations.audit(
+                db, expectation, "expectation.mismatch", persisted.id,
+                evaluation_id=persisted.id,
+                evidence_id=linked_evidence.id if linked_evidence else None,
+                result_status=output.result.value,
+                idempotency_key=f"MISMATCH_DETECTED:{persisted.id}",
+                metadata=metadata,
+                **source,
+            )
         notification = notification_service.for_evaluation(db, expectation, persisted, dedupe_key=dedupe_key)
         if commit:
             db.commit()

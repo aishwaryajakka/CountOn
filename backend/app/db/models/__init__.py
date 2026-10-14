@@ -1,5 +1,11 @@
 """Public domain models and enums; imports register all Alembic metadata."""
 
+from app.db.models.bee_connector import (
+    BeeCliCredential,
+    BeeCliPairing,
+    BeeExpectationBinding,
+    BeeImportCandidate,
+)
 from app.db.models.conversation import ConversationRecord
 from app.db.models.delivery import NotificationDelivery, NotificationPreference
 from app.db.models.evaluation import Evaluation, EvaluationResult
@@ -20,6 +26,10 @@ from app.db.models.provider_sync import (
 
 __all__ = [
     "AuditEvent",
+    "BeeCliCredential",
+    "BeeCliPairing",
+    "BeeExpectationBinding",
+    "BeeImportCandidate",
     "ComparisonType",
     "CompilationSession",
     "ConversationRecord",

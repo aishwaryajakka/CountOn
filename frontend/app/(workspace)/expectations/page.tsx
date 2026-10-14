@@ -63,20 +63,14 @@ export default function Expectations() {
         ))}
       </div>
 
-      <div style={{ margin: '0.75rem 0' }}>
-        <label style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          Filter by provider:
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-          >
-            <option value="all">All providers</option>
-            <option value="google">Google</option>
-            <option value="microsoft">Microsoft</option>
-          </select>
-        </label>
-      </div>
+      <label>
+        Filter by provider
+        <select value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <option value="all">All providers</option>
+          <option value="google">Google</option>
+          <option value="microsoft">Microsoft</option>
+        </select>
+      </label>
 
       {board.loading ? (
         <Loading />

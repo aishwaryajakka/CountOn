@@ -52,7 +52,7 @@ def _to_db_evidence(expectation_id, ev_create) -> Evidence:
 
 def test_ring_package_delivery_matches():
     _raw, ev_create = simulate_package_delivery(device="front_door", metric="package_detected")
-    assert ev_create.source == "ring"
+    assert ev_create.source == "ring_simulator"
     assert ev_create.metric == "package_detected"
     assert ev_create.value["value"] is True
     assert ev_create.value["detected"] is True
@@ -65,17 +65,18 @@ def test_ring_package_delivery_matches():
     assert output.observed["value"] is True
 
 
-def test_ring_package_missing_mismatches():
+def test_ring_package_missing_is_unknown():
     _raw, ev_create = simulate_package_missing(device="front_door", metric="package_detected")
-    assert ev_create.source == "ring"
+    assert ev_create.source == "ring_simulator"
     assert ev_create.metric == "package_detected"
-    assert ev_create.value["value"] is False
+    assert "value" not in ev_create.value
+    assert ev_create.value["detected"] is False
 
     expectation = _mock_expectation("package_detected")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MISMATCH
-    assert output.observed["value"] is False
+    assert output.result == EvaluationResult.UNKNOWN
+    assert "value" not in output.observed
 
 
 def test_ring_doorbell_and_motion():
@@ -90,7 +91,7 @@ def test_ring_doorbell_and_motion():
 
 def test_bee_conversation_plumber_confirmed():
     _raw, ev_create = simulate_plumber_confirmed(metric="appointment_confirmed")
-    assert ev_create.source == "bee"
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
     assert ev_create.value["value"] is True
     assert "Landlord" in ev_create.value["speaker"]
@@ -103,7 +104,7 @@ def test_bee_conversation_plumber_confirmed():
 
 def test_bee_conversation_plumber_cancelled():
     _raw, ev_create = simulate_plumber_cancelled(metric="appointment_confirmed")
-    assert ev_create.source == "bee"
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
     assert ev_create.value["value"] is False
 
@@ -115,7 +116,7 @@ def test_bee_conversation_plumber_cancelled():
 
 def test_bee_document_commitment():
     _raw, ev_create = simulate_document_commitment()
-    assert ev_create.source == "bee"
+    assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "conversation_mention"
     assert "Sarah" in ev_create.value["speaker"]
 
@@ -202,8 +203,8 @@ def test_utility_bill_below_baseline_evaluates_to_match():
 if __name__ == "__main__":
     test_ring_package_delivery_matches()
     print("PASS: test_ring_package_delivery_matches")
-    test_ring_package_missing_mismatches()
-    print("PASS: test_ring_package_missing_mismatches")
+    test_ring_package_missing_is_unknown()
+    print("PASS: test_ring_package_missing_is_unknown")
     test_ring_doorbell_and_motion()
     print("PASS: test_ring_doorbell_and_motion")
     test_bee_conversation_plumber_confirmed()
@@ -219,4 +220,3 @@ if __name__ == "__main__":
     test_utility_bill_below_baseline_evaluates_to_match()
     print("PASS: test_utility_bill_below_baseline_evaluates_to_match")
     print("\nALL ADAPTER & SIMULATOR TESTS PASSED!")
-

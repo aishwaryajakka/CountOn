@@ -36,7 +36,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
     return { expectation, evidence, evaluations, latest };
   }, [id]);
 
-  const state = useResource(load);
+  const state = useResource(load, 30000);
 
   async function triggerSimulation(type: 'ring_match' | 'ring_mismatch' | 'bee_confirm' | 'bee_cancel' | 'utility_high' | 'utility_low') {
     if (!state.data) return;
@@ -45,16 +45,13 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
     const exp = state.data.expectation;
 
     try {
-      let label = '';
       let evidencePayload: EvidenceCreate;
       if (type === 'ring_match') {
         const raw = generateRingEvent('package_detected', { metric: exp.metric ?? 'package_detected' });
         evidencePayload = ringEventToEvidence(raw);
-        label = 'Ring package delivery event';
       } else if (type === 'ring_mismatch') {
         const raw = generateRingEvent('package_not_detected', { metric: exp.metric ?? 'package_detected' });
         evidencePayload = ringEventToEvidence(raw);
-        label = 'Ring no package detected event';
       } else if (type === 'bee_confirm') {
         const raw = generateBeeEvent({
           speaker: 'Landlord',
@@ -63,7 +60,6 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
           confirmed: true,
         });
         evidencePayload = beeEventToEvidence(raw);
-        label = 'Bee plumber confirmed conversation';
       } else if (type === 'bee_cancel') {
         const raw = generateBeeEvent({
           speaker: 'Landlord',
@@ -72,18 +68,15 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
           confirmed: false,
         });
         evidencePayload = beeEventToEvidence(raw);
-        label = 'Bee plumber cancelled conversation';
       } else if (type === 'utility_high') {
         evidencePayload = createUtilityBillEvidence(162);
-        label = 'Utility bill of $162.00';
       } else {
         evidencePayload = createUtilityBillEvidence(130);
-        label = 'Utility bill of $130.00';
       }
 
       await api.addEvidence(exp.id, evidencePayload);
-      const evalResult = await api.evaluate(exp.id);
-      setSimMessage(`${label} ingested. Backend evaluated expectation as ${evalResult.result}!`);
+      const evaluation = await api.evaluate(exp.id, `simulation:${evidencePayload.external_event_id}`);
+      setSimMessage(`SIMULATED evidence · Backend evaluation: ${evaluation.result}`);
       state.reload();
     } catch (err) {
       setSimMessage(err instanceof Error ? `Simulation error: ${err.message}` : 'Failed to simulate');
@@ -93,9 +86,10 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
   }
 
   const exp = state.data?.expectation;
-  const isRing = exp?.evidence_sources.some((s) => s.toLowerCase().includes('ring')) || exp?.metric?.includes('package');
-  const isBee = exp?.evidence_sources.some((s) => s.toLowerCase().includes('bee')) || exp?.claim.toLowerCase().includes('plumber') || exp?.claim.toLowerCase().includes('landlord');
-  const isUtility = exp?.evidence_sources.some((s) => s.toLowerCase().includes('utility')) || exp?.metric === 'total_cost';
+  const active = exp && !['resolved', 'cancelled'].includes(exp.status);
+  const isRing = active && ['boolean', 'event', 'temporal'].includes(exp.type) && ['package_detected', 'delivered', 'package_delivery', 'delivery_reported'].includes(exp.metric ?? '');
+  const isBee = active && exp.type === 'boolean' && exp.metric === 'appointment_confirmed';
+  const isUtility = active && exp.type === 'numeric_comparison' && exp.metric === 'total_cost';
 
   return (
     <>
@@ -168,7 +162,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                       <FlaskConical size={18} color="var(--primary, #2563eb)" />
                       <strong style={{ fontSize: '0.95rem' }}>Simulate Evidence</strong>
                     </div>
-                    <span className="caption">Test without physical devices</span>
+                    <span className="caption">SIMULATED · live Ring/Bee connections unavailable</span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -179,14 +173,14 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                           onClick={() => triggerSimulation('ring_match')}
                           disabled={simBusy}
                         >
-                          Simulate Package Delivered (MATCH)
+                          Simulate Package Delivered
                         </button>
                         <button
                           className="button ghost"
                           onClick={() => triggerSimulation('ring_mismatch')}
                           disabled={simBusy}
                         >
-                          Simulate No Package (MISMATCH)
+                          Simulate No Package Detected
                         </button>
                       </>
                     )}
@@ -198,14 +192,14 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                           onClick={() => triggerSimulation('bee_confirm')}
                           disabled={simBusy}
                         >
-                          Simulate Plumber Confirmed (MATCH)
+                          Simulate Plumber Confirmed
                         </button>
                         <button
                           className="button ghost"
                           onClick={() => triggerSimulation('bee_cancel')}
                           disabled={simBusy}
                         >
-                          Simulate Plumber Cancelled (MISMATCH)
+                          Simulate Plumber Cancelled
                         </button>
                       </>
                     )}
@@ -217,36 +211,19 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                           onClick={() => triggerSimulation('utility_low')}
                           disabled={simBusy}
                         >
-                          Simulate Bill $130.00 (MATCH)
+                          Simulate Bill $130.00
                         </button>
                         <button
                           className="button ghost"
                           onClick={() => triggerSimulation('utility_high')}
                           disabled={simBusy}
                         >
-                          Simulate Bill $162.00 (MISMATCH)
+                          Simulate Bill $162.00
                         </button>
                       </>
                     )}
 
-                    {!isRing && !isBee && !isUtility && (
-                      <>
-                        <button
-                          className="button secondary"
-                          onClick={() => triggerSimulation('ring_match')}
-                          disabled={simBusy}
-                        >
-                          Simulate Positive Confirmation
-                        </button>
-                        <button
-                          className="button ghost"
-                          onClick={() => triggerSimulation('ring_mismatch')}
-                          disabled={simBusy}
-                        >
-                          Simulate Negative Observation
-                        </button>
-                      </>
-                    )}
+                    {!isRing && !isBee && !isUtility && <p>No compatible simulator for these conditions.</p>}
                   </div>
                 </section>
 
@@ -296,7 +273,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   <Link className="button secondary full" href="/integrations">
                     View connected accounts
                   </Link>
-                  <SourceBinding expectationId={id} />
+                  <SourceBinding key={id} expectationId={id} />
                 </section>
 
                 <section className="soft-card">
@@ -309,9 +286,10 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Modal for Editing / Pausing / Resolving */}
-            {exp && (
+            {exp && manageOpen && (
               <ExpectationActionsModal
                 expectation={exp}
+                key={exp.id}
                 isOpen={manageOpen}
                 onClose={() => setManageOpen(false)}
                 onUpdated={() => state.reload()}

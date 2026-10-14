@@ -14,6 +14,7 @@ class ConnectionMetadata(BaseModel):
     demo: bool = False
     demo_tag: Literal['counton-demo-v1'] | None = None
     account_kind: Literal['personal','work','family'] | None = None
+    connector: Literal['official_cli'] | None = None
 
 
 class IntegrationCreate(BaseModel):
@@ -48,6 +49,9 @@ class IntegrationResponse(BaseModel):
     scopes: list[str]
     metadata: ConnectionMetadata = Field(validation_alias=AliasChoices('connection_metadata','metadata'))
     last_synced_at: datetime|None
+    connected_at: datetime|None = None
+    revoked_at: datetime|None = None
+    failure_status: str|None = None
     created_at: datetime
     updated_at: datetime
     credential_state: Literal['not_configured', 'configured'] = 'not_configured'

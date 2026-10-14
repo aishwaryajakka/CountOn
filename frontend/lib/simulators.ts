@@ -1,4 +1,4 @@
-import type { EvidenceCreate, RingSimEvent, BeeSimEvent } from './types';
+import type { EvidenceCreate, RingSimEvent, BeeSimEvent, Expectation, WatchedExpectation } from './types';
 
 // ==========================================
 // RING EVENT SIMULATOR & ADAPTER
@@ -13,9 +13,10 @@ export function generateRingEvent(
     timestamp?: string;
   } = {}
 ): RingSimEvent {
-  const id = `ring_sim_${Math.random().toString(36).substring(2, 9)}`;
+  const id = `ring_sim_${crypto.randomUUID()}`;
   const timestamp = options.timestamp ?? new Date().toISOString();
   return {
+    simulated: true,
     event_id: id,
     kind,
     device: options.device ?? 'front_door',
@@ -32,49 +33,49 @@ export function ringEventToEvidence(raw: RingSimEvent): EvidenceCreate {
 
   if (raw.kind === 'package_detected') {
     return {
-      source: 'ring',
+      source: 'ring_simulator',
       metric: raw.metric ?? 'package_detected',
       value: { value: true, detected: true, kind: raw.kind, device },
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: raw as unknown as Record<string, unknown>,
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
   if (raw.kind === 'package_not_detected') {
     return {
-      source: 'ring',
+      source: 'ring_simulator',
       metric: raw.metric ?? 'package_detected',
-      value: { value: false, detected: false, kind: raw.kind, device },
+      value: { detected: false, kind: raw.kind, device },
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: raw as unknown as Record<string, unknown>,
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
   if (raw.kind === 'doorbell_ding') {
     return {
-      source: 'ring',
+      source: 'ring_simulator',
       metric: raw.metric ?? 'doorbell_pressed',
       value: { value: true, event: 'doorbell_ding', kind: raw.kind, device },
       observed_at,
       confidence,
       external_event_id: raw.event_id,
-      raw_data: raw as unknown as Record<string, unknown>,
+      raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
     };
   }
 
   // Motion detected
   return {
-    source: 'ring',
+    source: 'ring_simulator',
     metric: raw.metric ?? 'motion_detected',
     value: { value: true, event: 'motion_detected', kind: raw.kind, device },
     observed_at,
     confidence,
     external_event_id: raw.event_id,
-    raw_data: raw as unknown as Record<string, unknown>,
+    raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_RING' },
   };
 }
 
@@ -90,8 +91,9 @@ export function generateBeeEvent(options: {
   confirmed?: boolean;
   start_time?: string;
 }): BeeSimEvent {
-  const id = `bee_sim_${Math.random().toString(36).substring(2, 9)}`;
+  const id = `bee_sim_${crypto.randomUUID()}`;
   return {
+    simulated: true,
     id,
     type: options.type ?? 'conversation',
     speaker: options.speaker ?? 'Landlord',
@@ -112,24 +114,18 @@ export function beeEventToEvidence(raw: BeeSimEvent): EvidenceCreate {
 
   if (raw.confirmed !== undefined) {
     valDict.value = raw.confirmed;
-  } else {
-    // Basic heuristic if not explicitly set
-    const lower = raw.summary.toLowerCase();
-    if (lower.includes('cancel') || lower.includes('cannot make it') || lower.includes('reschedule') || lower.includes('emergency')) {
-      valDict.value = false;
-    } else if (lower.includes('confirm') || lower.includes('will come') || lower.includes('arriving')) {
-      valDict.value = true;
-    }
+    valDict.commitment_confirmed = raw.confirmed;
+    valDict.context_only = true;
   }
 
   return {
-    source: 'bee',
+    source: 'bee_simulator',
     metric: raw.metric ?? 'conversation_mention',
     value: valDict,
     observed_at,
     confidence: 0.85,
     external_event_id: raw.id,
-    raw_data: raw as unknown as Record<string, unknown>,
+    raw_data: { ...raw, simulated: true, provenance: 'SIMULATED_BEE' },
   };
 }
 
@@ -145,7 +141,7 @@ export function createUtilityBillEvidence(amount: number): EvidenceCreate {
     unit: 'USD',
     observed_at: new Date().toISOString(),
     confidence: 1.0,
-    external_event_id: `util_bill_${Date.now()}`,
+    external_event_id: `util_bill_${crypto.randomUUID()}`,
     raw_data: { simulated: true, amount },
   };
 }
@@ -158,7 +154,7 @@ export function createUtilityUsageEvidence(percentageChange: number): EvidenceCr
     unit: 'percent',
     observed_at: new Date().toISOString(),
     confidence: 1.0,
-    external_event_id: `util_usage_${Date.now()}`,
+    external_event_id: `util_usage_${crypto.randomUUID()}`,
     raw_data: { simulated: true, percentageChange },
   };
 }
@@ -171,7 +167,24 @@ export function createTariffRateEvidence(percentageChange: number): EvidenceCrea
     unit: 'percent',
     observed_at: new Date().toISOString(),
     confidence: 1.0,
-    external_event_id: `util_tariff_${Date.now()}`,
+    external_event_id: `util_tariff_${crypto.randomUUID()}`,
     raw_data: { simulated: true, percentageChange },
   };
+}
+
+// Never attach a demo to an arbitrary first row or infer compatibility from prose.
+export function simulatorTargets(rows: WatchedExpectation[], kind: 'utility' | 'ring' | 'bee'): Expectation[] {
+  return rows.map(row => row.expectation).filter(exp => {
+    if (['resolved', 'cancelled'].includes(exp.status)) return false;
+    if (kind === 'utility') return exp.type === 'numeric_comparison' && exp.metric === 'total_cost';
+    if (kind === 'ring') return ['boolean', 'event', 'temporal'].includes(exp.type) && ['package_detected', 'delivered', 'package_delivery', 'delivery_reported'].includes(exp.metric ?? '');
+    return exp.type === 'boolean' && exp.metric === 'appointment_confirmed';
+  });
+}
+
+export function simulatorTarget(rows: WatchedExpectation[], kind: 'utility' | 'ring' | 'bee', selectedId?: string): Expectation {
+  const targets = simulatorTargets(rows, kind);
+  const selected = selectedId ? targets.find(exp => exp.id === selectedId) : targets.length === 1 ? targets[0] : undefined;
+  if (!selected) throw new Error(targets.length ? 'Select the exact compatible expectation in Interactive Demos.' : 'No compatible active expectation. Create one before simulating evidence.');
+  return selected;
 }

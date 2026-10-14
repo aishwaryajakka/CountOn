@@ -16,7 +16,6 @@ import { useIdentity } from '@/components/auth-provider';
 import { AttentionCard, ExpectationCard, HealthyCard } from '@/components/expectation';
 import { EvidenceTimeline } from '@/components/evidence-timeline';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
-import { AiRecommendations } from '@/components/ai-recommendations';
 import { Badge, EmptyState, ErrorState, IconBox, Loading, NewExpectationLink, PageHeader, QuietNote } from '@/components/ui';
 import { api } from '@/lib/api';
 import type { Evidence, Expectation } from '@/lib/types';
@@ -27,6 +26,7 @@ import {
   ringEventToEvidence,
   generateBeeEvent,
   beeEventToEvidence,
+  simulatorTarget,
 } from '@/lib/simulators';
 
 export default function Dashboard() {
@@ -40,14 +40,16 @@ export default function Dashboard() {
   const [simMessage, setSimMessage] = useState<string | null>(null);
   const [simBusy, setSimBusy] = useState(false);
 
+  const reloadBoard = board.reload;
+
   // Auto-refresh poll every 8 seconds for real-time MATCH, UNKNOWN, MISMATCH updates
   useEffect(() => {
     const timer = setInterval(() => {
-      board.reload();
+      reloadBoard();
       setLastUpdated(new Date());
     }, 8000);
     return () => clearInterval(timer);
-  }, [board]);
+  }, [reloadBoard]);
 
   const attention = rows.filter(
     (row) => getExpectationPresentationStatus(row.expectation, row.latest) === 'attention'
@@ -62,18 +64,12 @@ export default function Dashboard() {
   );
   const priorityEvidence = useResource(loadPriorityEvidence);
 
-  // Load multi-source evidence across ALL active expectations for the complete Evidence Timeline
+  // Load multi-source evidence across active expectations for the Evidence Timeline
   const loadTimelineEvidence = useCallback(
     async (signal: AbortSignal): Promise<Evidence[]> => {
       if (!rows.length) return [];
       const results = await Promise.all(
-        rows.map(async (row) => {
-          try {
-            return await api.evidence(row.expectation.id, signal);
-          } catch {
-            return [];
-          }
-        })
+        rows.map((row) => api.evidence(row.expectation.id, signal))
       );
       return results.flat();
     },
@@ -88,42 +84,18 @@ export default function Dashboard() {
 
     try {
       if (scenario === 'ring_delivery' || scenario === 'ring_missing') {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'delivered' ||
-            r.expectation.metric === 'package_detected' ||
-            r.expectation.claim.toLowerCase().includes('package') ||
-            r.expectation.claim.toLowerCase().includes('delivery')
-        );
-
-        if (!targetRow) {
-          setSimMessage('No package delivery expectation found. Create a package expectation first to test Ring simulation.');
-          return;
-        }
+        const target = simulatorTarget(rows, 'ring');
 
         const kind = scenario === 'ring_delivery' ? 'package_detected' : 'package_not_detected';
         const raw = generateRingEvent(kind, {
-          metric: targetRow.expectation.metric ?? 'package_detected',
+          metric: target.metric ?? 'package_detected',
         });
         const ev = ringEventToEvidence(raw);
-        await api.addEvidence(targetRow.expectation.id, ev);
-        const evalResult = await api.evaluate(targetRow.expectation.id);
-        setSimMessage(
-          `Ring simulated event (${kind}) sent -> Backend evaluated expectation as ${evalResult.result}`
-        );
+        await api.addEvidence(target.id, ev);
+        const evaluation = await api.evaluate(target.id, `simulation:${ev.external_event_id}`);
+        setSimMessage(`SIMULATED Ring event · Backend evaluation: ${evaluation.result}`);
       } else {
-        const targetRow = rows.find(
-          (r) =>
-            r.expectation.metric === 'appointment_confirmed' ||
-            r.expectation.claim.toLowerCase().includes('plumber') ||
-            r.expectation.claim.toLowerCase().includes('appointment') ||
-            r.expectation.claim.toLowerCase().includes('landlord')
-        );
-
-        if (!targetRow) {
-          setSimMessage('No plumber or appointment expectation found. Create an appointment expectation first to test Bee simulation.');
-          return;
-        }
+        const target = simulatorTarget(rows, 'bee');
 
         const isConfirm = scenario === 'bee_confirm';
         const raw = generateBeeEvent({
@@ -131,15 +103,13 @@ export default function Dashboard() {
           summary: isConfirm
             ? 'Spoke with landlord: Plumber confirmed for Friday 10:00 AM.'
             : 'Spoke with landlord: Plumber cancelled Friday due to an emergency.',
-          metric: targetRow.expectation.metric ?? 'appointment_confirmed',
+          metric: target.metric ?? 'appointment_confirmed',
           confirmed: isConfirm,
         });
         const ev = beeEventToEvidence(raw);
-        await api.addEvidence(targetRow.expectation.id, ev);
-        const evalResult = await api.evaluate(targetRow.expectation.id);
-        setSimMessage(
-          `Bee simulated context (${isConfirm ? 'confirmed' : 'cancelled'}) sent -> Backend evaluated expectation as ${evalResult.result}`
-        );
+        await api.addEvidence(target.id, ev);
+        const evaluation = await api.evaluate(target.id, `simulation:${ev.external_event_id}`);
+        setSimMessage(`SIMULATED Bee event · Backend evaluation: ${evaluation.result}`);
       }
 
       board.reload();
@@ -215,7 +185,7 @@ export default function Dashboard() {
               boxShadow: '0 0 0 2px rgba(22, 163, 74, 0.2)',
             }}
           />
-          <strong style={{ color: '#0f172a' }}>Real-time updates active</strong>
+          <strong style={{ color: '#0f172a' }}>Updates every 8 seconds</strong>
           <span>· Watching evaluations and evidence</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -305,9 +275,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* AI Recommended Expectations Review */}
-          <AiRecommendations onAccepted={() => board.reload()} />
-
           {/* Quick Simulation Bar */}
           <section
             className="card"
@@ -331,7 +298,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FlaskConical size={18} color="var(--primary, #2563eb)" />
                 <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Simulator Quick Actions</h3>
-                <span className="caption">Test Ring & Bee context without physical devices</span>
+                <span className="caption">SIMULATED evidence · live Ring/Bee connections unavailable</span>
               </div>
               <Link href="/demos" className="text-link" style={{ fontSize: '0.85rem' }}>
                 Full interactive demos <ArrowRight size={14} />
@@ -345,7 +312,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Ring: Package Delivered (MATCH)
+                Ring: Package Detected · SIMULATED
               </button>
               <button
                 className="button ghost"
@@ -353,7 +320,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Ring: Package Missing (MISMATCH)
+                Ring: No Package Detected · SIMULATED
               </button>
               <button
                 className="button secondary"
@@ -361,7 +328,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Bee: Plumber Confirmed (MATCH)
+                Bee: Plumber Confirmed · SIMULATED
               </button>
               <button
                 className="button ghost"
@@ -369,7 +336,7 @@ export default function Dashboard() {
                 disabled={simBusy}
                 style={{ fontSize: '0.825rem', padding: '0.4rem 0.75rem' }}
               >
-                Bee: Plumber Cancelled (MISMATCH)
+                Bee: Plumber Cancelled · SIMULATED
               </button>
             </div>
           </section>

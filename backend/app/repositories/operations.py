@@ -5,11 +5,12 @@ from sqlalchemy.dialects.postgresql import insert
 from app.db.models import MonitoringJob
 
 
-def audit(db, expectation, action, resource_id=None):
+def audit(db, expectation, action, resource_id=None, metadata=None, **details):
     from app.repositories.audit import record
     entity_type = 'evidence' if action.startswith('evidence.') else ('evaluation' if action.endswith('.evaluated') else 'expectation')
-    metadata={k:v for k,v in expectation.compiler_metadata.items() if k in ('demo','demo_tag')}
-    return record(db,expectation.user_id,entity_type,resource_id or expectation.id,action,expectation.id,metadata)
+    safe={k:v for k,v in expectation.compiler_metadata.items() if k in ('demo','demo_tag')}
+    safe.update(metadata or {})
+    return record(db,expectation.user_id,entity_type,resource_id or expectation.id,action,expectation.id,safe,**details)
 
 
 def ensure_job(db, expectation):

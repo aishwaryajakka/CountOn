@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { ConnectAccountModal, IntegrationCard } from '@/components/integration';
 import { EmptyState, ErrorState, IconBox, Loading, PageHeader } from '@/components/ui';
+import { BeeCliConnection } from '@/components/bee-cli-connection';
 
 const load = (signal: AbortSignal) => api.integrations(signal);
 
@@ -66,6 +67,7 @@ export default function Integrations() {
           />
         )}
       </section>
+      <BeeCliConnection />
       <div className="soft-card connection-bottom">
         <h3>More context, thoughtfully connected.</h3>
         <p>

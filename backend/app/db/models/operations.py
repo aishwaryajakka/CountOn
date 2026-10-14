@@ -82,7 +82,14 @@ class Notification(Base):
 
 class AuditEvent(Base):
     __tablename__='audit_events'
-    __table_args__=(Index('ix_audit_owner_created','user_id','created_at'),)
+    __table_args__=(
+        Index('ix_audit_owner_created','user_id','created_at'),
+        Index('ix_audit_owner_source_created','user_id','source_provider','created_at'),
+        Index('ix_audit_owner_result_created','user_id','result_status','created_at'),
+        UniqueConstraint('user_id','idempotency_key',name='uq_audit_owner_idempotency'),
+        CheckConstraint("actor_type IN ('USER','SYSTEM','PROVIDER')",name='ck_audit_actor_type'),
+        CheckConstraint("result_status IS NULL OR result_status IN ('MATCH','UNKNOWN','MISMATCH')",name='ck_audit_result_status'),
+    )
     id: Mapped[UUID]=mapped_column(PGUUID,primary_key=True,default=uuid4)
     user_id: Mapped[UUID]=mapped_column(PGUUID,ForeignKey('profiles.id',ondelete='CASCADE'),index=True)
     expectation_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('expectations.id',ondelete='SET NULL'),index=True)
@@ -91,5 +98,15 @@ class AuditEvent(Base):
     entity_id = synonym('resource_id')
     resource_id: Mapped[UUID]=mapped_column(PGUUID)
     action: Mapped[str]=mapped_column(String(50))
+    event_type: Mapped[str]=mapped_column(String(50),default='OPERATION_RECORDED',server_default='OPERATION_RECORDED')
+    actor_type: Mapped[str]=mapped_column(String(10),default='SYSTEM',server_default='SYSTEM')
+    source_provider: Mapped[str|None]=mapped_column(String(30))
+    source_type: Mapped[str|None]=mapped_column(String(40))
+    source_provenance: Mapped[str|None]=mapped_column(String(40))
+    source_reference: Mapped[str|None]=mapped_column(String(80))
+    evidence_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('evidence.id',ondelete='SET NULL'),index=True)
+    evaluation_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('evaluations.id',ondelete='SET NULL'),index=True)
+    result_status: Mapped[str|None]=mapped_column(String(10))
+    idempotency_key: Mapped[str|None]=mapped_column(String(128))
     request_id: Mapped[str|None]=mapped_column(String(36))
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())

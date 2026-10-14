@@ -1,4 +1,5 @@
-"""Future ring adapters normalize external data into the shared Evidence contract.
+"""Ring normalization and SIMULATED developer events, not a live connector.
 
-Adapters must not contain core evaluation logic.
+All persistence uses the authenticated evidence API. Evaluation stays in the
+shared deterministic services; these adapters never assign an outcome.
 """

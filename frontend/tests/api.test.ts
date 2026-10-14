@@ -102,10 +102,58 @@ describe('FastAPI client', () => {
     await api.updateNotification('notification-id', 'dismissed');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ status: 'dismissed' });
   });
+  it('serializes owner-scoped audit filters without a caller-supplied user id', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'));
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
+    await api.auditEvents({
+      expectationId: expectation.id,
+      source: 'RING',
+      result: 'MATCH',
+      after: '2026-10-01T00:00:00Z',
+      before: '2026-10-14T00:00:00Z',
+    });
+    const url = String(fetcher.mock.calls[0][0]);
+    expect(url).toContain(`expectation_id=${expectation.id}`);
+    expect(url).toContain('source_provider=RING');
+    expect(url).toContain('result_status=MATCH');
+    expect(url).toContain('occurred_after=2026-10-01T00%3A00%3A00Z');
+    expect(url).toContain('occurred_before=2026-10-14T00%3A00%3A00Z');
+    expect(url).not.toContain('user_id');
+  });
   it('reads a bounded history for unevaluated board rows without routine 404s', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify([expectation]))).mockResolvedValueOnce(new Response('[]'));
     const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
     expect(await api.board()).toEqual([{ expectation, latest: null }]);
     expect(fetcher.mock.calls[1][0]).toContain('/evaluations?limit=1');
   });
+});
+
+it.each(['ring', 'bee'] as const)('submits authorized %s simulator evidence and idempotent evaluation', async kind => {
+  const { generateRingEvent, ringEventToEvidence, generateBeeEvent, beeEventToEvidence } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? ringEventToEvidence(generateRingEvent('package_not_detected')) : beeEventToEvidence(generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false }));
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  await client.addEvidence(expectation.id, payload);
+  await client.evaluate(expectation.id, `simulation:${payload.external_event_id}`);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/expectations/${expectation.id}/evidence`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ source: `${kind}_simulator`, raw_data: { simulated: true } });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('Idempotency-Key')).toBe(`simulation:${payload.external_event_id}`);
+});
+
+it.each(['ring', 'bee'] as const)('submits dedicated %s simulator route evidence', async kind => {
+  const { generateRingEvent, generateBeeEvent } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? generateRingEvent('package_not_detected') : generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false });
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  if (kind === 'ring') await client.simulateRing(expectation.id, payload as ReturnType<typeof generateRingEvent>);
+  else await client.simulateBee(expectation.id, payload as ReturnType<typeof generateBeeEvent>);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/simulators/${kind}/expectations/${expectation.id}/events`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ simulated: true });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(fetcher).toHaveBeenCalledOnce();
 });

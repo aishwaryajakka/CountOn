@@ -5,6 +5,9 @@ from fastapi import APIRouter
 from app.api.v1 import (
     agent,
     alexa,
+    amazon_auth,
+    audit,
+    bee_connector,
     compiler,
     dashboard,
     evaluations,
@@ -16,12 +19,16 @@ from app.api.v1 import (
     notifications,
     provider_oauth,
     provider_sync,
+    simulators,
 )
 
 router = APIRouter()
 for module in (
     agent,
     alexa,
+    amazon_auth,
+    audit,
+    bee_connector,
     expectations,
     evidence,
     evaluations,
@@ -29,6 +36,7 @@ for module in (
     notification_preferences,
     provider_oauth,
     provider_sync,
+    simulators,
     integrations,
     monitoring,
     compiler,

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     local_database_url: str | None = Field(default=None, repr=False)
     supabase_database_url: str | None = Field(default=None, repr=False)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    amazon_auth_enabled: bool = False
+    amazon_client_id: str | None = Field(default=None, min_length=1, max_length=100)
     bedrock_enabled: bool = False
     aws_region: str = Field(default="us-east-2", min_length=1)
     bedrock_model_id: str = Field(default="openai.gpt-oss-120b-1:0", min_length=1)

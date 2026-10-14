@@ -66,6 +66,9 @@ class IntegrationConnection(Base):
     oauth_generation: Mapped[str|None] = mapped_column(String(64))
     connection_metadata: Mapped[dict]=mapped_column('metadata',JSONB,default=dict,server_default=text("'{}'::jsonb"))
     last_synced_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+    connected_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+    failure_status: Mapped[str|None]=mapped_column(String(64))
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
     updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
 

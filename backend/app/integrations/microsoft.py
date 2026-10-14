@@ -320,6 +320,7 @@ class MicrosoftOAuth:
             connection.external_account_id = account
             connection.status = "connected"
             connection.scopes = list(SCOPES)
+            connection.connected_at, connection.revoked_at, connection.failure_status = current, None, None
             connection.__dict__["_credential_state"] = "configured"
             db.commit()
             return connection
@@ -367,6 +368,7 @@ class MicrosoftOAuth:
                 if not error.retryable:
                     db.delete(stored)
                     connection.status = "error"
+                    connection.failure_status = error.code
                     db.commit()
                 raise
             stored.encrypted_tokens = self.encrypt(refreshed, connection_id)

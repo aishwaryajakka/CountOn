@@ -3,12 +3,13 @@
 import { useMemo } from 'react';
 import { Camera, Clock3, Mail, Mic, Zap, Package, Activity } from 'lucide-react';
 import type { Evidence, Expectation } from '@/lib/types';
-import { formatDate, humanize, evidenceValue } from '@/lib/presentation';
+import { formatDate, humanize, evidenceSourceLabel, evidenceValue } from '@/lib/presentation';
 import { useIdentity } from './auth-provider';
 
 export interface TimelineEventItem {
   id: string;
   source: string;
+  sourceLabel: string;
   metric: string | null;
   observedAt: string;
   valueText: string;
@@ -83,6 +84,7 @@ export function EvidenceTimeline({
       return {
         id: item.id,
         source: item.source,
+        sourceLabel: evidenceSourceLabel(item),
         metric: item.metric,
         observedAt: item.observed_at,
         valueText: evidenceValue(item, timeZone),
@@ -174,7 +176,7 @@ export function EvidenceTimeline({
                         color: badgeColors.color,
                       }}
                     >
-                      {humanize(event.source)}
+                      {event.sourceLabel}
                     </span>
                     {(event.source.toLowerCase().includes('ring') || event.source.toLowerCase().includes('bee')) && (
                       <span

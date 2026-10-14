@@ -77,23 +77,6 @@ def gmail_text(payload: dict, depth: int = 0) -> str:
     return unescape(re.sub(r"<[^>]{0,1000}>", " ", text))
 
 
-def attachments(payload: dict, depth: int = 0) -> list[dict]:
-    if depth > 8:
-        return []
-    result = []
-    if payload.get("filename"):
-        result.append(
-            {
-                "name": str(payload["filename"])[:150],
-                "type": str(payload.get("mimeType", ""))[:100],
-                "size": payload.get("body", {}).get("size", 0),
-            }
-        )
-    for part in payload.get("parts", [])[:30]:
-        result.extend(attachments(part, depth + 1))
-    return result[:30]
-
-
 def mail_facts(message: dict, provider: str) -> dict:
     if provider == "google":
         headers = {
@@ -107,7 +90,6 @@ def mail_facts(message: dict, provider: str) -> dict:
             int(message["internalDate"]) / 1000, timezone.utc
         ).isoformat()
         thread = message.get("threadId", "")
-        files = attachments(message.get("payload", {}))
         recipients = [
             address.casefold()
             for _, address in getaddresses([headers.get("to", "")])
@@ -127,7 +109,6 @@ def mail_facts(message: dict, provider: str) -> dict:
         )
         observed = timestamp(message["receivedDateTime"])
         thread = message.get("conversationId", "")
-        files = [{"present": True}] if message.get("hasAttachments") else []
         recipients = [
             str(r.get("emailAddress", {}).get("address", "")).casefold()
             for r in message.get("toRecipients", [])[:30]
@@ -141,7 +122,6 @@ def mail_facts(message: dict, provider: str) -> dict:
         "subject": subject,
         "thread_id": str(thread)[:512],
         "source_timestamp": observed,
-        "attachments": files,
         "sender_authenticated": False,
         "report_basis": "email_reported",
     }
