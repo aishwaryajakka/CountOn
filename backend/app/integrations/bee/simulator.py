@@ -1,6 +1,5 @@
 """Bee context simulator: simulates wearable conversations, notes, and commitments without an iPhone or Bee CLI."""
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -92,13 +91,10 @@ if __name__ == "__main__":
     import sys
     mode = sys.argv[1] if len(sys.argv) > 1 else "confirmed"
     if mode == "cancelled":
-        raw, evidence = simulate_plumber_cancelled()
+        _raw, evidence = simulate_plumber_cancelled()
     elif mode == "commitment":
-        raw, evidence = simulate_document_commitment()
+        _raw, evidence = simulate_document_commitment()
     else:
-        raw, evidence = simulate_plumber_confirmed()
+        _raw, evidence = simulate_plumber_confirmed()
 
-    print("Simulated Raw Bee Event:")
-    print(json.dumps(raw, indent=2))
-    print("\nConverted CountOn Evidence:")
-    print(evidence.model_dump_json(indent=2))
+    print("Bee simulation normalized")

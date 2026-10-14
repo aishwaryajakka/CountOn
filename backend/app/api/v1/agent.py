@@ -89,6 +89,7 @@ async def converse(
     agent = AgentOrchestrator(
         adapter,
         session_store=store,
+        require_capture_confirmation=True,
         audit_sink=lambda user, result, duration: record_run(
             db, user, result, duration
         ),

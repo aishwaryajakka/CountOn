@@ -484,6 +484,7 @@ class AccountOAuth(MicrosoftOAuth):
             except ProviderError as error:
                 if not error.retryable:
                     item.status = "error"
+                    item.failure_status = error.code
                     db.delete(stored)
                     db.commit()
                 raise

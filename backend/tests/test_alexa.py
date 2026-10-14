@@ -815,6 +815,16 @@ def test_real_compiler_clarification_and_shared_dashboard(
             )
             is not None
         )
+        confirmation = db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.user_id == users[0].id,
+                AuditEvent.expectation_id == records[0]["id"],
+                AuditEvent.event_type == "EXPECTATION_CONFIRMED",
+            )
+        )
+        assert confirmation is not None
+        assert confirmation.source_provider == "ALEXA"
+        assert confirmation.source_provenance == "SIGNED_ASK"
         if mode == "correction":
             assert records[0]["baseline"] == 150
         assert (

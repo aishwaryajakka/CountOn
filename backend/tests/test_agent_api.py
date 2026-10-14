@@ -193,6 +193,15 @@ def test_api_capture_conversation_dashboard_persistence(wired, wire_engine, mode
                 and wired.get("/api/v1/expectations").json() == []
             )
             turn = converse(wired, answer, turn["session_reference"])
+    if mode != "cancel":
+        assert turn["clarification_required"] and not turn["captured"]
+        assert "Should I save it?" in turn["answer"]
+        assert wired.get("/api/v1/expectations").json() == []
+        pending = turn["session_reference"]
+        assert not any(step["label"] == "capture_expectation" for step in turn["traces"])
+        turn = converse(wired, "Yes", pending)
+        assert sum(step["label"] == "capture_expectation" for step in turn["traces"]) == 1
+        assert converse(wired, "Yes", pending)["code"] == "STATE_REJECTED"
     assert turn["captured"] == (mode != "cancel")
     records = wired.get("/api/v1/expectations").json()
     assert len(records) == (0 if mode == "cancel" else 1)
@@ -206,6 +215,19 @@ def test_api_capture_conversation_dashboard_persistence(wired, wire_engine, mode
             key in turn
             for key in ("capture_state", "clarification_state", "compiled_expectation")
         )
+
+
+def test_web_capture_confirmation_can_be_declined_without_persistence(wired, wire_engine):
+    from tests.test_expectation_compiler import compiled
+
+    wire_engine(compiled())
+    pending = converse(wired, "I'm counting on my grocery bill staying under $120 this week")
+    assert pending["clarification_required"] and not pending["captured"]
+    declined = converse(wired, "No", pending["session_reference"])
+    assert not declined["captured"]
+    assert wired.get("/api/v1/expectations").json() == []
+    replay = converse(wired, "Yes", pending["session_reference"])
+    assert replay["code"] == "STATE_REJECTED" and not replay["captured"]
 
 
 def test_invalid_auth_never_reaches_orchestrator(monkeypatch):
@@ -267,6 +289,9 @@ def test_real_http_adapter_full_agent_path_and_shared_dashboard(
                     "I'm counting on my grocery bill staying under $120 this week",
                     listed["session_reference"],
                 )
+                assert not saved["captured"]
+                assert client.get("/api/v1/expectations").json() == []
+                saved = converse(client, "Yes", saved["session_reference"])
                 assert saved["captured"] and saved["saved_id"]
                 assert (
                     client.get("/api/v1/expectations").json()[0]["id"]

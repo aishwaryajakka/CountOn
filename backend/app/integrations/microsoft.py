@@ -397,6 +397,8 @@ class MicrosoftOAuth:
         from app.db.models.provider_sync import ProviderSyncState
         db.execute(delete(ProviderSyncState).where(ProviderSyncState.connection_id == connection_id, ProviderSyncState.user_id == user_id))
         connection.status = "disconnected"
+        connection.revoked_at = datetime.now(timezone.utc)
+        connection.failure_status = None
         connection.oauth_generation = None
         connection.scopes = []
         connection.__dict__["_credential_state"] = "not_configured"
@@ -425,7 +427,8 @@ class OutlookProvider:
             GRAPH + "/me?$select=id",
             headers={"Authorization": "Bearer " + token},
         )
-        if identity.get("id") != connection.external_account_id:
+        account_id = connection.external_account_id
+        if not account_id or identity.get("id") != account_id:
             raise ProviderError("PERMISSION_DENIED", retryable=False)
         start = max(
             expectation.created_at,
@@ -525,7 +528,13 @@ class OutlookProvider:
                         raw_data={
                             "provider": "microsoft_graph",
                             "connection_id": str(job.connection_id),
-                            "account_id": connection.external_account_id,
+                            "account_id": account_id,
+                            "account_fingerprint": hashlib.sha256(
+                                (
+                                    "counton-provider-account:"
+                                    + account_id
+                                ).encode()
+                            ).hexdigest(),
                             "event_id": event_id,
                             "permission": "Mail.ReadBasic",
                             "access": "delegated_own_mailbox",

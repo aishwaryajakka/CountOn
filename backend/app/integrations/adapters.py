@@ -275,7 +275,7 @@ class AccountAdapter:
             args: dict[str, str | int] = {}
             if self.kind == "email":
                 args["$select"] = (
-                    "id,subject,from,toRecipients,receivedDateTime,lastModifiedDateTime,conversationId,body,hasAttachments"
+                    "id,subject,from,toRecipients,receivedDateTime,lastModifiedDateTime,conversationId,body"
                 )
             else:
                 cp.setdefault(
@@ -314,21 +314,6 @@ class AccountAdapter:
                     timestamp(event["receivedDateTime"])
                 ) < now - timedelta(days=self.retention):
                     continue
-                if event.get("hasAttachments"):
-                    files = self.get(
-                        "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/"
-                        + quote(event["id"], safe="")
-                        + "/attachments?$select=name,contentType,size,isInline",
-                        token,
-                    )
-                    facts["attachments"] = [
-                        {
-                            "name": str(f.get("name", ""))[:150],
-                            "type": str(f.get("contentType", ""))[:100],
-                            "size": f.get("size", 0),
-                        }
-                        for f in files.get("value", [])[:30]
-                    ]
             events.append((str(event["id"]), facts))
         more = response.get("@odata.nextLink")
         if more:

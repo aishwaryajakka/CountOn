@@ -17,6 +17,9 @@ def test_supported_provider_models(client,provider,kind):
     assert response.status_code==201
     assert response.json()['credential_state']=='not_configured'
     assert response.json()['metadata']['mock'] is True
+    assert response.json()['connected_at'] is not None
+    assert response.json()['revoked_at'] is None
+    assert response.json()['failure_status'] is None
 
 
 def test_crud_multiple_accounts_filters_and_audit(client,db,users):
@@ -30,12 +33,45 @@ def test_crud_multiple_accounts_filters_and_audit(client,db,users):
     assert client.post('/api/v1/integrations',json={'provider':'microsoft','connection_type':'email'}).status_code==201
     assert len(client.get('/api/v1/integrations?provider=google&connection_type=calendar&status=pending').json())==2
     assert len(client.get('/api/v1/integrations?provider=google&limit=1&offset=1').json())==1
-    assert client.patch(path,json={'status':'disconnected'}).json()['status']=='disconnected'
+    disconnected = client.patch(path,json={'status':'disconnected'}).json()
+    assert disconnected['status']=='disconnected'
+    assert disconnected['revoked_at'] is not None
     assert client.delete(path).status_code==204
     assert client.get(path).status_code==404
     events=list(db.scalars(select(AuditEvent).where(AuditEvent.resource_id==UUID(iid))))
     assert {e.action for e in events}=={'integration.created','integration.updated','integration.deleted'}
     assert all(e.entity_type=='integration' and e.request_id for e in events)
+
+
+def test_audit_history_is_owned_paginated_and_redacted(client, db, users):
+    connection = client.post('/api/v1/integrations', json={
+        'provider': 'google', 'connection_type': 'email', 'metadata': {'demo': True}
+    }).json()
+    event = db.scalar(
+        select(AuditEvent)
+        .where(AuditEvent.resource_id == UUID(connection['id']))
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    )
+    event.audit_metadata = {
+        'status': 'ok', 'demo': True, 'access_token': 'must-not-leave-backend'
+    }
+    db.flush()
+    response = client.get('/api/v1/audit-events')
+    assert response.status_code == 200
+    row = next(
+        item for item in response.json() if item['audit_event_id'] == str(event.id)
+    )
+    assert row['audit_event_id'] == str(event.id)
+    assert row['action_taken'] == event.action
+    assert row['action_metadata'] == {'status': 'ok', 'demo': True}
+    assert row['counton_user_id'] == str(users[0].id)
+    assert 'must-not-leave-backend' not in response.text
+    assert len(client.get('/api/v1/audit-events?limit=1').json()) == 1
+    app.dependency_overrides[get_current_user] = lambda: users[1]
+    other_history = client.get('/api/v1/audit-events')
+    assert other_history.status_code == 200
+    assert all(item['counton_user_id'] != str(users[0].id) for item in other_history.json())
+    assert 'must-not-leave-backend' not in other_history.text
 
 
 def test_integration_and_notification_isolation(client,users,numeric_payload,bill_payload):

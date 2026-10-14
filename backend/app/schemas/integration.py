@@ -49,9 +49,9 @@ class IntegrationResponse(BaseModel):
     scopes: list[str]
     metadata: ConnectionMetadata = Field(validation_alias=AliasChoices('connection_metadata','metadata'))
     last_synced_at: datetime|None
-    connected_at: datetime|None = None
-    revoked_at: datetime|None = None
-    failure_status: str|None = None
+    connected_at: datetime|None
+    revoked_at: datetime|None
+    failure_status: str|None
     created_at: datetime
     updated_at: datetime
     credential_state: Literal['not_configured', 'configured'] = 'not_configured'

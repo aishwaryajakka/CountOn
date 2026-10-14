@@ -984,7 +984,7 @@ def test_new_migration_metadata_rls_and_guarded_rollback(scenario):
     with engine.begin() as connection:
         assert (
             connection.scalar(text("SELECT version_num FROM alembic_version"))
-            == "ac746eb3f145"
+            == "d6a71c9e24f0"
         )
         assert (
             compare_metadata(MigrationContext.configure(connection), Base.metadata)

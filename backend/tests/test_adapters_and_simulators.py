@@ -12,11 +12,13 @@ from app.db.models.expectation import ComparisonType, Expectation, ExpectationTy
 from app.evaluators.base import EvaluationResult
 from app.evaluators.boolean import evaluate as evaluate_boolean
 from app.evaluators.numeric import evaluate as evaluate_numeric
+from app.integrations.bee.adapter import bee_event_to_evidence
 from app.integrations.bee.simulator import (
     simulate_document_commitment,
     simulate_plumber_cancelled,
     simulate_plumber_confirmed,
 )
+from app.integrations.ring.adapter import ring_event_to_evidence
 from app.integrations.ring.simulator import (
     simulate_doorbell_ring,
     simulate_motion,
@@ -93,25 +95,27 @@ def test_bee_conversation_plumber_confirmed():
     _raw, ev_create = simulate_plumber_confirmed(metric="appointment_confirmed")
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
-    assert ev_create.value["value"] is True
+    assert ev_create.value["commitment_confirmed"] is True
+    assert "value" not in ev_create.value
     assert "Landlord" in ev_create.value["speaker"]
 
     expectation = _mock_expectation("appointment_confirmed")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MATCH
+    assert output.result == EvaluationResult.UNKNOWN
 
 
 def test_bee_conversation_plumber_cancelled():
     _raw, ev_create = simulate_plumber_cancelled(metric="appointment_confirmed")
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "appointment_confirmed"
-    assert ev_create.value["value"] is False
+    assert ev_create.value["commitment_confirmed"] is False
+    assert "value" not in ev_create.value
 
     expectation = _mock_expectation("appointment_confirmed")
     db_evidence = _to_db_evidence(expectation.id, ev_create)
     output = evaluate_boolean(expectation, [db_evidence])
-    assert output.result == EvaluationResult.MISMATCH
+    assert output.result == EvaluationResult.UNKNOWN
 
 
 def test_bee_document_commitment():
@@ -119,6 +123,40 @@ def test_bee_document_commitment():
     assert ev_create.source == "bee_simulator"
     assert ev_create.metric == "conversation_mention"
     assert "Sarah" in ev_create.value["speaker"]
+
+
+def test_simulator_adapters_never_retain_media_or_transcripts():
+    ring = ring_event_to_evidence(
+        {
+            "simulated": True,
+            "event_id": "ring-private-payload",
+            "kind": "package_detected",
+            "timestamp": "2026-10-13T12:00:00Z",
+            "video_url": "https://private.invalid/video",
+            "provider_payload": {"private": "content"},
+        }
+    )
+    bee = bee_event_to_evidence(
+        {
+            "simulated": True,
+            "id": "bee-private-payload",
+            "type": "conversation",
+            "start_time": "2026-10-13T12:00:00Z",
+            "summary": "Only the approved summary",
+            "transcript": "private full conversation",
+            "audio_url": "https://private.invalid/audio",
+        }
+    )
+
+    assert ring is not None and ring.raw_data == {
+        "provenance": "SIMULATED_RING",
+        "simulated": True,
+    }
+    assert bee is not None and bee.raw_data == {
+        "provenance": "SIMULATED_BEE",
+        "simulated": True,
+        "category": "conversation",
+    }
 
 
 def test_utility_bill_within_tolerance_evaluates_to_match():
@@ -133,7 +171,6 @@ def test_utility_bill_within_tolerance_evaluates_to_match():
         materiality_threshold=0.05,
         evidence_sources=["utility_bill"],
     )
-    # $148.00 exceeds $142.10 baseline by $5.90, but deviation is 4.15% which is within the 5% tolerance
     db_evidence = Evidence(
         id=uuid4(),
         expectation_id=expectation.id,
@@ -160,7 +197,6 @@ def test_utility_bill_exceeding_tolerance_evaluates_to_mismatch():
         materiality_threshold=0.05,
         evidence_sources=["utility_bill"],
     )
-    # $162.00 exceeds baseline by $19.90, deviation 14.0% > 5% tolerance
     db_evidence = Evidence(
         id=uuid4(),
         expectation_id=expectation.id,
@@ -213,10 +249,4 @@ if __name__ == "__main__":
     print("PASS: test_bee_conversation_plumber_cancelled")
     test_bee_document_commitment()
     print("PASS: test_bee_document_commitment")
-    test_utility_bill_within_tolerance_evaluates_to_match()
-    print("PASS: test_utility_bill_within_tolerance_evaluates_to_match")
-    test_utility_bill_exceeding_tolerance_evaluates_to_mismatch()
-    print("PASS: test_utility_bill_exceeding_tolerance_evaluates_to_mismatch")
-    test_utility_bill_below_baseline_evaluates_to_match()
-    print("PASS: test_utility_bill_below_baseline_evaluates_to_match")
     print("\nALL ADAPTER & SIMULATOR TESTS PASSED!")

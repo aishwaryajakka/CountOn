@@ -27,8 +27,11 @@ def test_acceptance_idempotency_and_atomic_effects(client,db,users,numeric_paylo
     notices=client.get('/api/v1/notifications?status=pending&limit=1').json()
     assert len(notices)==1 and notices[0]['expectation_id']==str(eid)
     events=list(db.scalars(select(AuditEvent).where(AuditEvent.expectation_id==eid)))
-    assert {e.action for e in events}=={'expectation.created','evidence.ingested','expectation.evaluated','notification.created'}
-    assert len(events)==4 and all(e.request_id for e in events)
+    assert {e.action for e in events}=={
+        'expectation.created', 'evidence.ingested', 'evidence.correlated',
+        'expectation.evaluated', 'expectation.mismatch', 'notification.created',
+    }
+    assert len(events)==6 and all(e.request_id for e in events)
     from app.db.models import Expectation
     expectation=db.get(Expectation,eid)
     ensure_job(db,expectation);ensure_job(db,expectation);db.commit()
@@ -80,13 +83,44 @@ def test_pagination_and_filtering(client,numeric_payload,bill_payload):
 def test_evaluation_selects_metric_before_pagination(client,db,numeric_payload):
     from datetime import datetime, timezone
     eid=UUID(client.post('/api/v1/expectations',json=numeric_payload).json()['id'])
-    db.add_all([Evidence(expectation_id=eid,source='usage',metric='unrelated',value={'amount':999},observed_at=datetime(2030,1,1,tzinfo=timezone.utc)) for _ in range(105)])
-    db.add(Evidence(expectation_id=eid,source='bill',metric='total_cost',value={'amount':130},observed_at=datetime(2026,1,1,tzinfo=timezone.utc)))
-    db.add(Evidence(expectation_id=eid,source='late_bill',metric='total_cost',value={'amount':162},observed_at=datetime(2025,1,1,tzinfo=timezone.utc)))
+    db.add_all([Evidence(expectation_id=eid,source='utility_usage',metric='unrelated',value={'amount':999},observed_at=datetime(2030,1,1,tzinfo=timezone.utc)) for _ in range(105)])
+    db.add(Evidence(expectation_id=eid,source='utility_bill',metric='total_cost',value={'amount':130},observed_at=datetime(2026,1,1,tzinfo=timezone.utc)))
+    db.add(Evidence(expectation_id=eid,source='utility_bill',metric='total_cost',value={'amount':162},observed_at=datetime(2025,1,1,tzinfo=timezone.utc)))
     db.commit()
     path=f'/api/v1/expectations/{eid}'
     assert len(client.get(path+'/evidence').json())==100
     assert client.post(path+'/evaluate').json()['result']=='MATCH'
+
+
+def test_on_demand_evaluation_ignores_and_does_not_correlate_unapproved_source(
+    client, db, numeric_payload, bill_payload
+):
+    eid = client.post('/api/v1/expectations', json=numeric_payload).json()['id']
+    path = f'/api/v1/expectations/{eid}'
+    approved = client.post(
+        path + '/evidence',
+        json=dict(bill_payload, value={'amount': 125}),
+    ).json()
+    unapproved = client.post(
+        path + '/evidence',
+        json=dict(
+            bill_payload,
+            source='unapproved_provider',
+            value={'amount': 180},
+            observed_at='2026-10-03T12:00:00Z',
+        ),
+    ).json()
+    result = client.post(path + '/evaluate').json()
+    assert result['result'] == 'MATCH'
+    assert result['observed']['evidence_id'] == approved['id']
+    assert db.scalar(
+        select(func.count())
+        .select_from(AuditEvent)
+        .where(
+            AuditEvent.evidence_id == UUID(unapproved['id']),
+            AuditEvent.action == 'evidence.correlated',
+        )
+    ) == 0
 
 
 def test_concurrent_evidence_retries_create_one_row(postgres_engine,bill_payload,numeric_payload):
