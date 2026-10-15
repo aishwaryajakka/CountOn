@@ -38,7 +38,7 @@ written directly to Supabase.
 | **Done locally** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
 | **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
 | **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
-| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification, Ring and Bee ingestion; broader autonomous orchestration/shared session infrastructure. Metadata records alone do not prove live provider or device integrations. |
+| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification; physical Ring ingestion; real Bee CLI account acceptance; broader autonomous orchestration/shared session infrastructure. Metadata records and fixture tests do not prove live provider or device integrations. |
 
 The core MCP tools are `capture_expectation`, `get_expectation`, and
 `list_expectations`. The intelligence tools are `compile_expectation`,
@@ -165,7 +165,7 @@ as current. Never commit credentials or put private keys in `NEXT_PUBLIC_*`.
 ## Unfinished integrations
 
 Real Alexa+/Echo onboarding and account linking, compatible OAuth discovery,
-live Microsoft Graph consent/ingestion, Ring/Bee ingestion and external notification
+live Microsoft Graph consent/ingestion, physical Ring ingestion, real Bee CLI acceptance and external notification
 delivery remain incomplete. PostgreSQL monitoring, encrypted Outlook OAuth and
 in-app delivery are implemented locally; see [worker operation](docs/monitoring.md). Shared rate limiting, durable metrics export, backup/restore,
 and conversation/audit retention need operational work. `/alexa` uses constrained
@@ -183,8 +183,8 @@ routing and a bounded owned-record search, not an autonomous agent.
 8. Test the Alexa Skills Kit simulator.
 9. Test real Alexa/Echo.
 10. Register the Microsoft app, consent a test mailbox and run live Outlook acceptance.
-11. Add Ring ingestion.
-12. Add Bee ingestion.
+11. Add and verify physical Ring ingestion if vendor access becomes available; keep the simulator labeled.
+12. Install/authenticate the official Bee CLI and perform the documented real-account acceptance; keep fixture and simulator results separate.
 13. Manually validate the minimal Trust Orchestrator source policy, receipts and audit delivery; validate the monitoring worker against live provider credentials before deployment.
 14. Complete final demo hardening.
 
@@ -201,6 +201,7 @@ makes a provider, worker or Alexa device integration complete.
 - [Bedrock integration and rollout](docs/bedrock-integration.md)
 - [Background monitoring and legacy Outlook setup](docs/monitoring.md)
 - [Gmail, Outlook, calendars and order evidence acceptance](docs/integrations-acceptance.md)
+- [Bee CLI, Bee simulator and Ring simulator acceptance](docs/bee-ring-integration-acceptance.md)
 - [Compiler/client semantics](backend/app/ai/README.md),
   [clarification state machine](backend/app/ai/clarification.md), and
   [grounded investigator](backend/app/ai/investigation.md)
@@ -233,3 +234,8 @@ The resumed [typed source orchestration](docs/orchestration.md) connects complet
 expectations to explicitly confirmed authorized sources and existing durable workers.
 [Current validation and release gates](docs/orchestration-validation.md) distinguish
 local automated results from human review, cloud/model and Alexa device acceptance.
+
+CountOn sign-in uses Supabase Auth for email/password, confirmation and recovery,
+with an optional `custom:amazon` OAuth2 provider. The native provider/secret setup
+and real Amazon login remain external acceptance gates. See [authentication audit,
+configuration and tests](docs/authentication.md). No identity migration is required.

@@ -192,7 +192,7 @@ describe('End-to-End Integration Flow: Expectation -> Simulation -> Evidence -> 
     const beeEvidenceCreate = beeEventToEvidence(beeEvent);
 
     expect(beeEvidenceCreate.source).toBe('bee_simulator');
-    expect(beeEvidenceCreate.value.value).toBe(false);
+    expect(beeEvidenceCreate.value.commitment_confirmed).toBe(false);
 
     // 3. Backend evaluation returns MISMATCH with reasoning
     const mismatchEvaluation: Evaluation = {

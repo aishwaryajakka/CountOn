@@ -30,7 +30,7 @@ export function Avatar() {
 function Workspace({ children }: { children: ReactNode }) {
   const board = useResource(loadBoard, 30000);
   const pathname = usePathname();
-  const { name } = useIdentity();
+  const { name, email } = useIdentity();
   const [open, setOpen] = useState(false);
   const [signoutError, setSignoutError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -63,7 +63,7 @@ function Workspace({ children }: { children: ReactNode }) {
       <nav>{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={`nav-link ${active(href) ? 'active' : ''}`} aria-current={active(href) ? 'page' : undefined} onClick={() => setOpen(false)}><Icon size={19} strokeWidth={1.7} /><span>{label}</span>{href === '/expectations' && board.data && <span className="nav-count">{board.data.length}</span>}</Link>)}</nav>
       <div className="sidebar-bottom"><Link className={`nav-link ${active('/settings') ? 'active' : ''}`} href="/settings" onClick={() => setOpen(false)}><Settings size={19} />Profile / Settings</Link><div className="account-strip"><Avatar /><div><strong>{name}</strong><span>Your personal workspace</span></div><button className="icon-button" onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={18} /></button></div>{signoutError && <p role="alert" className="inline-error">{signoutError}</p>}</div>
     </aside>
-    <div className="workspace" inert={open}><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-only" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={22} /></button><span className="topbar-title">{navigation.find(item => active(item.href))?.label ?? 'Your workspace'}</span></div><div className="topbar-right"><span className="workspace-pill"><span className="status-dot" />Calm monitoring</span><Link href="/settings" aria-label="Your profile"><Avatar /></Link></div></header><main id="main-content" className="page-content" tabIndex={-1}>{children}</main><footer className="app-footer">Calm monitoring. Clear signals.<span>CountOn</span></footer></div>
+    <div className="workspace" inert={open}><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-only" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={22} /></button><span className="topbar-title">{navigation.find(item => active(item.href))?.label ?? 'Your workspace'}</span></div><div className="topbar-right"><span className="workspace-pill"><span className="status-dot" />Calm monitoring</span><Link href="/settings" aria-label="Your profile"><Avatar /></Link></div></header><main id="main-content" className="page-content" tabIndex={-1}>{!email && <aside className="soft-card" role="status"><p>Add a verified recovery email in <Link href="/settings">Account settings</Link>. Amazon sign-in does not share your email or connect devices.</p></aside>}{children}</main><footer className="app-footer">Calm monitoring. Clear signals.<span>CountOn</span></footer></div>
   </div></BoardContext.Provider>;
 }
 export function AppShell({ children }: { children: ReactNode }) {

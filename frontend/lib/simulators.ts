@@ -113,7 +113,6 @@ export function beeEventToEvidence(raw: BeeSimEvent): EvidenceCreate {
   };
 
   if (raw.confirmed !== undefined) {
-    valDict.value = raw.confirmed;
     valDict.commitment_confirmed = raw.confirmed;
     valDict.context_only = true;
   }

@@ -127,7 +127,7 @@ Login uses Supabase email/password authentication. The [supported Auth client](h
 persists and refreshes the session. Its [Auth subscription](https://supabase.com/docs/reference/javascript/auth-onauthstatechange)
 updates the app on sign-in/sign-out and is removed on unmount. Protected pages
 redirect to login; FastAPI verifies the actual JWT and enforces ownership. A 401
-clears the local session. No Google OAuth or registration UI is advertised.
+clears the local session. Registration, email confirmation/recovery, and explicit Amazon linking are implemented. Amazon remains disabled until provider setup and live acceptance. See [authentication setup](../docs/authentication.md).
 
 The dedicated demo account is **Ashley Mccormick**, **demo@counton.app**. Obtain
 its password through the team's secure shared channel. Login is normal Auth,
@@ -142,7 +142,10 @@ The supplied portrait is used only for this demo account; other users get initia
 | Route | Behavior |
 | --- | --- |
 | `/` | Redirects to `/dashboard` |
-| `/login` | Email/password sign-in |
+| `/login` | Supabase email/password and configured Amazon sign-in |
+| `/register` | Supabase signup and confirmation feedback |
+| `/forgot-password`, `/reset-password` | Supabase recovery and password update |
+| `/auth/callback` | Server PKCE exchange; no tokens in redirect URLs |
 | `/alexa` | Authenticated Alexa+ hackathon conversation through the controlled backend orchestrator, real MCP discovery/actions, stateful clarification and grounded Why explanations; see [demo guide](docs/alexa-demo.md) |
 | `/dashboard` | Actual expectations, latest results, evidence context and dynamic counts |
 | `/expectations` | Cards and filters by presentation status |
@@ -150,8 +153,8 @@ The supplied portrait is used only for this demo account; other users get initia
 | `/expectations/[id]` | Expectation, all evidence/history, latest evaluation, sources and timeline |
 | `/integrations` | Provider OAuth actions, sync health, calendar selection; modeled accounts labeled; live acceptance required |
 | `/notifications` | Actual notifications; mark read or dismiss through FastAPI |
-| `/activity` | Limited activity derived from creation/latest evaluation timestamps |
-| `/settings` | Read-only authenticated identity and timezone |
+| `/activity` | Persisted redacted audit history, evidence stream, and expectation lifecycle timestamps |
+| `/settings` | Identity, verified recovery email and explicit Amazon link/unlink |
 
 `lib/api.ts` is the authenticated FastAPI client for normal workspace data.
 `lib/mcp/client.ts` is the separate authenticated internal-route client for `/alexa`. It attaches Bearer authorization,
@@ -262,3 +265,9 @@ Editing a source filter or a rejected/stale confirmation clears prior choices. E
 manual binding remains available. Voice capture currently saves complete expectations;
 account/order source selection must then be confirmed in the web detail view. See
 [source orchestration](../docs/orchestration.md) and [validation](../docs/orchestration-validation.md).
+
+Supabase sessions now use the official `@supabase/ssr` cookie/PKCE clients. Next.js
+Proxy verifies protected pages with `getUser`; browser API/MCP requests still
+forward the Supabase bearer token. Existing local-storage sessions require signing
+in again after rollout; account UUIDs and data are unchanged. Production additionally
+requires exact `NEXT_PUBLIC_APP_URL`. [Setup and live acceptance](../docs/authentication.md).

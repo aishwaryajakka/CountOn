@@ -208,7 +208,7 @@ live; initialize and discover all six tools, then run intelligence acceptance.
 Real Alexa+/Echo onboarding/account linking and compatible OAuth resource metadata
 remain incomplete. PostgreSQL workers and encrypted delegated Outlook ingestion
 are implemented locally; [provider/worker deployment](monitoring.md) needs live
-Microsoft verification. Ring/Bee and external notification delivery remain absent. Direct structured capture has no generic idempotency key;
+Microsoft verification. Physical Ring ingestion, real Bee CLI account acceptance and external notification delivery remain absent. Ring/Bee simulators and the consent-gated local Bee CLI bridge are separate backend integrations, not MCP tools. Direct structured capture has no generic idempotency key;
 compiler-backed capture has durable replay protection. Bedrock is opt-in.
 
 ## Next Steps for Alexa+
