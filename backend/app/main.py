@@ -20,6 +20,7 @@ from app.services.readiness import database_ready
 from app.api.errors import register_exception_handlers
 from app.api.v1.router import router
 from app.core.logging import configure_logging
+from starlette.middleware.sessions import SessionMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,15 @@ app = FastAPI(
 )
 
 settings = get_settings()
+if not settings.session_secret_key:
+    raise RuntimeError("SESSION_SECRET_KEY must be configured.")
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret_key.get_secret_value(),
+    same_site="lax",
+    https_only=settings.environment == "production",
+)
 app.add_middleware(
     ExplicitCORSMiddleware,
     allow_origins=settings.allowed_origins,

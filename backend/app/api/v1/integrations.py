@@ -3,6 +3,7 @@
 
 from typing import Annotated
 from uuid import UUID
+import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -20,7 +21,9 @@ from app.schemas.integration import (
 )
 from app.services import integration_event_service
 from app.services import integration_service as service
+from app.services.gmail_service import fetch_gmail_messages
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 Database = Annotated[Session, Depends(get_db)]
 
@@ -145,3 +148,25 @@ def ingest_email_event(
             status_code=422,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/google/gmail/messages")
+def get_gmail_messages(
+    db: Database,
+    user: CurrentUser,
+    max_results: Annotated[int, Query(ge=1, le=100)] = 10,
+):
+    try:
+        return fetch_gmail_messages(
+            db=db,
+            user_id=user.id,
+            max_results=max_results,
+        )
+    except Exception as exc:
+        logger.error(
+            "Gmail endpoint failed: %s: %s",
+            type(exc).__name__,
+            str(exc),
+            exc_info=True,
+        )
+        raise
