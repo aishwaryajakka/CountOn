@@ -142,3 +142,18 @@ it.each(['ring', 'bee'] as const)('submits authorized %s simulator evidence and 
   expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
   expect(fetcher).toHaveBeenCalledOnce();
 });
+
+it.each(['ring', 'bee'] as const)('submits dedicated %s simulator route evidence', async kind => {
+  const { generateRingEvent, generateBeeEvent } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? generateRingEvent('package_not_detected') : generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false });
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  if (kind === 'ring') await client.simulateRing(expectation.id, payload as ReturnType<typeof generateRingEvent>);
+  else await client.simulateBee(expectation.id, payload as ReturnType<typeof generateBeeEvent>);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/simulators/${kind}/expectations/${expectation.id}/events`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ simulated: true });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(fetcher).toHaveBeenCalledOnce();
+});

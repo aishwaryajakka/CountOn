@@ -63,7 +63,7 @@ export function EvidenceTimeline({
   }, [expectations]);
 
   const sortedEvents: TimelineEventItem[] = useMemo(() => {
-    const list = [...evidenceList].sort(
+    const list = [...(evidenceList ?? [])].sort(
       (a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at)
     );
     const sliced = limit ? list.slice(0, limit) : list;
@@ -178,6 +178,21 @@ export function EvidenceTimeline({
                     >
                       {event.sourceLabel}
                     </span>
+                    {(event.source.toLowerCase().includes('ring') || event.source.toLowerCase().includes('bee')) && (
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '4px',
+                          backgroundColor: '#fef3c7',
+                          color: '#92400e',
+                          border: '1px solid #fde68a',
+                        }}
+                      >
+                        SIMULATED
+                      </span>
+                    )}
                     {event.metric && (
                       <strong style={{ fontSize: '0.925rem' }}>
                         {humanize(event.metric)}

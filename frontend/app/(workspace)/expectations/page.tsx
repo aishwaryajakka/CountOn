@@ -18,17 +18,20 @@ const filters: { value: 'all' | PresentationStatus; label: string }[] = [
 
 export default function Expectations() {
   const board = useBoard();
-  const [provider, setProvider] = useState('all');
   const [filter, setFilter] = useState<'all' | PresentationStatus>('all');
+  const [provider, setProvider] = useState('all');
   const [managingExp, setManagingExp] = useState<Expectation | null>(null);
 
   const rows = board.data ?? [];
   const filtered = rows.filter(
     (row) =>
       (filter === 'all' || getExpectationPresentationStatus(row.expectation, row.latest) === filter) &&
-      (provider === 'all' || row.expectation.evidence_sources.some(source =>
-        provider === 'google' ? source.startsWith('google') || source.startsWith('gmail') :
-          source.startsWith('microsoft') || source.startsWith('outlook')))
+      (provider === 'all' ||
+        row.expectation.evidence_sources.some((source) =>
+          provider === 'google'
+            ? source.startsWith('google') || source.startsWith('gmail')
+            : source.startsWith('microsoft') || source.startsWith('outlook')
+        ))
   );
 
   return (
@@ -60,7 +63,14 @@ export default function Expectations() {
         ))}
       </div>
 
-      <label>Filter by provider<select value={provider} onChange={event => setProvider(event.target.value)}><option value="all">All providers</option><option value="google">Google</option><option value="microsoft">Microsoft</option></select></label>
+      <label>
+        Filter by provider
+        <select value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <option value="all">All providers</option>
+          <option value="google">Google</option>
+          <option value="microsoft">Microsoft</option>
+        </select>
+      </label>
 
       {board.loading ? (
         <Loading />

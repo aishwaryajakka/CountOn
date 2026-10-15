@@ -102,6 +102,9 @@ export function createApiClient(deps: Dependencies) {
       if (filters.before) query.set('occurred_before', filters.before);
       return all<AuditEvent>(`/audit-events${query.size ? `?${query}` : ''}`, signal);
     },
+    createIntegration: (payload: import('./types').IntegrationCreate) => request<Integration>('/integrations', { method: 'POST', body: JSON.stringify(payload) }),
+    updateIntegration: (id: string, payload: import('./types').IntegrationUpdate) => request<Integration>(`/integrations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteIntegration: (id: string) => request<void>(`/integrations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     async board(signal?: AbortSignal): Promise<WatchedExpectation[]> {
       const expectations = await all<Expectation>('/expectations', signal);
       const rows: WatchedExpectation[] = [];

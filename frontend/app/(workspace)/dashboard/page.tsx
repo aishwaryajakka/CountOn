@@ -68,9 +68,8 @@ export default function Dashboard() {
   const loadTimelineEvidence = useCallback(
     async (signal: AbortSignal): Promise<Evidence[]> => {
       if (!rows.length) return [];
-      const sampled = rows.slice(0, 6);
       const results = await Promise.all(
-        sampled.map(row => api.evidence(row.expectation.id, signal))
+        rows.map((row) => api.evidence(row.expectation.id, signal))
       );
       return results.flat();
     },
