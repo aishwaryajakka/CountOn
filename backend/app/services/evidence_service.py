@@ -8,13 +8,17 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core import observability
-from app.core.exceptions import IdempotencyConflictError
+from app.core.exceptions import (
+    ExpectationNotFoundError,
+    IdempotencyConflictError,
+)
 from app.db.models import Evidence, Expectation
 from app.repositories import evidence as repository
 from app.repositories import operations
 from app.schemas.evidence import EvidenceCreate
-from app.services import evaluation_service
+
 from app.services.expectation_service import get_expectation
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,34 +30,35 @@ def add_evidence(
     user_id: UUID,
     idempotency_key: str | None = None,
 ) -> Evidence:
-    expectation = get_expectation(db, expectation_id, user_id)
-
     try:
-        # Check whether this evidence has already been submitted.
-        if idempotency_key or payload.external_event_id:
-            db.scalar(
-                select(Expectation)
-                .where(
-                    Expectation.id == expectation_id,
-                    Expectation.user_id == user_id,
+        # Serialize evidence ingestion for this expectation.
+        expectation = db.scalar(
+            select(Expectation)
+            .where(
+                Expectation.id == expectation_id,
+                Expectation.user_id == user_id,
+            )
+            .with_for_update()
+        )
+
+        if expectation is None:
+            raise ExpectationNotFoundError(expectation_id)
+
+        # Check for an existing submission after acquiring the lock.
+        checks = []
+        if idempotency_key:
+            checks.append(Evidence.idempotency_key == idempotency_key)
+
+        if payload.external_event_id:
+            checks.append(
+                (Evidence.source == payload.source)
+                & (
+                    Evidence.external_event_id
+                    == payload.external_event_id
                 )
-                .with_for_update()
             )
 
-            checks = []
-
-            if idempotency_key:
-                checks.append(Evidence.idempotency_key == idempotency_key)
-
-            if payload.external_event_id:
-                checks.append(
-                    (Evidence.source == payload.source)
-                    & (
-                        Evidence.external_event_id
-                        == payload.external_event_id
-                    )
-                )
-
+        if checks:
             existing_rows = list(
                 db.scalars(
                     select(Evidence).where(
@@ -68,7 +73,7 @@ def add_evidence(
 
             existing = existing_rows[0] if existing_rows else None
 
-            if existing:
+            if existing is not None:
                 if any(
                     getattr(existing, key) != value
                     for key, value in payload.model_dump().items()
@@ -84,15 +89,15 @@ def add_evidence(
                 db.commit()
                 return existing
 
-        # Save the new evidence.
-        evidence = repository.create_evidence(
-            db,
-            expectation_id,
-            payload,
+        # Create evidence and its audit event atomically.
+        evidence = Evidence(
+            expectation_id=expectation_id,
+            **payload.model_dump(),
+            idempotency_key=idempotency_key,
         )
-        evidence.idempotency_key = idempotency_key
+        db.add(evidence)
+        db.flush()
 
-        # Record the evidence ingestion in the audit log.
         operations.audit(
             db,
             expectation,
@@ -100,29 +105,20 @@ def add_evidence(
             evidence.id,
         )
 
+        db.commit()
+        db.refresh(evidence)
+
     except Exception:
         db.rollback()
         raise
 
-    # Record successful ingestion and refresh the saved evidence.
     observability.record("evidence_ingested")
-    db.refresh(evidence)
-
-    # Automatically evaluate the expectation once.
-    evaluation_service.evaluate_expectation(
-        db,
-        expectation_id,
-        user_id,
-    )
-
     logger.info(
         "Evidence added id=%s expectation_id=%s",
         evidence.id,
         expectation_id,
     )
-
     return evidence
-
 
 def list_evidence(
     db: Session,
@@ -139,3 +135,8 @@ def list_evidence(
         limit,
         offset,
     )
+
+    observability.record("evidence_ingested")
+    db.refresh(evidence)
+    logger.info("Evidence added id=%s expectation_id=%s", evidence.id, expectation_id)
+    return evidence
