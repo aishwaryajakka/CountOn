@@ -48,4 +48,4 @@ class IntegrationResponse(BaseModel):
     last_synced_at: datetime|None
     created_at: datetime
     updated_at: datetime
-    credential_state: Literal['not_configured'] = 'not_configured'
+    credential_state: Literal['configured', 'not_configured'] = 'not_configured'
