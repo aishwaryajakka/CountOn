@@ -1,8 +1,7 @@
 """Owner-scoped notification persistence; no delivery credentials or network."""
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from app.db.models import Notification
-
+from sqlalchemy.dialects.postgresql import insert
 
 def create_mismatch(db,expectation,evaluation):
     values=dict(user_id=expectation.user_id,expectation_id=expectation.id,evaluation_id=evaluation.id,
@@ -28,3 +27,62 @@ def update_status(db,item,status):
     item.status=status
     db.flush()
     return item
+
+
+def create_monitoring_notification(
+    db,
+    expectation,
+    notification_type: str,
+    message: str,
+):
+    """Create one idempotent notification for a monitoring alert."""
+    if notification_type not in {
+        "expectation_overdue",
+        "missing_evidence",
+    }:
+        raise ValueError("Unsupported monitoring notification type")
+
+    values = {
+        "user_id": expectation.user_id,
+        "expectation_id": expectation.id,
+        "evaluation_id": None,
+        "type": notification_type,
+        "channel": "in_app",
+        "message": message,
+        "notification_metadata": {},
+    }
+
+    statement = (
+        insert(Notification)
+        .values(**values)
+        .on_conflict_do_nothing(
+            index_elements=[
+                Notification.expectation_id,
+                Notification.user_id,
+                Notification.type,
+            ],
+            index_where=(
+                (Notification.evaluation_id.is_(None))
+                & Notification.type.in_(
+                    ["expectation_overdue", "missing_evidence"]
+                )
+            ),
+        )
+        .returning(Notification.id)
+    )
+
+    created_id = db.scalar(statement)
+
+    if created_id is None:
+        return db.scalar(
+            select(Notification).where(
+                Notification.expectation_id == expectation.id,
+                Notification.user_id == expectation.user_id,
+                Notification.type == notification_type,
+                Notification.evaluation_id.is_(None),
+            )
+        )
+
+    return db.scalar(
+        select(Notification).where(Notification.id == created_id)
+    )
