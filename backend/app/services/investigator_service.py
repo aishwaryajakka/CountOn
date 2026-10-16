@@ -2,7 +2,17 @@
 
 from uuid import UUID
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+try:
+    from fastapi import HTTPException, status
+except ImportError:
+    class HTTPException(Exception):
+        def __init__(self, status_code: int = 400, detail: str = ""):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class status:
+        HTTP_400_BAD_REQUEST = 400
 
 from app.ai.investigator import investigate_mismatch
 from app.ai.models.expectation import (
