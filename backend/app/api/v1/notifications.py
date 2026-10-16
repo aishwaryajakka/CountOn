@@ -17,7 +17,9 @@ class NotificationResponse(BaseModel):
     id: UUID
     user_id: UUID
     expectation_id: UUID
-    evaluation_id: UUID
+
+    evaluation_id: UUID | None = None
+
     type: str
     channel: str
     status: str
