@@ -10,8 +10,12 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from alembic import command
-from alembic.config import Config
+try:
+    from alembic import command
+    from alembic.config import Config
+except ImportError:
+    command = None
+    Config = None
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
