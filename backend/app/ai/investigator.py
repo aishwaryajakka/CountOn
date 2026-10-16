@@ -29,8 +29,15 @@ def _should_use_mock(explicit_mock: Optional[bool] = None) -> bool:
     if env_mock in ("1", "true", "yes", "on"):
         return True
 
-    if not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"):
-        return True
+    try:
+        import boto3
+        session = boto3.Session()
+        creds = session.get_credentials()
+        if creds is None:
+            return True
+    except Exception:
+        if not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"):
+            return True
 
     return False
 
@@ -87,11 +94,34 @@ def _mock_investigate_mismatch(
             confidence=0.95
         )
 
+    if "delivery" in sources:
+        delivery_status = str(metrics.get("delivery_status", "")).lower()
+        if "delay" in delivery_status or "rescheduled" in delivery_status:
+            return InvestigationResult(
+                explanation="Your package delivery was delayed in transit by the carrier beyond the promised delivery window.",
+                key_factors=["Carrier transit delay logged", f"Status: {metrics.get('delivery_status')}"],
+                confidence=0.95,
+            )
+        if "cancel" in delivery_status:
+            return InvestigationResult(
+                explanation="Your order shipment was cancelled by the carrier or merchant before arrival.",
+                key_factors=["Shipment cancellation confirmed", f"Status: {metrics.get('delivery_status')}"],
+                confidence=0.95,
+            )
+
     if "outlook_calendar" in sources or "outlook_email" in sources:
         status_val = metrics.get("appointment_status") or metrics.get("appointment_date") or "rescheduled"
         return InvestigationResult(
             explanation="Your Outlook Calendar shows the appointment was rescheduled to a different date or marked as cancelled.",
             key_factors=["Outlook Calendar verification", f"Calendar record indicates: {status_val}"],
+            confidence=0.92,
+        )
+
+    if "google_calendar" in sources or "gmail" in sources:
+        status_val = metrics.get("appointment_status") or metrics.get("appointment_date") or "rescheduled"
+        return InvestigationResult(
+            explanation="Your Google Calendar shows the appointment was rescheduled to a different date or marked as cancelled.",
+            key_factors=["Google Calendar verification", f"Calendar record indicates: {status_val}"],
             confidence=0.92,
         )
 

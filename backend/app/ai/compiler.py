@@ -30,8 +30,15 @@ def _should_use_mock(explicit_mock: Optional[bool] = None) -> bool:
     if env_mock in ("1", "true", "yes", "on"):
         return True
 
-    if not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"):
-        return True
+    try:
+        import boto3
+        session = boto3.Session()
+        creds = session.get_credentials()
+        if creds is None:
+            return True
+    except Exception:
+        if not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"):
+            return True
 
     return False
 
@@ -306,6 +313,23 @@ def _mock_compile_expectation(
             )
         )
 
+    if "gmail" in lowered or "google" in lowered:
+        cal_deadline = "tomorrow" if "tomorrow" in lowered else ("today" if "today" in lowered else "upcoming")
+        is_cal = "calendar" in lowered or "appointment" in lowered or "meeting" in lowered
+        return ExpectationCompilationResult(
+            kind="expectation",
+            expectation=Expectation(
+                id=expectation_id,
+                claim=user_text,
+                type="event_occurrence" if is_cal else "conversation_commitment",
+                metric="appointment_status" if is_cal else "email_confirmation",
+                comparison="exists",
+                deadline=cal_deadline,
+                evidence_sources=["google_calendar"] if is_cal else ["gmail"],
+                status="monitoring",
+            )
+        )
+
     if "outlook" in lowered or "dentist" in lowered:
         cal_deadline = "2026-10-05" if "dentist" in lowered else "upcoming"
         if "tomorrow" in lowered:
@@ -326,6 +350,22 @@ def _mock_compile_expectation(
                 deadline=cal_deadline,
                 evidence_sources=["outlook_calendar"] if is_cal else ["outlook_email"],
                 status="monitoring"
+            )
+        )
+
+    if "amazon" in lowered or ("delivery" in lowered and "order" in lowered):
+        del_deadline = "today" if "today" in lowered else ("tomorrow" if "tomorrow" in lowered else "upcoming")
+        return ExpectationCompilationResult(
+            kind="expectation",
+            expectation=Expectation(
+                id=expectation_id,
+                claim=user_text,
+                type="delivery",
+                metric="delivery_status",
+                comparison="exists",
+                deadline=del_deadline,
+                evidence_sources=["delivery", "ring"],
+                status="monitoring",
             )
         )
 
