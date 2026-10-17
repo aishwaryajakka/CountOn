@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     counton_demo_user_id: UUID | None = None
     counton_demo_email: str = "demo@counton.app"
     counton_demo_password: SecretStr | None = Field(default=None, repr=False)
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = Field(default=None, repr=False)
+    google_redirect_uri: str | None = None
+    oauth_token_encryption_key: SecretStr | None = Field(default=None, repr=False)
 
     @field_validator("counton_demo_user_id", mode="before")
     @classmethod
