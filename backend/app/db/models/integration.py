@@ -39,7 +39,14 @@ class IntegrationConnection(Base):
         CheckConstraint("provider IN ('google','microsoft','ring','bee','utility','delivery')",name='ck_integration_provider'),
         CheckConstraint("connection_type IN ('email','calendar','camera','wearable','utility','delivery')",name='ck_integration_type'),
         CheckConstraint("status IN ('pending','connected','disconnected','error')",name='ck_integration_status'),
-        Index('ix_integration_owner_filters','user_id','provider','connection_type','status'),)
+        Index('ix_integration_owner_filters','user_id','provider','connection_type','status'),
+        CheckConstraint("sync_status IN ('idle','success','error','retrying')",
+        name='ck_integration_sync_status',
+        ),
+        CheckConstraint("consecutive_failures >= 0",
+        name='ck_integration_consecutive_failures',
+        ),)
+
     id: Mapped[UUID]=mapped_column(PGUUID,primary_key=True,default=uuid4)
     user_id: Mapped[UUID]=mapped_column(PGUUID,ForeignKey('profiles.id',ondelete='CASCADE'),index=True)
     provider: Mapped[str]=mapped_column(String(20))
@@ -52,3 +59,16 @@ class IntegrationConnection(Base):
     last_synced_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
     updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    sync_status: Mapped[str] = mapped_column(
+        String(20), default='idle', server_default='idle'
+    )
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_error_code: Mapped[str | None] = mapped_column(String(50))
+    consecutive_failures: Mapped[int] = mapped_column(
+        default=0, server_default=text('0')
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )

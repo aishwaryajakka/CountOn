@@ -46,6 +46,11 @@ class IntegrationResponse(BaseModel):
     scopes: list[str]
     metadata: ConnectionMetadata = Field(validation_alias=AliasChoices('connection_metadata','metadata'))
     last_synced_at: datetime|None
+    sync_status: Literal['idle', 'success', 'error', 'retrying'] = 'idle'
+    last_attempt_at: datetime | None
+    last_error_code: str | None
+    consecutive_failures: int = 0
+    next_retry_at: datetime | None
     created_at: datetime
     updated_at: datetime
     credential_state: Literal['not_configured'] = 'not_configured'

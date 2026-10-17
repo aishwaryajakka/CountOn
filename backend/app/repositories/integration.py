@@ -11,8 +11,16 @@ def create(db,payload,user_id):
     return item
 
 
-def get(db,id,user_id):
-    return db.scalar(select(IntegrationConnection).where(IntegrationConnection.id==id,IntegrationConnection.user_id==user_id))
+def get(db, id, user_id, *, for_update=False):
+    stmt = select(IntegrationConnection).where(
+        IntegrationConnection.id == id,
+        IntegrationConnection.user_id == user_id,
+    )
+
+    if for_update:
+        stmt = stmt.with_for_update()
+
+    return db.scalar(stmt)
 
 
 def list_connections(db,user_id,provider=None,connection_type=None,status=None,limit=100,offset=0):
