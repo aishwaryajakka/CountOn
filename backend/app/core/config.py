@@ -50,12 +50,12 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr | None = Field(default=None, repr=False)
     google_redirect_uri: str | None = None
     oauth_token_encryption_key: SecretStr | None = Field(default=None, repr=False)
+    google_gmail_redirect_uri: str | None = None
 
     @field_validator("counton_demo_user_id", mode="before")
     @classmethod
     def empty_demo_uuid(cls, value):
         return None if value == "" else value
-
     @model_validator(mode="after")
     def validate_selected_database(self) -> "Settings":
         selected = self.local_database_url if self.database_target == "local" else self.supabase_database_url
