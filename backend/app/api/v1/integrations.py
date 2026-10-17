@@ -1,12 +1,14 @@
 """Authenticated metadata-only connected accounts."""
 from typing import Annotated
 from uuid import UUID
-from fastapi import APIRouter,Depends,Query,Response
+from fastapi import APIRouter, Depends, Query, Response, Body, HTTPException
 from sqlalchemy.orm import Session
 from app.api.dependencies import CurrentUser,get_db
 from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
 from app.schemas.integration import IntegrationCreate,IntegrationUpdate,IntegrationResponse
 from app.services import integration_service as service
+from app.schemas.evidence import EvidenceResponse
+from app.services import integration_event_service
 
 router=APIRouter(prefix='/integrations',tags=['integrations'])
 Database=Annotated[Session,Depends(get_db)]
@@ -35,3 +37,28 @@ def update(id:UUID,payload:IntegrationUpdate,db:Database,user:CurrentUser):retur
 def delete(id:UUID,db:Database,user:CurrentUser):
     service.delete(db,id,user.id)
     return Response(status_code=204)
+
+@router.post(
+    "/{expectation_id}/events/bee",
+    response_model=EvidenceResponse,
+    status_code=201,
+    summary="Ingest a simulated Bee event",
+)
+def ingest_bee_event(
+    expectation_id: UUID,
+    db: Database,
+    user: CurrentUser,
+    event: dict = Body(...),
+):
+    try:
+        return integration_event_service.ingest_bee_event(
+            db=db,
+            expectation_id=expectation_id,
+            user_id=user.id,
+            event=event,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
