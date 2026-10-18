@@ -9,6 +9,13 @@ from app.schemas.integration import IntegrationCreate,IntegrationUpdate,Integrat
 from app.services import integration_service as service
 from app.schemas.evidence import EvidenceResponse
 from app.services import integration_event_service
+from app.services import outlook_sync_service
+from app.services.microsoft_outlook_service import MicrosoftOutlookError
+from app.services.microsoft_token_service import MicrosoftOAuthError
+from app.services.microsoft_calendar_service import (
+    list_microsoft_calendar_events,
+    MicrosoftCalendarError,
+)
 
 router=APIRouter(prefix='/integrations',tags=['integrations'])
 Database=Annotated[Session,Depends(get_db)]
@@ -62,3 +69,54 @@ def ingest_bee_event(
             status_code=422,
             detail=str(exc),
         ) from exc
+
+@router.post("/{connection_id}/outlook/sync")
+def sync_outlook(
+    connection_id: UUID,
+    db: Database,
+    user: CurrentUser,
+    top: Annotated[int, Query(ge=1, le=100)] = 25,
+):
+    try:
+        return outlook_sync_service.sync_outlook_emails(
+            db=db,
+            connection_id=connection_id,
+            user_id=user.id,
+            top=top,
+        )
+    except (MicrosoftOAuthError, MicrosoftOutlookError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{connection_id}/microsoft-calendar/sync")
+def sync_microsoft_calendar(
+    connection_id: UUID,
+    db: Database,
+    user: CurrentUser,
+    top: Annotated[int, Query(ge=1, le=100)] = 10,
+):
+    """Fetch upcoming events from a connected Microsoft Calendar."""
+    try:
+        return list_microsoft_calendar_events(
+            db=db,
+            connection_id=connection_id,
+            user_id=user.id,
+            top=top,
+        )
+    except MicrosoftOAuthError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MicrosoftCalendarError as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load Microsoft Calendar events.",
+        ) from None

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     google_redirect_uri: str | None = None
     oauth_token_encryption_key: SecretStr | None = Field(default=None, repr=False)
     google_gmail_redirect_uri: str | None = None
+    microsoft_client_id: str | None = None
+    microsoft_client_secret: SecretStr | None = Field(default=None, repr=False)
+    microsoft_tenant_id: str = "common"
+    microsoft_outlook_redirect_uri: str | None = None
+    microsoft_calendar_redirect_uri: str | None = None
 
     @field_validator("counton_demo_user_id", mode="before")
     @classmethod

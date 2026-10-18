@@ -9,6 +9,8 @@ from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
 class ConnectionMetadata(BaseModel):
     model_config=ConfigDict(extra='forbid')
     mock: bool = False
+    email: str | None = None
+    display_name: str | None = None
     demo: bool = False
     demo_tag: Literal['counton-demo-v1'] | None = None
     account_kind: Literal['personal','work','family'] | None = None

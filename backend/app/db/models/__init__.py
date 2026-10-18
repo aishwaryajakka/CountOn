@@ -15,3 +15,5 @@ __all__ = [
 from app.db.models.operations import AuditEvent, MonitoringJob, Notification
 
 from app.db.models.integration import IntegrationConnection
+
+from app.db.models.calendar_event import CalendarEvent
