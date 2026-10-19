@@ -6,7 +6,7 @@ import { AgentClientError } from '@/lib/agent/client';
 import type { AgentResponse } from '@/lib/agent/contracts';
 import { toolNames } from '@/lib/mcp/contracts';
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), discovery: vi.fn(), replace: vi.fn(), authenticated: true }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }), useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/components/auth-provider', () => ({ useAuth: () => ({ loading: false, session: mocks.authenticated ? { user: { id: 'user-id' }, access_token: 'private-test-token' } : null }), useIdentity: () => ({ firstName: 'Taylor' }) }));
 vi.mock('@/lib/mcp/client', async original => ({ ...await original<typeof import('@/lib/mcp/client')>(), requestMcp: mocks.discovery }));
 vi.mock('@/lib/agent/client', async original => ({ ...await original<typeof import('@/lib/agent/client')>(), requestAgent: mocks.agent }));

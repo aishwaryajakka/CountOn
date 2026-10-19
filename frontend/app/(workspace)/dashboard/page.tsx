@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
-import { AttentionCard, ExpectationCard, HealthyCard } from '@/components/expectation';
+import { AttentionCard, ExpectationCard, HealthyCard, RealityDecisionCard } from '@/components/expectation';
 import { EvidenceTimeline } from '@/components/evidence-timeline';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
 import { Badge, EmptyState, ErrorState, IconBox, Loading, NewExpectationLink, PageHeader, QuietNote } from '@/components/ui';
@@ -42,12 +42,14 @@ export default function Dashboard() {
 
   const reloadBoard = board.reload;
 
-  // Auto-refresh poll every 8 seconds for real-time MATCH, UNKNOWN, MISMATCH updates
+  // Calm background refresh every 30 seconds without wiping UI
   useEffect(() => {
     const timer = setInterval(() => {
-      reloadBoard();
-      setLastUpdated(new Date());
-    }, 8000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        reloadBoard(true);
+        setLastUpdated(new Date());
+      }
+    }, 30000);
     return () => clearInterval(timer);
   }, [reloadBoard]);
 
@@ -59,21 +61,25 @@ export default function Dashboard() {
 
   // Load priority supporting evidence
   const loadPriorityEvidence = useCallback(
-    (signal: AbortSignal) => (priorityId ? api.evidence(priorityId, signal) : Promise.resolve([])),
+    (signal: AbortSignal) => (priorityId ? api.evidence(priorityId, signal).catch(() => []) : Promise.resolve([])),
     [priorityId]
   );
   const priorityEvidence = useResource(loadPriorityEvidence);
 
+  // Memoize active row IDs to prevent re-triggering timeline evidence loads unnecessarily
+  const serializedIds = useMemo(() => rows.slice(0, 6).map((r) => r.expectation.id).join(','), [rows]);
+  const targetIds = useMemo(() => (serializedIds ? serializedIds.split(',') : []), [serializedIds]);
+
   // Load multi-source evidence across active expectations for the Evidence Timeline
   const loadTimelineEvidence = useCallback(
     async (signal: AbortSignal): Promise<Evidence[]> => {
-      if (!rows.length) return [];
+      if (!targetIds.length) return [];
       const results = await Promise.all(
-        rows.map((row) => api.evidence(row.expectation.id, signal))
+        targetIds.map((id) => api.evidence(id, signal).catch(() => []))
       );
       return results.flat();
     },
-    [rows]
+    [targetIds]
   );
   const timelineResource = useResource(loadTimelineEvidence);
 
@@ -185,7 +191,7 @@ export default function Dashboard() {
               boxShadow: '0 0 0 2px rgba(22, 163, 74, 0.2)',
             }}
           />
-          <strong style={{ color: '#0f172a' }}>Updates every 8 seconds</strong>
+          <strong style={{ color: '#0f172a' }}>Calm monitoring active</strong>
           <span>· Watching evaluations and evidence</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -356,7 +362,14 @@ export default function Dashboard() {
               ) : priorityEvidence.error ? (
                 <ErrorState error={priorityEvidence.error} retry={priorityEvidence.reload} />
               ) : (
-                <AttentionCard row={priority} evidence={priorityEvidence.data ?? []} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <RealityDecisionCard
+                    expectation={priority.expectation}
+                    evaluation={priority.latest}
+                    evidence={priorityEvidence.data ?? []}
+                  />
+                  <AttentionCard row={priority} evidence={priorityEvidence.data ?? []} />
+                </div>
               )}
             </section>
           ) : (

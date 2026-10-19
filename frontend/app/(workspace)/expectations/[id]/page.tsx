@@ -8,7 +8,9 @@ import { TrackingControls } from '@/components/tracking-controls';
 import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui';
-import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline } from '@/components/expectation';
+import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline, RealityDecisionCard } from '@/components/expectation';
+import { ResolutionPanel } from '@/components/resolution-panel';
+import { AiSuggestions } from '@/components/ai-suggestions';
 import { displayTitle, getExpectationPresentationStatus, humanize } from '@/lib/presentation';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
 import type { EvidenceCreate } from '@/lib/types';
@@ -141,6 +143,27 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
 
             <div className="detail-layout">
               <div className="detail-main">
+                {/* Core Reality Engine Decision Visualization */}
+                <RealityDecisionCard
+                  expectation={state.data.expectation}
+                  evaluation={state.data.latest}
+                  evidence={state.data.evidence}
+                />
+
+                {/* State-Specific Human Action & Resolution Panel */}
+                <ResolutionPanel
+                  expectation={state.data.expectation}
+                  evaluation={state.data.latest}
+                  evidence={state.data.evidence}
+                  onManage={() => setManageOpen(true)}
+                  onRefresh={() => state.reload()}
+                />
+
+                {/* AI Next-Action Suggestions (Only after verified mismatch) */}
+                {getExpectationPresentationStatus(state.data.expectation, state.data.latest) === 'attention' && (
+                  <AiSuggestions expectation={state.data.expectation} />
+                )}
+
                 <ComparisonCards
                   expectation={state.data.expectation}
                   evaluation={state.data.latest}
@@ -227,7 +250,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   </div>
                 </section>
 
-                <section className="section">
+                <section className="section" id="evidence-section">
                   <div className="section-heading">
                     <h2>Evidence gathered</h2>
                     <span className="caption">{state.data.evidence.length} recorded observations</span>

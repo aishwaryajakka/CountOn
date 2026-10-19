@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { toolNames } from '@/lib/mcp/contracts';
 export const actions = ['LIST_EXPECTATIONS', 'GET_EXPECTATION', 'COMPILE_EXPECTATION', 'CONTINUE_CLARIFICATION', 'CAPTURE_EXPECTATION', 'EXPLAIN_MISMATCH', 'CANCEL', 'UNKNOWN'] as const;
-export const agentInputSchema = z.strictObject({ text: z.string().trim().min(1).max(2000), session_reference: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable() });
+export const agentInputSchema = z.strictObject({
+  text: z.string().trim().min(1).max(2000),
+  session_reference: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
+  expectation_id: z.string().uuid().nullable().optional(),
+});
 export type AgentInput = z.infer<typeof agentInputSchema>;
 const row = z.strictObject({ id: z.uuid(), claim: z.string().max(4000), type: z.enum(['numeric_comparison', 'boolean', 'temporal', 'event']), status: z.enum(['monitoring', 'fulfilled', 'contradicted', 'unknown', 'resolved', 'cancelled']), metric: z.string().nullable(), created_at: z.iso.datetime({ offset: true }) });
 const trace = z.union([
