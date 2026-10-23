@@ -1,9 +1,11 @@
 
+"""One-time OAuth state records to prevent callback replay."""
 """One-time OAuth state records for CSRF protection."""
 
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,6 +24,7 @@ class OAuthState(Base):
         primary_key=True,
         default=uuid4,
     )
+
     state_hash: Mapped[str] = mapped_column(
         String(64),
         unique=True,
@@ -32,6 +35,19 @@ class OAuthState(Base):
         ForeignKey("profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
+
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    state_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
     provider: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -40,10 +56,16 @@ class OAuthState(Base):
         DateTime(timezone=True),
         nullable=False,
     )
+
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

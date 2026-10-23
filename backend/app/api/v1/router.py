@@ -12,6 +12,10 @@ from app.api.v1 import (
     notifications,
     integrations,
     oauth,
+    calendar,
+)
+
+router = APIRouter()
 )
 
 router = APIRouter()
@@ -23,6 +27,11 @@ for module in (
     notifications,
     integrations,
     oauth,
+    calendar,
+    compiler,
+    dashboard,
+):
+    router.include_router(module.router)
     compiler,
     dashboard,
 ):
