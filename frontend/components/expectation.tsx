@@ -14,7 +14,98 @@ export function ExpectationCard({ row, onManage }: { row: WatchedExpectation; on
   const { expectation, latest } = row;
   const status = getExpectationPresentationStatus(expectation, latest);
   const { timeZone } = useIdentity();
-  return <article className={`card expectation-card ${status === 'attention' ? 'attention-card' : ''}`}><div className="card-top"><IconBox icon={expectationIcon(expectation)} tone={status === 'attention' ? 'orange' : 'blue'} /><div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Badge status={status} />{onManage && <button className="icon-button" type="button" onClick={() => onManage(expectation)} aria-label={`Manage ${displayTitle(expectation)}`} title="Edit or manage lifecycle" style={{ width: '28px', height: '28px', padding: '4px' }}><Settings size={15} /></button>}</div></div><h3><Link href={`/expectations/${expectation.id}`}>{displayTitle(expectation)}</Link></h3><p className="claim">“{expectation.claim}”</p><div className="source-chips">{expectation.evidence_sources.map(source => <span key={source}>{humanize(source)}</span>)}</div><div className="card-bottom"><span><Clock3 size={14} />{formatDate(latest?.created_at ?? expectation.updated_at, timeZone)}</span><Link className="icon-button" href={`/expectations/${expectation.id}`} aria-label={`View ${displayTitle(expectation)}`}><ArrowRight size={18} /></Link></div></article>;
+
+  return (
+    <article className={`card expectation-card ${status === 'attention' ? 'attention-card' : ''}`}>
+      <div className="card-top">
+        <IconBox icon={expectationIcon(expectation)} tone={status === 'attention' ? 'orange' : 'blue'} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <Badge status={status} />
+          {onManage && (
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => onManage(expectation)}
+              aria-label={`Manage ${displayTitle(expectation)}`}
+              title="Edit or manage lifecycle"
+              style={{ width: '28px', height: '28px', padding: '4px' }}
+            >
+              <Settings size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <h3>
+        <Link href={`/expectations/${expectation.id}`}>{displayTitle(expectation)}</Link>
+      </h3>
+      <p className="claim">“{expectation.claim}”</p>
+
+      {/* Structured Monitoring Criteria Summary */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '0.5rem',
+          margin: '0.6rem 0',
+          padding: '0.6rem 0.75rem',
+          backgroundColor: 'var(--color-bg-app, #f8fafc)',
+          borderRadius: '8px',
+          fontSize: '0.8rem',
+          border: '1px solid var(--color-border, #e6ebf2)',
+        }}
+      >
+        <div>
+          <span className="overline" style={{ fontSize: '0.65rem' }}>Expected</span>
+          <span style={{ fontWeight: 600, display: 'block', color: 'var(--color-brand-primary, #1a5fd7)' }}>
+            {expectedText(expectation)}
+          </span>
+        </div>
+        <div>
+          <span className="overline" style={{ fontSize: '0.65rem' }}>Observed</span>
+          <span
+            style={{
+              fontWeight: 600,
+              display: 'block',
+              color: status === 'attention' ? 'var(--color-status-attention, #ac3d10)' : 'var(--color-text-primary, #2d3142)',
+            }}
+          >
+            {observedText(latest)}
+          </span>
+        </div>
+        <div>
+          <span className="overline" style={{ fontSize: '0.65rem' }}>Deadline</span>
+          <span className="caption" style={{ display: 'block' }}>
+            {expectation.deadline ? formatDate(expectation.deadline, timeZone) : 'No deadline'}
+          </span>
+        </div>
+        <div>
+          <span className="overline" style={{ fontSize: '0.65rem' }}>Last Evaluated</span>
+          <span className="caption" style={{ display: 'block' }}>
+            {latest ? formatDate(latest.created_at, timeZone) : 'Awaiting signal'}
+          </span>
+        </div>
+      </div>
+
+      <div className="source-chips">
+        {expectation.evidence_sources.map((source) => (
+          <span key={source}>{humanize(source)}</span>
+        ))}
+        {expectation.evidence_sources.length === 0 && <span className="caption">No bound sources</span>}
+      </div>
+
+      <div className="card-bottom">
+        <span>
+          <Clock3 size={14} />
+          {expectation.evidence_sources.length} source{expectation.evidence_sources.length === 1 ? '' : 's'} ·{' '}
+          {formatDate(latest?.created_at ?? expectation.updated_at, timeZone)}
+        </span>
+        <Link className="icon-button" href={`/expectations/${expectation.id}`} aria-label={`View ${displayTitle(expectation)}`}>
+          <ArrowRight size={18} />
+        </Link>
+      </div>
+    </article>
+  );
 }
 export function ComparisonCards({ expectation, evaluation, evidence }: { expectation: Expectation; evaluation: Evaluation | null; evidence: Evidence[] }) {
   const observedEvidence = evidence.find(item => item.id === evaluation?.observed.evidence_id) ?? latestMetricEvidence(evidence, expectation.metric);
@@ -34,7 +125,46 @@ export function AttentionCard({ row, evidence }: { row: WatchedExpectation; evid
 }
 export function EvidenceCard({ item }: { item: Evidence }) {
   const { timeZone } = useIdentity();
-  return <article className="card evidence-card"><IconBox icon={item.metric === 'total_cost' ? Zap : CalendarDays} /><span className="overline">{humanize(item.metric ?? 'Observation')}</span><strong>{evidenceValue(item, timeZone)}</strong><p>{evidenceSourceLabel(item)}</p><footer><time dateTime={item.observed_at}>{formatDate(item.observed_at, timeZone)}</time><span>{new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(item.confidence)} confidence</span></footer></article>;
+  const s = item.source.toLowerCase();
+  const isRing = s.includes('ring');
+  const isBee = s.includes('bee');
+  const provTag = isRing ? 'SIMULATED_RING' : isBee ? 'SIMULATED_BEE' : 'LIVE SOURCE';
+  const isSimulated = isRing || isBee;
+
+  return (
+    <article className="card evidence-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+        <IconBox icon={item.metric === 'total_cost' ? Zap : CalendarDays} />
+        <span
+          style={{
+            fontSize: '0.675rem',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            padding: '0.15rem 0.5rem',
+            borderRadius: '4px',
+            backgroundColor: isSimulated ? '#fef3c7' : '#edf3ff',
+            color: isSimulated ? '#92400e' : '#1a5fd7',
+            border: `1px solid ${isSimulated ? '#fde68a' : '#dce7fa'}`,
+          }}
+        >
+          {provTag}
+        </span>
+      </div>
+      <span className="overline">{humanize(item.metric ?? 'Observation')}</span>
+      <strong>{evidenceValue(item, timeZone)}</strong>
+      <p>{evidenceSourceLabel(item)}</p>
+      {isSimulated && (
+        <span className="caption" style={{ color: '#92400e', fontSize: '0.725rem' }}>
+          Hardware simulation fixture · Not physical device
+        </span>
+      )}
+      <footer style={{ marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border, #e6ebf2)' }}>
+        <time dateTime={item.observed_at}>{formatDate(item.observed_at, timeZone)}</time>
+        <span>{new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(item.confidence)} confidence</span>
+      </footer>
+    </article>
+  );
 }
 export function Timeline({ expectation, evidence, evaluations }: { expectation: Expectation; evidence: Evidence[]; evaluations: Evaluation[] }) {
   const { timeZone } = useIdentity();
@@ -42,3 +172,4 @@ export function Timeline({ expectation, evidence, evaluations }: { expectation: 
   return <section className="card timeline-card"><div className="section-heading"><h2>Timeline</h2><span className="caption">Recorded activity</span></div><ol className="timeline">{events.map(event => <li key={event.id} className={event.tone}><span className="timeline-node" aria-hidden="true" /><div><strong>{event.title}</strong><p>{event.description}</p></div><time dateTime={event.at}>{formatDate(event.at, timeZone)}</time></li>)}</ol></section>;
 }
 export function HealthyCard() { return <div className="card healthy-card"><IconBox icon={CheckCircle2} tone="green" /><div><h2>Everything looks as expected.</h2><p>CountOn is still watching in the background.</p><span className="caption">Evidence updates appear when they’re available.</span></div></div>; }
+export { RealityDecisionCard } from './reality-decision-card';

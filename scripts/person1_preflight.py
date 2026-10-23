@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Non-secret CountOn Person 1 ASK/MCP/simulator preflight.
 
 Static audit only by default; optional HTTP probes never send tokens or signed ASK requests.

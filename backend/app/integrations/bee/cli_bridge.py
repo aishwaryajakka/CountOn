@@ -19,7 +19,15 @@ from urllib.parse import urlsplit
 
 import httpx
 
-TOKEN_PATH = Path.home() / ".counton" / "bee-connector.json"
+
+def _default_token_path() -> Path:
+    try:
+        return Path.home() / ".counton" / "bee-connector.json"
+    except RuntimeError:
+        return Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or ".") / ".counton" / "bee-connector.json"
+
+
+TOKEN_PATH = _default_token_path()
 MAX_CLI_OUTPUT = 2_000_000
 
 

@@ -9,7 +9,11 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy.orm import Session
 
-from app.agent.adapters import CapabilityAdapter, StreamableMcpAdapter
+from app.agent.adapters import (
+    CapabilityAdapter,
+    CountOnMcpAdapter,
+    StreamableMcpAdapter,
+)
 from app.agent.models import AgentInput
 from app.agent.orchestrator import AgentOrchestrator
 from app.agent.session import AgentSessionStore
@@ -17,6 +21,7 @@ from app.agent.trust import SENSITIVE
 from app.api.dependencies import CurrentUser, bearer
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
+from app.db.models.expectation import Expectation
 from app.db.session import get_db
 from app.evaluators.base import EvaluationResult
 from app.mcp.schemas import ExpectationResult
@@ -31,6 +36,7 @@ class ConversationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     text: str = Field(min_length=1, max_length=2000, repr=False)
     session_reference: SecretStr | None = Field(default=None, repr=False, max_length=43)
+    expectation_id: UUID | None = None
 
     @field_validator("text")
     @classmethod
@@ -73,7 +79,10 @@ def remote_adapter(
 ) -> CapabilityAdapter:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise AuthenticationError()  # type: ignore[no-untyped-call]
-    return StreamableMcpAdapter(get_settings(), SecretStr(credentials.credentials))
+    settings = get_settings()
+    if settings.mcp_public_url:
+        return StreamableMcpAdapter(settings, SecretStr(credentials.credentials))
+    return CountOnMcpAdapter()
 
 
 @router.post("/converse", response_model=ConversationResponse)
@@ -106,7 +115,12 @@ async def converse(
         timezone = "UTC"
     turn = await agent.handle_session(
         user,
-        AgentInput(text=body.text, timezone=timezone, locale=locale),
+        AgentInput(
+            text=body.text,
+            timezone=timezone,
+            locale=locale,
+            expectation_id=body.expectation_id,
+        ),
         body.session_reference,
     )
     result = turn.result
@@ -140,6 +154,11 @@ async def converse(
         rows = [result.expectation]
     response.headers["Cache-Control"] = "no-store"
     claim = result.expectation.claim if result.expectation else None
+    if not claim and (trust.expectation_id or (result.explanation and result.explanation.expectation_id)):
+        target_id = trust.expectation_id or (result.explanation and result.explanation.expectation_id)
+        found_exp = db.get(Expectation, target_id)
+        if found_exp and found_exp.user_id == user.id:
+            claim = found_exp.claim
     expectation_label = (
         claim[:120]
         if claim and not SENSITIVE.search(claim)

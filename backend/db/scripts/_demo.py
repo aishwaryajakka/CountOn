@@ -24,8 +24,8 @@ SCENARIOS=[('bill','My next electricity bill should be lower.','numeric_comparis
     ('after-hours','I should have no meetings after 5 PM tomorrow.','temporal','meeting_start','UNKNOWN')]
 OBSERVATIONS={
     'bill':[('utility_usage','energy_usage_change',{'percentage':-18},'percent'),
-            ('utility_bill','total_cost',{'amount':162},'USD'),
-            ('tariff','rate_change',{'percentage':22},'percent')],
+            ('tariff','rate_change',{'percentage':22},'percent'),
+            ('utility_bill','total_cost',{'amount':162},'USD')],
     'package':[('delivery','delivered',{'value':True,'description':'Delivery provider marked the package delivered'},None),
                ('ring','package_present',{'value':True,'description':'Mock front door package detection'},None)],
     'plumber':[('gmail','appointment_confirmed',{'value':True,'scheduled_for':'2026-10-09T10:00:00-05:00','description':'Landlord confirmation email'},None),

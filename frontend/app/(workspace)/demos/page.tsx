@@ -110,6 +110,113 @@ export default function DemosPage() {
     }
   }
 
+  // ----------------------------------------------------
+  // ONE-CLICK SCENARIO LAUNCHER
+  // ----------------------------------------------------
+  const [scenarioRunning, setScenarioRunning] = useState(false);
+  const [scenarioState, setScenarioState] = useState<{
+    id: 'utility_mismatch' | 'ring_match' | 'bee_mismatch' | null;
+    statusText: string;
+    result?: 'MATCH' | 'MISMATCH' | 'UNKNOWN';
+    targetClaim?: string;
+    targetId?: string;
+  }>({ id: null, statusText: '' });
+
+  async function runScenario(scenario: 'utility_mismatch' | 'ring_match' | 'bee_mismatch') {
+    setScenarioRunning(true);
+    setStatusMessage(null);
+    try {
+      if (scenario === 'utility_mismatch') {
+        const target = simulatorTarget(rows, 'utility');
+        setScenarioState({
+          id: scenario,
+          statusText: `Step 1/3: Target identified · “${target.claim}”`,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+        const evidence = createUtilityBillEvidence(162.0);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 2/3: Ingesting simulated $162.00 bill evidence...' }));
+        await api.addEvidence(target.id, evidence);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 3/3: Running NumericEvaluator against criteria...' }));
+        const evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+        setEvaluations((prev) => ({ ...prev, utility: evaluation }));
+        setScenarioState({
+          id: scenario,
+          statusText: `Evaluated: ${evaluation.result} (162.00 < 142.10 → FALSE) · Difference +$19.90`,
+          result: evaluation.result,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+      } else if (scenario === 'ring_match') {
+        const target = simulatorTarget(rows, 'ring');
+        setScenarioState({
+          id: scenario,
+          statusText: `Step 1/3: Target identified · “${target.claim}”`,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+        const raw = generateRingEvent('package_detected', {
+          metric: target.metric ?? 'package_detected',
+          confidence: 0.95,
+        });
+        const evidence = ringEventToEvidence(raw);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 2/3: Ingesting simulated Ring package detection...' }));
+        await api.addEvidence(target.id, evidence);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 3/3: Running BooleanEvaluator...' }));
+        const evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+        setEvaluations((prev) => ({ ...prev, ring: evaluation }));
+        setScenarioState({
+          id: scenario,
+          statusText: `Evaluated: ${evaluation.result} (Package confirmed delivered) · Silence is success`,
+          result: evaluation.result,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+      } else {
+        const target = simulatorTarget(rows, 'bee');
+        setScenarioState({
+          id: scenario,
+          statusText: `Step 1/3: Target identified · “${target.claim}”`,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+        const raw = generateBeeEvent({
+          speaker: 'Landlord',
+          summary: 'The plumber had an emergency and cannot make it Friday. We need to reschedule.',
+          metric: target.metric ?? 'appointment_confirmed',
+          confirmed: false,
+        });
+        const evidence = beeEventToEvidence(raw);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 2/3: Ingesting simulated Bee cancellation transcript...' }));
+        await api.addEvidence(target.id, evidence);
+        await new Promise((r) => setTimeout(r, 350));
+        setScenarioState((s) => ({ ...s, statusText: 'Step 3/3: Running BooleanEvaluator...' }));
+        const evaluation = await api.evaluate(target.id, `simulation:${evidence.external_event_id}`);
+        setEvaluations((prev) => ({ ...prev, bee: evaluation }));
+        setScenarioState({
+          id: scenario,
+          statusText: `Evaluated: ${evaluation.result} (Appointment contradicted) · Attention required`,
+          result: evaluation.result,
+          targetClaim: target.claim,
+          targetId: target.id,
+        });
+      }
+      board.reload();
+    } catch (err) {
+      setScenarioState({
+        id: scenario,
+        statusText: err instanceof Error ? err.message : 'Scenario run failed',
+      });
+    } finally {
+      setScenarioRunning(false);
+    }
+  }
+
   return (
     <>
       <Link className="back-link" href="/dashboard">
@@ -141,6 +248,278 @@ export default function DemosPage() {
           <span>{statusMessage}</span>
         </div>
       )}
+
+      {/* ========================================================
+          TOP-LEVEL: TRY A COUNTON SCENARIO LAUNCHER
+          ======================================================== */}
+      <section
+        className="card"
+        style={{
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          backgroundColor: '#ffffff',
+          border: '1.5px solid var(--color-brand-primary, #1a5fd7)',
+          borderRadius: '16px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Sparkles size={20} color="var(--color-brand-primary, #1a5fd7)" />
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Try a CountOn Scenario</h2>
+            </div>
+            <p className="caption" style={{ marginTop: '0.25rem' }}>
+              One-click demonstrations of the CountOn thesis: Expectation → Evidence → Evaluation → Result.
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '0.2rem 0.6rem',
+              borderRadius: '99px',
+              backgroundColor: '#edf3ff',
+              color: '#1a5fd7',
+            }}
+          >
+            Deterministic Reality Checks
+          </span>
+        </div>
+
+        {/* 3 Scenario Cards Grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.25rem',
+          }}
+        >
+          {/* Scenario 1: Electricity Mismatch */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '12px',
+              border: '1px solid var(--color-border, #e6ebf2)',
+              backgroundColor: 'var(--color-bg-app, #f8fafc)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                color: '#15803d',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+              }}
+            >
+              <Zap size={16} color="#15803d" />
+              <span>1. Unexpected Electric Bill</span>
+            </div>
+            <p style={{ fontSize: '0.825rem', color: 'var(--color-text-secondary, #667085)', margin: 0 }}>
+              Expected: Bill &lt; $142.10. Simulated $162.00 bill arrives.
+            </p>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: '#475569',
+                backgroundColor: '#ffffff',
+                padding: '0.4rem 0.6rem',
+                borderRadius: '6px',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              NumericEvaluator → <strong>MISMATCH</strong> (+$19.90 variance)
+            </div>
+            <button
+              className="button primary"
+              style={{ marginTop: 'auto', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+              onClick={() => runScenario('utility_mismatch')}
+              disabled={scenarioRunning || busy}
+            >
+              Run Scenario
+            </button>
+          </div>
+
+          {/* Scenario 2: Package Delivery Match */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '12px',
+              border: '1px solid var(--color-border, #e6ebf2)',
+              backgroundColor: 'var(--color-bg-app, #f8fafc)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                color: '#0369a1',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+              }}
+            >
+              <Camera size={16} color="#0369a1" />
+              <span>2. Package Delivery Match</span>
+            </div>
+            <p style={{ fontSize: '0.825rem', color: 'var(--color-text-secondary, #667085)', margin: 0 }}>
+              Expected: Delivery at front door. Ring detects package.
+            </p>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: '#475569',
+                backgroundColor: '#ffffff',
+                padding: '0.4rem 0.6rem',
+                borderRadius: '6px',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              BooleanEvaluator → <strong>MATCH</strong> (Silence is success)
+            </div>
+            <button
+              className="button secondary"
+              style={{ marginTop: 'auto', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+              onClick={() => runScenario('ring_match')}
+              disabled={scenarioRunning || busy}
+            >
+              Run Scenario
+            </button>
+          </div>
+
+          {/* Scenario 3: Landlord Cancellation */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '12px',
+              border: '1px solid var(--color-border, #e6ebf2)',
+              backgroundColor: 'var(--color-bg-app, #f8fafc)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                color: '#b45309',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+              }}
+            >
+              <Mic size={16} color="#b45309" />
+              <span>3. Service Cancellation</span>
+            </div>
+            <p style={{ fontSize: '0.825rem', color: 'var(--color-text-secondary, #667085)', margin: 0 }}>
+              Expected: Plumber confirmed. Wearable hears emergency cancel.
+            </p>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: '#475569',
+                backgroundColor: '#ffffff',
+                padding: '0.4rem 0.6rem',
+                borderRadius: '6px',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              BooleanEvaluator → <strong>MISMATCH</strong> (Needs attention)
+            </div>
+            <button
+              className="button primary"
+              style={{ marginTop: 'auto', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+              onClick={() => runScenario('bee_mismatch')}
+              disabled={scenarioRunning || busy}
+            >
+              Run Scenario
+            </button>
+          </div>
+        </div>
+
+        {/* Scenario Live Progress Display */}
+        {scenarioState.id && (
+          <div
+            style={{
+              padding: '1rem',
+              backgroundColor: '#f1f5f9',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  className="status-dot"
+                  style={{ backgroundColor: scenarioRunning ? '#2563eb' : '#16a34a' }}
+                />
+                <strong style={{ fontSize: '0.9rem' }}>{scenarioState.statusText}</strong>
+              </div>
+
+              {scenarioState.result && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Badge
+                    status={
+                      scenarioState.result === 'MATCH'
+                        ? 'match'
+                        : scenarioState.result === 'MISMATCH'
+                        ? 'attention'
+                        : 'waiting'
+                    }
+                  />
+                  {scenarioState.result === 'MISMATCH' && (
+                    <Link
+                      className="button primary"
+                      href={`/alexa?expectationId=${scenarioState.targetId ?? ''}&starter=${encodeURIComponent(
+                        `Why did ${scenarioState.targetClaim ?? 'my expectation'} fail?`
+                      )}`}
+                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+                    >
+                      <Sparkles size={14} />
+                      Ask CountOn Why
+                    </Link>
+                  )}
+                  {scenarioState.targetId && (
+                    <Link
+                      className="button secondary"
+                      href={`/expectations/${scenarioState.targetId}`}
+                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
+                    >
+                      View Expectation
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Tabs */}
       <div className="filters" aria-label="Demo scenarios" style={{ marginBottom: '1.5rem' }}>

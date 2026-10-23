@@ -10,7 +10,11 @@ from typing import Literal
 from pydantic import ValidationError
 
 from app.ai.bedrock_client import BedrockClient
-from app.ai.exceptions import BedrockError, BedrockResponseError
+from app.ai.exceptions import (
+    BedrockDisabledError,
+    BedrockError,
+    BedrockResponseError,
+)
 from app.ai.investigation_evidence import (
     InvestigationFacts,
     InvestigationGroundingError,
@@ -154,8 +158,56 @@ def render_factor(draft: FactorDraft, facts: InvestigationFacts) -> ExplanationF
     )
 
 
+def deterministic_draft(facts: InvestigationFacts) -> InvestigatorDraft | None:
+    by_metric = {item.metric: item for item in facts.evidence}
+    usage = by_metric.get("energy_usage_change")
+    rate = by_metric.get("rate_change")
+    primary = next(
+        (
+            item
+            for item in facts.evidence
+            if item.metric == facts.observed.metric and item.ref == "E1"
+        ),
+        None,
+    )
+    if (
+        primary is not None
+        and usage is not None
+        and rate is not None
+        and not facts.conflicts
+        and isinstance(usage.value, (int, float))
+        and isinstance(rate.value, (int, float))
+        and usage.value < 0 < rate.value
+        and facts.expected.metric == "total_cost"
+        and facts.expected.comparison in ("less_than", "less_than_or_equal")
+        and isinstance(facts.expected.target, (int, float))
+        and isinstance(facts.observed.value, (int, float))
+        and facts.observed.value > facts.expected.target
+    ):
+        return InvestigatorDraft(
+            expected=facts.expected,
+            observed=facts.observed,
+            summary_kind="possible_contribution",
+            key_factors=[
+                FactorDraft(
+                    kind="possible_rate_offset",
+                    evidence_refs=[primary.ref, usage.ref, rate.ref],
+                    values={
+                        primary.ref: primary.value,
+                        usage.ref: usage.value,
+                        rate.ref: rate.value,
+                    },
+                )
+            ],
+        )
+    return None
+
+
 def explanation(
-    facts: InvestigationFacts, draft: InvestigatorDraft | None
+    facts: InvestigationFacts,
+    draft: InvestigatorDraft | None,
+    *,
+    generation: Literal["bedrock", "deterministic"] | None = None,
 ) -> MismatchExplanation:
     factors = (
         [render_factor(item, facts) for item in draft.key_factors] if draft else []
@@ -212,7 +264,7 @@ def explanation(
             for item in facts.evidence
         ],
         prompt_version=MISMATCH_INVESTIGATOR_PROMPT_VERSION,
-        generation="bedrock" if draft else "deterministic",
+        generation=generation or ("bedrock" if draft else "deterministic"),
     )
 
 
@@ -283,18 +335,22 @@ class BedrockMismatchInvestigator:
                     != facts.observed.model_dump_json()
                 ):
                     raise InvestigationGroundingError()
-                result = explanation(facts, draft)
+                result = explanation(facts, draft, generation="bedrock")
                 grounding_passed = True
             except BedrockResponseError:
                 grounding_passed = False
-                result = explanation(facts, None)
+                result = explanation(facts, None, generation="deterministic")
+            except BedrockDisabledError:
+                result = explanation(
+                    facts, deterministic_draft(facts), generation="deterministic"
+                )
             except BedrockError:
-                result = explanation(facts, None)
+                result = explanation(facts, None, generation="deterministic")
             except (InvestigationGroundingError, ValidationError):
                 grounding_passed = False
-                result = explanation(facts, None)
+                result = explanation(facts, None, generation="deterministic")
         else:
-            result = explanation(facts, None)
+            result = explanation(facts, None, generation="deterministic")
         result = result.model_copy(
             update={
                 "bedrock_attempted": bool(facts.evidence),
