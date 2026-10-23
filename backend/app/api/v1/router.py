@@ -1,3 +1,4 @@
+
 """Compose version-one route modules."""
 
 from fastapi import APIRouter
@@ -15,6 +16,10 @@ from app.api.v1 import (
 )
 
 router = APIRouter()
+)
+
+router = APIRouter()
+
 for module in (
     expectations,
     evidence,
@@ -23,6 +28,10 @@ for module in (
     integrations,
     oauth,
     calendar,
+    compiler,
+    dashboard,
+):
+    router.include_router(module.router)
     compiler,
     dashboard,
 ):

@@ -53,13 +53,24 @@ class OperationalMiddleware:
             else:
                 try:
                     await self.app(scope,receive,correlated)
+
                 except Exception as error:
-                    logger.error('Request failed request_id=%s error_type=%s',rid,type(error).__name__)
+                    print(
+                        f"REQUEST ERROR: {type(error).__name__}: {error}",
+                        flush=True,
+                    )
                     if response_started:
-                        raise RuntimeError('Response failed after headers') from None
-                    response=error_response(500,'INTERNAL_ERROR','Internal server error')
-                    self.add_cors(response,scope)
-                    await response(scope,receive,correlated)
+                        raise RuntimeError(
+                            "Response failed after headers"
+                        ) from None
+                    response = error_response(
+                        500,
+                        "INTERNAL_ERROR",
+                        "Internal server error",
+                    )
+                    self.add_cors(response, scope)
+                    await response(scope, receive, correlated)
+
         finally:
             route=scope.get('route')
             label=getattr(route,'path','unmatched')
