@@ -12,8 +12,15 @@ __all__ = [
     "Evidence", "Evaluation", "EvaluationResult", "OAuthCredential",
 ]
 
-from app.db.models.operations import AuditEvent, MonitoringJob, Notification
+from app.db.models.operations import (
+    AuditEvent,
+    MonitoringJob,
+    Notification,
+    NotificationDelivery,
+)
 
 from app.db.models.integration import IntegrationConnection
 
 from app.db.models.calendar_event import CalendarEvent
+from app.db.models.oauth_credential import OAuthCredential
+from app.db.models.oauth_state import OAuthState

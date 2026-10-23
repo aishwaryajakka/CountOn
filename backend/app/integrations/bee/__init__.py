@@ -1,6 +1,9 @@
 """Normalize simulated Bee wearable events into CountOn evidence."""
 
 import math
+
+"""Normalize simulated Bee wearable events into CountOn evidence."""
+
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +28,7 @@ def normalize_bee_event(event: dict[str, Any]) -> EvidenceCreate:
         raise ValueError("Bee event value must be a number, boolean, or object")
 
     if isinstance(value, float) and not math.isfinite(value):
+    if isinstance(value, float) and not __import__("math").isfinite(value):
         raise ValueError("Bee event value must be finite")
 
     if not isinstance(observed_at, str) or not observed_at.strip():
@@ -34,6 +38,7 @@ def normalize_bee_event(event: dict[str, Any]) -> EvidenceCreate:
         timestamp = datetime.fromisoformat(
             observed_at.replace("Z", "+00:00")
         )
+        timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ValueError("Bee event timestamp must be valid ISO 8601") from exc
 
@@ -52,6 +57,8 @@ def normalize_bee_event(event: dict[str, Any]) -> EvidenceCreate:
         or not 0 <= confidence <= 1
     ):
         raise ValueError("Bee event confidence must be a number between 0 and 1")
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        raise ValueError("Bee event confidence must be a number")
 
     evidence_value = value if isinstance(value, dict) else {"amount": value}
 
@@ -64,4 +71,5 @@ def normalize_bee_event(event: dict[str, Any]) -> EvidenceCreate:
         observed_at=timestamp,
         confidence=confidence,
         raw_data=event,
+    )
     )
