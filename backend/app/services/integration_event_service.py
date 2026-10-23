@@ -1,9 +1,15 @@
+"""Ingest simulated Bee events as CountOn evidence."""
 """Ingest Ring and Bee events as CountOn evidence."""
 
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+
+from app.integrations.bee import normalize_bee_event
+from app.services import evidence_service
+
+
 from app.integrations.email import normalize_email_event
 from app.integrations.bee import normalize_bee_event
 from app.integrations.ring import normalize_ring_event
@@ -33,6 +39,9 @@ def ingest_bee_event(
     expectation_id: UUID,
     user_id: UUID,
     event: dict[str, Any],
+):
+    """Normalize a Bee event and save it as evidence."""
+    payload = normalize_bee_event(event)
 ) -> Any:
     """Normalize a simulated Bee event and save it as evidence."""
     payload: EvidenceCreate = normalize_bee_event(event)
@@ -59,4 +68,5 @@ def ingest_email_event(
         expectation_id=expectation_id,
         payload=payload,
         user_id=user_id,
+    )
     )

@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = Field(default=None, repr=False)
     google_redirect_uri: str | None = None
+    oauth_token_encryption_key: SecretStr | None = Field(default=None, repr=False)
+    google_gmail_redirect_uri: str | None = None
+    microsoft_client_id: str | None = None
+    microsoft_client_secret: SecretStr | None = Field(default=None, repr=False)
+    microsoft_tenant_id: str = "common"
+    microsoft_outlook_redirect_uri: str | None = None
+    microsoft_calendar_redirect_uri: str | None = None
     frontend_url: str = "http://localhost:3000"
 
     microsoft_client_id: str | None = None
@@ -131,7 +138,6 @@ class Settings(BaseSettings):
     @classmethod
     def empty_demo_uuid(cls, value):
         return None if value == "" else value
-
     @model_validator(mode="after")
     def validate_selected_database(self) -> "Settings":
         selected = (

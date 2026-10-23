@@ -9,6 +9,8 @@ from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
 class ConnectionMetadata(BaseModel):
     model_config=ConfigDict(extra='forbid')
     mock: bool = False
+    email: str | None = None
+    display_name: str | None = None
     demo: bool = False
     demo_tag: Literal['counton-demo-v1'] | None = None
     account_kind: Literal['personal','work','family'] | None = None
@@ -46,6 +48,11 @@ class IntegrationResponse(BaseModel):
     scopes: list[str]
     metadata: ConnectionMetadata = Field(validation_alias=AliasChoices('connection_metadata','metadata'))
     last_synced_at: datetime|None
+    sync_status: Literal['idle', 'success', 'error', 'retrying'] = 'idle'
+    last_attempt_at: datetime | None
+    last_error_code: str | None
+    consecutive_failures: int = 0
+    next_retry_at: datetime | None
     created_at: datetime
     updated_at: datetime
     credential_state: Literal['configured', 'not_configured'] = 'not_configured'
