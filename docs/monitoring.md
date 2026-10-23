@@ -237,8 +237,10 @@ The existing `/api/v1/notifications` inbox is the delivery channel. MATCH/UNKNOW
 are silent. New observation-backed MISMATCH creates an unread `pending` row.
 PATCH read/dismissed acknowledges it with a stable timestamp; permissions remain
 owner-scoped. `NotificationChannel`/`InAppChannel` provide the extension seam.
-External channels need their own durable outbox/delivery/idempotency work; no
-Alexa proactive notification permission or Echo delivery is assumed or implemented.
+An optional encrypted delivery outbox and worker already support Resend/SMTP;
+see [automatic tracking](automatic-tracking.md) for confirmation, retries and delivery
+limits. Actual recipient delivery requires live verification. Alexa proactive
+notification permission and Echo delivery are not implemented.
 
 From backend, with private dedicated loopback `TEST_DATABASE_URL` ending `_test`:
 

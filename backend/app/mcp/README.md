@@ -2,6 +2,9 @@
 
 The canonical developer guide is [docs/mcp.md](../../../docs/mcp.md): architecture,
 authentication, tool contracts, local/network smoke and remote deployment.
+See [setup](../../../docs/setup.md) and [security](../../../docs/security.md) for
+configuration and trust boundaries. Transport tests exercise protocol `2025-06-18`;
+this is distinct from the Python SDK 2.x package version.
 See [Bedrock integration](../../../docs/bedrock-integration.md) for conversational
 orchestration, the durable lifecycle ledger and intelligence rollout.
 

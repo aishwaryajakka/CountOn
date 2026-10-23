@@ -1,10 +1,15 @@
 # CountOn release acceptance — October 12, 2026
 
-**NOT PRODUCTION-READY.** The local application is connected and testable, but the
-public deployment is older than this working tree, readiness fails, real provider/ASK
-acceptance is unavailable, and the updated working tree has not run in hosted CI.
-No production deployment, migration, commit, push, account consent, or real notification
-send was performed. All previous workspace changes were retained.
+> **Historical snapshot, October 12, 2026.** Current source/setup references are
+> [architecture](architecture.md), [deployment](deployment.md) and [testing](testing.md).
+> The observations below were not rerun by the documentation rebuild.
+
+**At that acceptance pass: NOT PRODUCTION-READY.** The local application was
+connected and testable, but the public deployment was older than the working tree,
+readiness failed, real provider/ASK acceptance was unavailable, and that source
+had not run in hosted CI. No production deployment, migration, commit, push,
+account consent or real notification send was performed. Previous workspace
+changes were retained.
 
 This is a historical release record for `feature/alexa-mcp`, based on HEAD `e7c74ac`
 plus uncommitted changes. HEAD alone does not identify the tested source. See the

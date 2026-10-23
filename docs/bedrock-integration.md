@@ -1,5 +1,9 @@
 # CountOn Bedrock intelligence integration
 
+This guide owns the MCP intelligence handoff and rollout details. Start with
+[Bedrock](bedrock.md) for runtime/validation behavior, [architecture](architecture.md)
+for the shared system and [demo guide](demo-guide.md) for the three current cards.
+
 ## Architecture and decision
 
 The existing authenticated Streamable HTTP server cleanly supports typed tools.
@@ -156,10 +160,9 @@ No vercel.json change is needed. No new browser CORS path was added.
 ## AWS permissions and credential delivery
 
 Boto3's standard credential chain is reused. Local development can use authenticated
-SSO/profile credentials (`aws sso login --profile YOUR_PROFILE`, then set
-`AWS_PROFILE` privately). A console `login_session` profile uses
-`aws login --profile NAME`, not `aws sso login`. The current default login needs
-refresh; run `python db/scripts/aws_preflight.py --verify-identity` from backend
+profile credentials refreshed through that profile's configured login mechanism;
+set `AWS_PROFILE` privately when needed. No developer profile or current credential
+validity is assumed here. Run `python db/scripts/aws_preflight.py --verify-identity` from backend
 then the harmless Bedrock smoke. See [actual credential/deployment evidence](production-readiness.md#deployment-investigation-follow-up-2026-10-11). [Converse requires `bedrock:InvokeModel`](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html).
 Grant it only for the selected permitted model/profile resources. Example policy
 template for a directly invoked regional foundation model:
@@ -323,12 +326,13 @@ migration, backend signing key, enabled Bedrock/model configuration and valid AW
 runtime credentials, then run live compilation/clarification/capture/explanation
 acceptance before claiming production intelligence readiness.
 
-Intentionally deferred: arbitrary intent classification, evidence/evaluate/update/
-resolve MCP tools, Ring/Bee ingestion, external notification delivery, cache
-infrastructure and real Alexa/Echo account linking. Durable PostgreSQL workers,
-delegated Outlook ingestion and the in-app inbox are implemented locally;
-[monitoring operation](monitoring.md) documents the remaining live provider setup. Conversation state is
-already durable; automatic ledger retention/cleanup remains operational work.
+Not implemented: a broad autonomous agent, extra evidence/evaluate/update/resolve
+MCP tools, physical Ring ingestion and proactive Alexa delivery. Ring/Bee simulator
+ingestion, the optional consent-gated Bee CLI bridge, Google/Microsoft provider
+sync, durable monitoring and an optional email outbox are implemented; actual
+provider access, recipient delivery and ASK/Echo account acceptance need live
+verification. [Integrations](integrations.md) records the current matrix. Conversation
+state is durable; compilation-ledger retention/cleanup remains operational work.
 
 ## Natural Why? acceptance
 

@@ -3,6 +3,8 @@
 `backend/app/db/` is application persistence. `backend/db/` holds developer
 checks, acceptance tools and read-only inspection SQL. Alembic is the schema
 source of truth; do not replace it with SQL table creation or `create_all()`.
+Start with [setup](../../docs/setup.md), [lifecycle](../../docs/expectation-lifecycle.md)
+and [deployment](../../docs/deployment.md); this guide owns the detailed SQL workflow.
 
 ## Schema
 
@@ -114,7 +116,8 @@ cd backend
 source .venv/bin/activate
 DATABASE_TARGET=local alembic upgrade head
 DATABASE_TARGET=local python db/scripts/local_acceptance.py
-TEST_DATABASE_URL='postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton_test' pytest
+# Privately export TEST_DATABASE_URL for the separate loopback counton_test database.
+python -m pytest
 ```
 
 The test URL must use loopback PostgreSQL and a separate database ending in
@@ -168,7 +171,10 @@ message, metadata, sent time and pending/read/sent/failed/dismissed states. Exis
 rows receive their actual parent owner in migration; no identity is invented.
 The notification service persists MISMATCH notifications atomically and audits
 creation; clients may mark records read/dismissed through FastAPI, recording
-`acknowledged_at`. In-app persistence is delivery; external channels are not implemented.
+`acknowledged_at`. In-app persistence is the initial delivery channel. An optional
+encrypted email outbox supports Resend or SMTP through the existing notification
+worker; real-recipient delivery still requires configuration and live verification.
+See [notification delivery](../../docs/automatic-tracking.md#notifications-and-dashboard).
 Monitoring additionally deduplicates repeated observations across polling runs.
 
 Audit events retain the existing `resource_id`, with the application alias

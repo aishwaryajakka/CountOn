@@ -1,273 +1,226 @@
 # CountOn
 
-CountOn records what you are counting on, compares real evidence against it, and
-calls attention to verified exceptions. **Calm monitoring. Clear signals.**
+CountOn is an expectation-monitoring system that remembers what you're counting on, watches evidence, and only interrupts when reality changes.
 
-## Product thesis
+*Reminders remember what you need to do. CountOn remembers what you're counting on.*
+
+## The problem
+
+“My package should arrive Friday.” “My electricity bill should stay under $150.”
+“The plumber said he'll come tomorrow.” These are expectations, not reminders.
+Today, checking them means reopening email, calendars, bills, delivery pages and
+messages. CountOn turns a stated expectation into something that can be checked
+against authorized evidence. **Silence is success.**
+
+## How CountOn works
 
 **Expectation → Evidence → Evaluation → Exception**
 
-Expectations are claims, not evidence. Deterministic evaluation alone decides
-`MATCH`, `UNKNOWN` or `MISMATCH`: matched expectations stay quiet, unknown outcomes
-keep watching, and mismatches merit attention. Missing evidence is never success.
-Bedrock interprets language and explains grounded mismatches; it does not decide
-outcomes or invent observations.
+| Evaluation | Meaning | Response |
+| --- | --- | --- |
+| MATCH | Observed facts satisfy the expectation. | Stay quiet. |
+| UNKNOWN | Evidence is missing, unusable or insufficient. | Keep monitoring. |
+| MISMATCH | Observed facts meaningfully differ from the expectation. | Create an in-app alert when enabled; explain on request. |
+
+**AI understands and explains. CountOn decides.** Amazon Bedrock interprets
+language and explains recorded mismatches. Deterministic Python code assigns the
+final result. A promise is evidence of a commitment, not proof it was fulfilled.
 
 ## Architecture
 
 ```text
-Supabase Auth → current user's bearer token
-  Browser /alexa → Next.js /api/agent → JWT-authenticated FastAPI agent route
-    → controlled orchestrator/session → MCP SDK Streamable HTTP → Python MCP
-      → compiler / stateful clarification / grounded investigator
-      → owned CountOn services → repositories → PostgreSQL / Supabase
-  Browser dashboard → authenticated FastAPI → same services/database
-
-Real evidence → deterministic evaluator → persisted evaluation → in-app exception
+Alexa Custom Skill                       Web /alexa
+  signed POST /api/v1/alexa                Next.js /api/agent
+          \                                /api/v1/agent/converse
+           +------ authenticated Trust Orchestrator ------+
+                                  |
+                       MCP Streamable HTTP /mcp
+                                  |
+                    CountOn services + PostgreSQL
+                                  ^
+     approved providers / DEMO evidence --> normalization
+                                  |
+                    deterministic evaluation
+                     /            |            \
+                  MATCH        UNKNOWN       MISMATCH
+                  quiet        watching      notification
+                                             grounded Why
+                                             via Bedrock
+Dashboard / detail / activity ------ FastAPI ------ same database
 ```
 
-The FastAPI and MCP processes must select the same database. Alembic owns schema
-creation. `backend/app/db/` contains application persistence; `backend/db/`
-contains developer checks and inspection SQL. Frontend application data is never
-written directly to Supabase.
+- **Web:** displays persisted expectations, evidence, results, notifications and audit history.
+- **Alexa and orchestration:** resolve owned records, clarify language and request capture approval.
+- **MCP:** exposes typed actions through existing services, with authenticated user context.
+- **Backend and workers:** authorize sources, correlate evidence, evaluate and deduplicate delivery.
+- **Bedrock:** supplies validated interpretations and evidence-grounded explanations.
+- **PostgreSQL:** retains shared records, provenance and durable workflow state.
 
-## Current Status
+## Amazon Alexa+ / MCP
 
-| Status | Scope |
+CountOn has a self-hosted Python MCP server using **Streamable HTTP**. All six
+tools accept `{"request": {...}}`:
+
+`capture_expectation` · `get_expectation` · `list_expectations` ·
+`compile_expectation` · `continue_expectation_compilation` ·
+`explain_expectation_mismatch`.
+
+The `/alexa` web experience uses the same orchestrator, MCP tools and persistence
+as the signed Alexa Skills Kit Custom Skill adapter. The browser sends language
+to its authenticated server route; it cannot select arbitrary tools. MCP clients
+initialize and discover tools through the real SDK. Transport tests explicitly
+exercise protocol version `2025-06-18`; SDK package versions are separate.
+
+The ASK adapter verifies signatures, timestamps and linked Supabase identity.
+**Native Alexa+ MCP onboarding, live account linking and Echo acceptance are not
+verified in the current repository.** Console setup and deployed model latency
+remain external gates. An Agent Skill artifact is also included; it is an
+instruction package, not an MCP App UI. See [MCP](docs/mcp.md),
+[Alexa setup](docs/traditional-alexa.md) and [Agent Skill](docs/agent-skill.md).
+
+## Amazon Bedrock
+
+The trusted backend uses **boto3 Bedrock Runtime Converse** for expectation
+compilation, stateful clarification and grounded mismatch investigation. Pydantic
+models provide JSON Schema and strict output validation. Grounding checks reject
+invented amounts and evidence references. JSON repair, selective retries,
+timeouts, concurrency limits and token budgets are bounded; safe fallback speech
+preserves the recorded evaluation when investigation is unavailable.
+
+Bedrock is disabled by default (`BEDROCK_ENABLED=false`). The configured default
+is `openai.gpt-oss-120b-1:0` in `us-east-2`; credentials use the AWS runtime provider
+chain. Model access must be verified in the deployment account. Bedrock does not
+choose the verdict, authorize users or write records directly. Source planning
+and current email/calendar normalization are deterministic services. Details:
+[Bedrock](docs/bedrock.md).
+
+## Demo scenarios
+
+Sign in and open `/demos`. Running a card creates a normal owned expectation and
+explicitly approves its named demo evidence source.
+
+| Scenario | Expectation and evidence | Expected demonstration |
+| --- | --- | --- |
+| **Electricity Bill Surprise** | “My next electricity bill should be below $150.” DEMO bill: **$180**. | **MISMATCH**; $30 over target, in-app notification and grounded Why. |
+| **Package Arrived** | “My package should arrive by Friday.” Positive DEMO delivery confirmation plus **SIMULATED Ring** observation. | **MATCH**; no mismatch alert. |
+| **Plumber Commitment** | “My landlord said the plumber will arrive Friday.” **SIMULATED Bee** commitment. | **UNKNOWN**; arrival remains unconfirmed. |
+
+Simulators provide evidence only. Persistence, evaluation, notification logic,
+and final MATCH / UNKNOWN / MISMATCH state are handled by the real CountOn backend.
+
+Cards show actual saved IDs/results, provenance, notification status, audit history
+and links to normal expectation details. Alerts respect user preferences. Package
+success demonstrates a positive observation before the saved deadline; absence of
+Ring detection never proves nondelivery. Generic temporal/event manual evaluation
+remains UNKNOWN; supported worker deadline policies are documented separately.
+See the [demo guide](docs/demo-guide.md).
+
+## Tech stack
+
+| Layer | Implementation |
 | --- | --- |
-| **🟡 Implemented + local automated validation** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
-| **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
-| **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
-| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification; physical Ring ingestion; real Bee CLI account acceptance. Durable encrypted shared conversations are implemented; broader autonomous orchestration is intentionally outside scope. Metadata records and fixture tests do not prove live provider or device integrations. |
+| Frontend | Next.js App Router, React, TypeScript |
+| Backend / MCP | FastAPI, Pydantic v2, Python MCP SDK 2.x |
+| AI / voice | Amazon Bedrock Runtime, boto3, Alexa Skills Kit |
+| Data / auth | PostgreSQL, SQLAlchemy, Alembic, Supabase Auth |
+| Testing / delivery | pytest, Vitest, Testing Library, Playwright; Docker, GitHub Actions, Vercel configuration |
 
-The core MCP tools are `capture_expectation`, `get_expectation`, and
-`list_expectations`. The intelligence tools are `compile_expectation`,
-`continue_expectation_compilation`, and `explain_expectation_mismatch`.
-Every tool accepts exactly one top-level `request`. Bedrock is disabled by default
-and needs secure runtime AWS access; deterministic evaluation remains authoritative.
-Temporal interpretation is implemented. Monitoring can compare a real positive event
-observation against an explicit deadline; missing events remain UNKNOWN. The
-legacy manual temporal endpoint remains conservative. The web conversation is not an official Amazon simulator or Echo skill.
+## Quick start
 
-See [component docs](#component-documentation) for the compiler, canonical
-clarification state/ledger, grounded evidence selection and Agent Skill details.
-
-## Canonical consolidation
-
-The local main merge and retained main-only compatibility features are documented in
-[canonical merge validation](docs/canonical-main-merge.md). Live deployment gates remain separate.
-
-The local canonical integration branch is `integration/counton-canonical`, based
-on `feature/alexa-mcp` at `8d4b72f`. Compatible UI from the identical Alexa/Ring
-snapshots is integrated with the existing backend. All six MCP contracts, ASK
-verification, deterministic evaluation, privacy boundaries and the single
-connection/credential system remain canonical. The criteria builder, result and
-resolution panels, source filters and settings integration alias use authenticated
-backend APIs. Explanation links select an untrusted expectation ID; MCP rechecks
-its owner. No generated provider recommendations or fabricated AI results are
-shown.
-
-See the [merge inventory](docs/consolidation-inventory.md),
-[per-file provenance manifest](docs/consolidation-manifest.json) and
-[consolidation report](docs/consolidation-report.md) for source decisions and
-alternative migration histories. The [final engineering audit](docs/final-engineering-audit.md)
-is the current validation and release-gate record; older reports retain dated
-results. Local tests do not prove
-that the consolidated code is deployed or accepted by a real provider/device.
-
-## Quick local setup
-
-Prerequisites: Python with `venv`, Node.js/npm, Docker/PostgreSQL, and a Supabase
-project for authentication. Configure ignored `backend/.env.local`:
-
-```env
-ENVIRONMENT=development
-DATABASE_TARGET=local
-LOCAL_DATABASE_URL=postgresql+psycopg://counton:counton_dev_password@localhost:5432/counton
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY
-MCP_PUBLIC_URL=http://127.0.0.1:8003/mcp
-```
-
-The database password above is the local Docker development value only. See
-[database setup and demo seeding](backend/db/README.md) for Supabase selection,
-JWT configuration, migrations and owned demo data. For conversational capture,
-configure the backend-only [Bedrock settings](backend/app/ai/README.md#configuration)
-and secure AWS credential provider; list/detail work without Bedrock.
-Set the same private `COUNTON_CLARIFICATION_SIGNING_KEY` in backend/MCP configuration
-for conversational compilation. Never put it in frontend variables.
-
-Terminal 1, from the repository root:
+Prerequisites: Python **3.12** (container/CI baseline), Node.js **24**, npm,
+Docker Compose and a Supabase Auth project. Local validation also uses Python 3.14. Configuration goes in ignored
+`backend/.env.local` and `frontend/.env.local`. Use the templates and guidance in [setup](docs/setup.md).
 
 ```sh
+# Repository root: local PostgreSQL
 docker compose up -d
+
+# Backend terminal, after configuring backend/.env.local
 cd backend
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt -r requirements-dev.txt
-DATABASE_TARGET=local alembic upgrade head
-DATABASE_TARGET=local uvicorn app.main:app --reload
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-Terminal 2, from the repository root:
-
 ```sh
+# Separate terminal: same backend environment and database
 cd backend
 source .venv/bin/activate
-DATABASE_TARGET=local python -m app.mcp
+python -m app.mcp
 ```
 
-Terminal 3, configure ignored `frontend/.env.local` using the public fields in
-[frontend/.env.example](frontend/.env.example), plus server-only
-`COUNTON_MCP_URL=http://127.0.0.1:8003/mcp`. Then:
-
 ```sh
+# Frontend terminal, after configuring frontend/.env.local
 cd frontend
 npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`; API docs are at `http://localhost:8000/docs`, and
-local MCP at `http://127.0.0.1:8003/mcp`. Both backend processes provide `/health`
-and `/ready`; those paths do not verify optional Bedrock model access.
+Open `http://localhost:3000`, FastAPI docs at `http://localhost:8000/docs`, and MCP
+at `http://127.0.0.1:8003/mcp`. Authenticated business actions require a real
+Supabase access token; there is no runtime authentication bypass. Conversational
+capture also needs enabled Bedrock access and a private clarification signing key.
+Evidence demos can use the deterministic explanation fallback.
 
-## Demo flow
+## Testing
 
-1. Sign in and open `/alexa`; initialize/discover MCP and list actual expectations.
-2. Ask “I'm counting on my bill being lower.” Answer which bill, the baseline,
-   and timing, then explicitly approve the completed expectation. Source monitoring
-   also requires separate source approval. Nothing incomplete is saved.
-3. Follow the saved expectation into the normal dashboard and refresh. MCP and
-   FastAPI read the same row.
-4. Ask why a prepared, owned electricity expectation failed. Its latest
-   deterministic `MISMATCH` enables a grounded explanation; `MATCH`, `UNKNOWN`
-   and no evaluation skip the investigator. No matching row is reported honestly.
-
-Use real test evidence/evaluations, not a claim that capture generates them.
-[Acceptance checklist and timed demos](docs/hackathon-acceptance.md) cover repeatable
-checks, safe cleanup and deployment prerequisites.
-
-## Test commands
-
-From `backend`, activate `.venv`, then run `pytest`. For the full integration
-suite, privately set `TEST_DATABASE_URL` to a separate loopback PostgreSQL database
-ending in `_test` (for example `counton_test`); otherwise database tests skip.
-Migration-cycle tests require local CREATEDB permission. Never use production data.
-
-From `frontend`:
+Use a separate loopback PostgreSQL database ending in `_test`; never application
+or production data. Without `TEST_DATABASE_URL`, database tests skip.
 
 ```sh
-npm run test
+cd backend
+source .venv/bin/activate
+python -m pytest -q --tb=short
+```
+
+```sh
+cd frontend
+npm test
 npm run lint
 npm run typecheck
 npm run build
 ```
 
-From `backend`, also run `ruff check app db/scripts tests alembic` and
-`mypy app --ignore-missing-imports`. From the root: `git diff --check`.
-Detailed AI/MCP strict mypy and opt-in smoke commands are in their component docs.
-The [repository audit](docs/repository-audit.md) records dependency snapshots,
-startup checks and validation limits. Mocked inference tests do not establish
-live model quality.
+Production frontend builds require a public HTTPS `NEXT_PUBLIC_API_BASE_URL`.
+[Testing](docs/testing.md) covers isolated configuration, smoke commands and
+manual acceptance. Check current executed results there; mocked inference and
+local fixtures do not prove live Alexa, OAuth or AWS behavior.
 
-## Deployment overview
+## Integration status
 
-Deploy `frontend/` as Next.js on Vercel and run FastAPI and MCP separately behind
-HTTPS on Lightsail. Before any migration, privately inspect the live
-`alembic_version` and follow the [production database gate](docs/final-engineering-audit.md#f-databasemigration-status).
-Use `alembic upgrade head` only after confirming canonical ancestry and approving
-a backup/migration plan. An alternative main-only revision requires a reviewed
-transition; never stamp it to conceal schema differences.
-Run the optional worker as a supervised backend process; see [monitoring setup](docs/monitoring.md). Configure public
-API/Supabase frontend values, server-only `COUNTON_MCP_URL`, explicit API CORS,
-and backend-only database/auth/AWS/signing secrets.
+| Integration | Status | Notes |
+| --- | --- | --- |
+| MCP / PostgreSQL | Implemented | Six tools, shared owned records, migrations and local network tests. |
+| Amazon Bedrock | Implemented — live config required | Compiler, clarification and investigator; genuine account/model acceptance remains separate. |
+| Supabase Auth / Amazon sign-in | Implemented — live config required | Email/password flows and optional `custom:amazon` provider path; live provider/session acceptance required. |
+| Alexa web simulator | Implemented | Shared server orchestration and persisted records. |
+| ASK Custom Skill | Implemented — live config required | Signed adapter and interaction model; Console linking/voice/device acceptance pending. |
+| Native Alexa+ MCP onboarding | Not verified | A working MCP endpoint alone does not establish onboarding or eligibility. |
+| Gmail / Google Calendar | Implemented — live config required | Read-only OAuth, synchronization and confirmed source bindings. |
+| Outlook / Microsoft Calendar | Implemented — live config required | Delegated OAuth, encrypted tokens and synchronization. |
+| Ring / Bee demos | Simulated | Explicitly labeled observations; no live hardware claim. |
+| Bee CLI bridge | Implemented — live config required | Optional, locally authenticated and consent-gated; real-account import not verified. |
 
-Existing deployment addresses and required variables are documented in
-[frontend setup](frontend/README.md#vercel-production),
-[MCP deployment](docs/mcp.md#remote-deployment), and
-[Bedrock rollout and live checks](docs/bedrock-integration.md).
-Discover all six tools and run live acceptance before describing that deployment
-as current. Never commit credentials or put private keys in `NEXT_PUBLIC_*`.
+## Security and trust
 
-## Unfinished integrations
+Supabase JWT verification and owned service queries bind actions to one CountOn
+user. Alexa `userId` is a transport reference, never database identity. Production
+conversation snapshots and OAuth credentials use encryption; audit metadata and
+logs exclude tokens, raw model prompts and provider payloads. Ingestion minimizes
+provider data, and simulations retain provenance. Rate limits and metrics are
+process-local; deployment must account for that boundary.
 
-Real Alexa+/Echo onboarding and account linking, compatible OAuth discovery,
-live Microsoft Graph consent/ingestion, physical Ring ingestion, real Bee CLI acceptance and external notification
-delivery remain incomplete. PostgreSQL monitoring, encrypted Outlook OAuth and
-in-app delivery are implemented locally; see [worker operation](docs/monitoring.md). Shared rate limiting, durable metrics export, production backup/restore acceptance,
-and deployed retention operations still need review. Local backup/restore tests and
-encrypted durable conversation expiry already exist. `/alexa` uses constrained
-routing and a bounded owned-record search, not an autonomous agent.
+## Documentation
 
-## Next-work priority
-
-1. Review and commit the clean current work (manual next step; this pass does not commit).
-2. Inspect the live database revision, approve the correct migration/backup path, then deploy matching API/MCP/worker code.
-3. Configure secure live Bedrock/model access on the MCP service.
-4. Run live Bedrock smoke on the trusted backend.
-5. Run live `/alexa` intelligence E2E, including clarification, shared persistence and Why.
-6. Import the traditional Alexa interaction model and deploy its signed HTTPS adapter.
-7. Provision compatible OAuth account linking/consent and verify the authenticated path.
-8. Test the Alexa Skills Kit simulator.
-9. Test real Alexa/Echo.
-10. Register the Microsoft app, consent a test mailbox and run live Outlook acceptance.
-11. Add and verify physical Ring ingestion if vendor access becomes available; keep the simulator labeled.
-12. Install/authenticate the official Bee CLI and perform the documented real-account acceptance; keep fixture and simulator results separate.
-13. Manually validate the minimal Trust Orchestrator source policy, receipts and audit delivery; validate the monitoring worker against live provider credentials before deployment.
-14. Complete final demo hardening.
-
-This order preserves the requested priorities. Runtime configuration and migrations
-must be provisioned before declaring a deployment ready; no current placeholder
-makes a provider, worker or Alexa device integration complete.
-
-## Component documentation
-
-- [CI failure investigation, fixes and executed validation](docs/ci-validation.md)
-- [Controlled orchestrator and Alexa session boundary](backend/app/agent/README.md)
-- [Traditional Alexa HTTPS adapter, interaction model and console/account-link setup](docs/traditional-alexa.md)
-- [MCP tools, auth, startup and remote smoke](docs/mcp.md)
-- [Bedrock integration and rollout](docs/bedrock-integration.md)
-- [Background monitoring and legacy Outlook setup](docs/monitoring.md)
-- [Gmail, Outlook, calendars and order evidence acceptance](docs/integrations-acceptance.md)
-- [Bee CLI, Bee simulator and Ring simulator acceptance](docs/bee-ring-integration-acceptance.md)
-- [Compiler/client semantics](backend/app/ai/README.md),
-  [clarification state machine](backend/app/ai/clarification.md), and
-  [grounded investigator](backend/app/ai/investigation.md)
-- [Database, RLS, migrations and demo data](backend/db/README.md)
-- [Frontend setup](frontend/README.md), [Alexa web demo](frontend/docs/alexa-demo.md),
-  and [Next.js MCP client](frontend/docs/mcp-client.md)
-- [Hackathon acceptance](docs/hackathon-acceptance.md) and
-  [Agent Skill inspection/consumption](docs/agent-skill.md)
-
-The minimal Trust Orchestrator now validates evidence-source permissions, creates
-backend-authored response receipts and records redacted runs in existing audit_events.
-The web simulator exposes an expandable safe provenance summary. See the
-[trust acceptance and exact manual runbook](docs/trust-orchestrator.md); implementation
-and local tests do not establish production Bedrock or Alexa/Echo acceptance.
-
-Production hardening adds native Supabase OAuth consent for ASK account linking,
-client-bound JWT verification, encrypted PostgreSQL conversation/replay state and
-explicit Alexa capture confirmation. The six MCP tool contracts and deterministic
-evaluator remain authoritative. See the [production readiness checklist and exact
-deployment/acceptance commands](docs/production-readiness.md). Live OAuth, AWS,
-ASK/Echo, Graph and deployed end-to-end acceptance remain required.
-
-Account sync now has local Google/Microsoft OAuth, official Gmail/Graph/calendar reads,
-encrypted durable checkpoints, push wake-ups and explicit source bindings. Provider
-credentials and live read-only acceptance remain required; see the integration guide.
-
-Automatic provider tracking now connects authenticated push/poll sync to the existing durable monitoring worker, deterministic evaluation and deduplicated inbox. Coverage-gated reply deadlines, calendar changes, predicted shipping warnings, tracking controls and opt-in email are implemented locally. Real provider/email acceptance remains pending. See [automatic tracking and operations](docs/automatic-tracking.md).
-
-The resumed [typed source orchestration](docs/orchestration.md) connects complete saved
-expectations to explicitly confirmed authorized sources and existing durable workers.
-[Current validation and release gates](docs/orchestration-validation.md) distinguish
-local automated results from human review, cloud/model and Alexa device acceptance.
-
-CountOn sign-in uses Supabase Auth for email/password, confirmation and recovery,
-with an optional `custom:amazon` OAuth2 provider. The native provider/secret setup
-and real Amazon login remain external acceptance gates. See [authentication audit,
-configuration and tests](docs/authentication.md). No identity migration is required.
+[Product](docs/product-overview.md) · [Architecture](docs/architecture.md) ·
+[Lifecycle](docs/expectation-lifecycle.md) · [MCP](docs/mcp.md) ·
+[Bedrock](docs/bedrock.md) · [Integrations](docs/integrations.md) ·
+[Demo guide](docs/demo-guide.md) · [Setup](docs/setup.md) ·
+[Testing](docs/testing.md) · [Deployment](docs/deployment.md) ·
+[Security](docs/security.md).
 
 ## License
 
-Licensed under the Apache License 2.0. See LICENSE.
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE).

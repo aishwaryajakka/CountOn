@@ -1,7 +1,9 @@
 # COUNTOn ALEXA+ HACKATHON ACCEPTANCE
 
 This checklist describes the **current six-tool implementation** and repeatable
-acceptance. Earlier three-tool production demos do not certify the current
+acceptance. For the current judge-facing three scenarios, use the
+[demo guide](demo-guide.md); fresh local command results are in [testing](testing.md).
+Earlier three-tool production demos do not certify the current
 compiler, clarification ledger or investigator deployment. No new live rollout
 or real Alexa/Echo integration is claimed by this cleanup. Current local command
 results and the ordered live plan are recorded in the [final engineering audit](final-engineering-audit.md); production checks must be run separately.
@@ -58,8 +60,9 @@ Real Alexa+/Echo onboarding, compatible OAuth discovery/account linking and nati
 device integration remain separate work. Durable workers, encrypted delegated
 Outlook ingestion and in-app notification delivery are implemented and tested
 locally; [monitoring operation](monitoring.md) still requires live Microsoft
-consent and deployment verification. Speech-to-text and external notification
-delivery are not claimed.
+consent and deployment verification. Ring/Bee simulator ingestion, the optional
+Bee CLI bridge and Resend/SMTP outbox also exist. Real speech/device behavior,
+provider imports and recipient delivery are not certified by those local tests.
 
 ## B. Vercel Production variables
 
@@ -69,6 +72,7 @@ Verify these are configured; this document does not assert a live environment au
 NEXT_PUBLIC_API_BASE_URL=https://counton-api.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com
 NEXT_PUBLIC_SUPABASE_URL=<existing Supabase project URL>
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<existing public publishable key>
+NEXT_PUBLIC_APP_URL=https://<canonical-frontend-host>
 COUNTON_MCP_URL=https://counton-mcp.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com/mcp
 ```
 
@@ -87,7 +91,8 @@ Use the configured `https://counton-frontend.vercel.app/alexa` address after rol
 4. Ask “Tell me about my electricity bill”; use a real returned ID or honest no-match.
 5. Ask “I'm counting on my bill being lower.” Answer “My electricity bill”,
    “My last bill was $142.10”, then “When my next bill arrives”. Check that no
-   expectation appears before completion; verify separate compile/continue/capture traces.
+   expectation appears before completion and explicit approval; verify separate
+   compile/continue/capture traces.
 6. Follow “View in CountOn”, refresh and verify the same persisted claim/criteria.
    Bill arrival is wording in the claim, not a fabricated deadline or scheduler.
 7. In a separate incomplete draft, test “Actually make that $150”, “Never mind”,

@@ -15,7 +15,9 @@ clarification workflow is now available through the pure application service; se
 [conversation state, security and integration](clarification.md). The authenticated `/alexa` web simulator delegates to FastAPI’s shared orchestrator,
 which uses the existing MCP tools.
 It compiles/clarifies before capture and explains only confirmed mismatch.
-This remains a web simulator; real Alexa/Echo integration is not complete.
+The signed ASK adapter is also implemented, but live account linking, speech and
+Echo acceptance are not verified. See the [architecture overview](../../../docs/architecture.md)
+and [Bedrock reference](../../../docs/bedrock.md).
 
 ## Configuration
 
@@ -42,11 +44,12 @@ intelligence is not added as a dependency.
 
 Use the normal boto3 credential provider chain: local AWS SSO/profile/shared
 credentials or an appropriate workload role. Do not pass credentials to this
-client. Authenticate an existing SSO profile using `aws sso login --profile NAME`
-and set `AWS_PROFILE=NAME` locally if needed. For a `login_session` profile, use
-`aws login --profile NAME` instead; the current default profile requires this refresh.
-Run `python db/scripts/aws_preflight.py --verify-identity` from backend before the
-opt-in model smoke; it never prints credentials or identity values. A Lightsail deployment must supply
+client. Authenticate or refresh the existing profile using its configured AWS
+login mechanism, and set `AWS_PROFILE` locally if needed. A particular developer
+profile or current credential validity is not established by this guide. Run
+`python db/scripts/aws_preflight.py --verify-identity` from backend before the
+opt-in model smoke; it never prints credentials or identity values. A Lightsail
+deployment must supply
 an appropriate supported credential provider; do not assume it has an IAM role.
 
 IAM requires **`bedrock:InvokeModel`** for non-streaming Converse on the selected
@@ -106,8 +109,10 @@ Invalid JSON/schema gets at most one repair, retaining the original minimal
 context and concise type/schema feedback, without echoing invalid model text or
 Pydantic input values. Missing/unusable response content is not repaired.
 Each generation has at most `1 + BEDROCK_MAX_RETRIES` attempts, so JSON is bounded
-by `2 * (1 + BEDROCK_MAX_RETRIES)` total invocations including repair. Timeouts are
-per connect/read, not an end-to-end deadline; callers should budget accordingly.
+by `2 * (1 + BEDROCK_MAX_RETRIES)` total invocations including repair. SDK timeouts
+apply per connect/read. The logical operation deadline also bounds
+retry/repair work and rejects late results; it cannot forcibly cancel an in-flight
+synchronous SDK call. Callers must account for that limit.
 Retries/repair can incur extra inference charges. No writes occur in this layer.
 
 Stable exceptions: `BedrockError`, `BedrockUnavailableError`,

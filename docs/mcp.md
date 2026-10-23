@@ -1,4 +1,4 @@
-# CountOn MCP handoff
+# CountOn MCP
 
 ## Architecture
 
@@ -10,6 +10,14 @@ clarification/capture lifecycle state is persisted separately in `compilation_se
 It does not replace FastAPI,
 replace the compiler or change deterministic evaluation. Existing intelligence
 tools delegate interpretation/clarification/explanation to the canonical AI services.
+
+Entrypoints: `backend/app/mcp/server.py:app` (ASGI) and `python -m app.mcp`
+(`__main__.py`). `tools.py` registers the surface; `schemas.py` defines its public
+Pydantic contracts. The requirements/constraints select Python SDK 2.x (currently
+`mcp==2.3.0` in the constraint snapshot). This package version is not an MCP
+protocol version. Raw transport tests explicitly initialize with **`2025-06-18`**
+and send `MCP-Protocol-Version`; SDK clients negotiate their supported protocol.
+CountOn does not implement a custom REST substitute for initialize/discovery/calls.
 
 ## Run Locally
 
@@ -35,8 +43,10 @@ DATABASE_TARGET=local python -m app.mcp
 
 MCP endpoint: **http://127.0.0.1:8003/mcp**. FastAPI:
 **http://127.0.0.1:8000**. Each exposes `/health` and `/ready`; MCP readiness
-checks DB/schema, not external Auth availability. Localhost Host/Origin
-protections remain enabled. Every MCP HTTP response includes `X-Request-ID`.
+checks DB/schema, not external Auth availability. Host/Origin restrictions are
+configured from `MCP_PUBLIC_URL`/`MCP_ALLOWED_ORIGINS`; production requires its
+canonical public HTTPS URL. Do not infer production protection from an unset
+local development configuration. Every MCP HTTP response includes `X-Request-ID`.
 
 ## Auth
 
@@ -69,6 +79,26 @@ object; extra fields and outer arguments are rejected.
 | `compile_expectation` | Interprets an expectation and asks for missing facts. | `text`, IANA `timezone`, optional `locale`, `conversational`, `compilation_id` | Typed compilation status, message, structured expectation or signed state/capture ticket |
 | `continue_expectation_compilation` | Continues, corrects or cancels an active draft. | Actual returned `state`, user `answer` | Next compilation result; no expectation saved |
 | `explain_expectation_mismatch` | Explains the latest recorded result using grounded evidence. | `expectation_id`: UUID | Result/message, explanation or fallback, internal provenance |
+
+### Exact input/output contracts and backend operations
+
+All input fields below are inside `request`. No tool accepts `user_id`. Unknown
+input fields fail validation. The actual schema models remain authoritative:
+
+| Tool | Input model / fields | Output model / fields | Existing backend operation |
+| --- | --- | --- | --- |
+| `capture_expectation` | `CaptureExpectationInput`: inherited `ExpectationCreate` plus optional `compilation_state` (max 24,000 characters) | `ExpectationResult`: `id`, `claim`, `type`, `status`, nullable `metric`, `created_at` | `capture_compiled` for a ticket, otherwise `expectation_service.create_expectation` |
+| `get_expectation` | `GetExpectationInput`: `expectation_id` UUID | `ExpectationResult` | `expectation_service.get_expectation` |
+| `list_expectations` | `ListExpectationsInput`: optional status/type, limit default 50 (1–100), offset default 0 (≥0) | `ExpectationListResult`: expectation array, limit, offset | `expectation_service.list_expectations` |
+| `compile_expectation` | `CompileExpectationInput`: `text` (1–2,000 characters), `timezone` (default UTC), optional locale, `conversational` (default false), optional `compilation_id` UUID | `CompilationResult`: status, message, nullable expectation/state/capture_state/code; bedrock_used, prompt_version, clarification_turn | `intelligence.compile_request` → existing compiler/clarification service and ledger |
+| `continue_expectation_compilation` | `ContinueCompilationInput`: actual returned `state` (1–24,000 characters), `answer` (1–2,000) | `CompilationResult` | `intelligence.continue_request`, locked owner-bound state and existing engine |
+| `explain_expectation_mismatch` | `ExplainMismatchInput`: expectation UUID | `ExplanationResult`: result, expectation/evaluation/evidence IDs, fallback_used, nullable typed explanation, message/code, bedrock_used and provenance | `intelligence.explain_request` → owned latest evaluation, source policy, investigation service |
+
+`CompilationResult.status` is `compiled`, `clarification`, `cancelled`, `expired`,
+`unsupported` or `error`. Compilation/continuation can write workflow state but do
+not create the expectation. Explain can append its audit receipt; its evaluation
+is read-only. Public compact expectation output is deliberately smaller than the
+normal FastAPI detail contract and does not expose the owner's identity or secrets.
 
 Capture accepts `claim`, `type`, optional `metric`, `comparison`, `baseline`,
 `target_value`, timezone-aware `deadline`, `evidence_sources`, and
@@ -144,6 +174,30 @@ List wraps those objects as
 `{"expectations":[...],"limit":10,"offset":0}`. A stored expectation is not an
 evaluation outcome; get returns the persisted status, not a new evaluation.
 
+For conversational interpretation, use the actual compiler tool instead of
+building a capture payload from a bare utterance:
+
+```json
+{"name":"compile_expectation","arguments":{"request":{"text":"I'm counting on my bill being lower.","conversational":true,"timezone":"America/Chicago"}}}
+```
+
+If the result is `clarification`, ask its one returned question and continue with
+the actual signed state. The placeholder below must be replaced, never fabricated:
+
+```json
+{"name":"continue_expectation_compilation","arguments":{"request":{"state":"<actual returned state>","answer":"My electricity bill."}}}
+```
+
+Only `compiled` supplies a capture payload/ticket. The conversational orchestrator
+requires approval before forwarding them to capture. For Why, use an owned ID:
+
+```json
+{"name":"explain_expectation_mismatch","arguments":{"request":{"expectation_id":"<id from list>"}}}
+```
+
+Its typed result includes the recorded evaluation, safe message and grounding
+metadata. MATCH/UNKNOWN/no evaluation do not invoke the mismatch investigator.
+
 ## Testing
 
 Third terminal, from the repository root:
@@ -209,7 +263,11 @@ live; initialize and discover all six tools, then run intelligence acceptance.
 Real Alexa+/Echo onboarding/account linking and compatible OAuth resource metadata
 remain incomplete. PostgreSQL workers and encrypted delegated Outlook ingestion
 are implemented locally; [provider/worker deployment](monitoring.md) needs live
-Microsoft verification. Physical Ring ingestion, real Bee CLI account acceptance and external notification delivery remain absent. Ring/Bee simulators and the consent-gated local Bee CLI bridge are separate backend integrations, not MCP tools. Direct structured capture has no generic idempotency key;
+Microsoft verification. Physical Ring ingestion is not verified. Real Bee CLI
+account acceptance and actual external notification delivery are not verified;
+the optional bridge and email outbox are implemented. Ring/Bee simulators and the
+consent-gated local Bee CLI bridge are separate backend integrations, not MCP
+tools. Direct structured capture has no generic idempotency key;
 compiler-backed capture has durable replay protection. Bedrock is opt-in.
 
 ## Next Steps for Alexa+
@@ -285,10 +343,10 @@ python db/scripts/mcp_remote_smoke.py
 
 Endpoint overrides: `--mcp-url https://<host>/mcp` and
 `--api-url https://<api-host>`. HTTPS certificate verification remains enabled.
-Discovery initializes the current SDK client and checks the required core tools
-as a subset; intelligence tools may also be present. Use `intelligence_smoke.py`
-to verify the six-tool surface. Without an API URL the second
-command is a **read-only probe**, and explicitly reports capture/get/cross-check
+Discovery initializes the current SDK client and checks all six required tools
+and their nested-request/object-output schemas. It does not invoke the compiler
+or investigator; use `intelligence_smoke.py` for that live behavior. Without an
+API URL the second command is a **read-only probe**, and explicitly reports capture/get/cross-check
 and cleanup as NOT RUN. No orphan test rows are created.
 
 With a matching API URL, it runs list → tagged capture → list/get → FastAPI
@@ -329,11 +387,10 @@ acceptance. No competing OAuth token issuer should be added to MCP.
 
 Next action: verify the deployed HTTPS endpoint and provision a compatible OAuth
 authorization server, then register the Alexa client and all provided redirects. Once metadata
-is genuinely available, follow Amazon's
-[account-linking guide](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-account-linking.html)
-and run `alexa-ai configure-account-linking --addon-id <id> --stage development --client-id <id>`.
-Enter any client secret through its masked prompt. Configure only with actual
-issued IDs; test two linked users before enabling customer writes.
+is genuinely available, follow the account-linking workflow in the authorized
+developer console and current provider documentation. A native Alexa+ CLI or
+accepted add-on registration is not verified in this repository. Configure only
+with actual issued IDs; test two linked users before enabling customer writes.
 
 ## Bedrock intelligence integration
 

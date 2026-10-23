@@ -32,8 +32,8 @@ syntax is host-specific.
 Configure the host's CountOn Streamable HTTP endpoint and current Supabase bearer
 session separately through its secure credential mechanism. The skill does not
 install or authenticate a connection. If the host cannot forward a bearer token,
-report that limitation; do not introduce shared credentials or assume an OAuth
-flow CountOn has not implemented. Never paste tokens into skill files/chat.
+report that limitation; do not introduce shared credentials or assume completed
+native Alexa+ MCP OAuth onboarding. Traditional ASK consent is a separate path. Never paste tokens into skill files/chat.
 
 ## Complement to the simulator
 
