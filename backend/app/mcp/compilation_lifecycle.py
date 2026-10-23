@@ -101,7 +101,7 @@ def capture_compiled(
         return expectation_service.get_expectation(db, row.expectation_id, user_id)
     try:
         expectation = expectation_service.create_expectation(
-            db, payload, user_id, commit=False
+            db, payload, user_id, commit=False, creation_source="mcp"
         )
         row.expectation_id = expectation.id
         db.commit()  # One atomic transaction: row + lifecycle consumption.

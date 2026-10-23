@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, latestMetricEvidence, notificationTitle, number, summary, reasoningText } from '@/lib/presentation';
+import { creationSourceLabel, contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, latestMetricEvidence, notificationTitle, number, summary, reasoningText } from '@/lib/presentation';
 import { manualExpectation } from '@/lib/manual-expectation';
 import { evidence, evaluation, expectation, notification } from './fixtures';
 describe('real contract presentation', () => {
@@ -64,4 +64,13 @@ describe('manual creation adapter', () => {
 it('explains verified coverage gaps and source ambiguity without claiming temporal support is missing', () => {
   expect(reasoningText({ ...evaluation, result: 'UNKNOWN', reasoning: { reason: 'incomplete_mailbox_coverage' } })).toContain('cannot safely claim a reply was absent');
   expect(reasoningText({ ...evaluation, result: 'UNKNOWN', reasoning: { reason: 'ambiguous_sources' } })).toContain('Choose one source');
+});
+
+
+it('only displays supported persisted creation channels', () => {
+  for (const [source, label] of [['alexa_skill', 'Created via Alexa'], ['alexa_web', 'Created via Alexa web'], ['web', 'Created via Web']] as const) {
+    expect(creationSourceLabel({ ...expectation, compiler_metadata: { creation_source: source } })).toBe(label);
+  }
+  expect(creationSourceLabel(expectation)).toBeNull();
+  expect(creationSourceLabel({ ...expectation, compiler_metadata: { creation_source: 'private-unrecognized-origin' } })).toBeNull();
 });

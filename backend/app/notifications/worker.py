@@ -26,9 +26,22 @@ from app.notifications.delivery import (
     ready_at,
 )
 from app.repositories import audit
-from app.services.notification_service import enabled
+from app.services.notification_service import audit_context, enabled
 
 logger = logging.getLogger(__name__)
+
+
+def audit_failed(db, item):
+    """Audit a failed attempt/dead letter without copying transport exceptions."""
+    notification = db.get(Notification, item.notification_id)
+    if notification is not None:
+        audit.record(
+            db, item.user_id, "notification", notification.id,
+            "notification.delivery_failed", notification.expectation_id,
+            {"notification_id": str(notification.id), "status": "failed", "channel": "email"},
+            actor_type="SYSTEM", evaluation_id=notification.evaluation_id,
+            idempotency_key=f"NOTIFICATION_DELIVERY_FAILED:{item.id}:{item.attempt_count}:{item.status}",
+        )
 
 
 class DeliveryWorker:
@@ -60,6 +73,7 @@ class DeliveryWorker:
                 # A crash may follow SMTP acceptance. There is no remote dedupe key.
                 item.status, item.last_error = "failed", "DELIVERY_UNCERTAIN"
                 item.lease_token = item.lease_expires_at = None
+                audit_failed(db, item)
                 db.commit()
                 return ()
             # Resend retains idempotency keys for 24 hours. Stop before that
@@ -69,10 +83,12 @@ class DeliveryWorker:
             ):
                 item.status, item.last_error = "failed", "DELIVERY_WINDOW_EXPIRED"
                 item.lease_token = item.lease_expires_at = None
+                audit_failed(db, item)
                 db.commit()
                 return ()
             if item.attempt_count >= 8:
                 item.status, item.last_error = "failed", "ATTEMPTS_EXHAUSTED"
+                audit_failed(db, item)
                 db.commit()
                 return ()
             pref = db.get(NotificationPreference, item.user_id)
@@ -115,6 +131,7 @@ class DeliveryWorker:
             except Exception:  # noqa: BLE001 -- rotated/corrupt ciphertext is a safe dead letter
                 item.status, item.last_error = "failed", "CREDENTIAL_UNAVAILABLE"
                 item.lease_token = item.lease_expires_at = None
+                audit_failed(db, item)
                 db.commit()
                 return ()
             if payload.get("to") != [recipient]:
@@ -178,18 +195,23 @@ class DeliveryWorker:
                         error.retry_after, min(3600, 30 * 2**item.attempt_count)
                     )
                 )
+                audit_failed(db, item)
             else:
                 item.status, item.sent_at, item.last_error = "sent", self.now(), None
                 notification = db.get(Notification, item.notification_id)
                 if notification is not None:
                     evaluation = db.get(Evaluation, notification.evaluation_id) if notification.evaluation_id else None
+                    evidence, source = audit_context(db, evaluation)
                     audit.record(
                         db, item.user_id, "notification", notification.id,
-                        "notification.sent", notification.expectation_id, {},
+                        "notification.sent", notification.expectation_id,
+                        {"notification_id": str(notification.id), "status": "delivered", "channel": "email"},
                         actor_type="SYSTEM",
                         evaluation_id=notification.evaluation_id,
+                        evidence_id=evidence.id if evidence else None,
                         result_status=evaluation.result.value if evaluation else None,
                         idempotency_key=f"NOTIFICATION_SENT:{item.id}",
+                        **source,
                     )
             item.lease_token = item.lease_expires_at = None
             db.commit()

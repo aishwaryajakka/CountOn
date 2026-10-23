@@ -13,7 +13,7 @@ SAFE_METADATA_KEYS = {
     "count", "deadline", "demo", "demo_tag", "duration_ms", "evaluator_result",
     "evaluation_id", "evidence_ids", "fallback_used", "grounded", "model_grounding_passed",
     "reason", "reported_date", "run_id", "safe_to_say", "source_decisions",
-    "sources_used", "status",
+    "sources_used", "status", "channel", "notification_id",
 }
 
 EVENT_TYPES = {
@@ -21,6 +21,8 @@ EVENT_TYPES = {
     "expectation.confirmed": "EXPECTATION_CONFIRMED",
     "expectation.updated": "EXPECTATION_UPDATED",
     "expectation.cancelled": "EXPECTATION_CANCELLED",
+    "expectation.creation_failed": "EXPECTATION_CREATION_FAILED",
+    "clarification.updated": "CLARIFICATION_UPDATED",
     "expectation.deleted": "EXPECTATION_CANCELLED",
     "provider.authorized": "SOURCE_AUTHORIZED",
     "provider.source_bound": "SOURCE_AUTHORIZED",
@@ -33,6 +35,7 @@ EVENT_TYPES = {
     "explanation.generated": "EXPLANATION_GENERATED",
     "notification.created": "NOTIFICATION_CREATED",
     "notification.sent": "NOTIFICATION_SENT",
+    "notification.delivery_failed": "NOTIFICATION_DELIVERY_FAILED",
     "notification.acknowledged": "NOTIFICATION_ACKNOWLEDGED",
     "recommendation.approved": "RECOMMENDATION_APPROVED",
     "recommendation.dismissed": "RECOMMENDATION_DISMISSED",
@@ -60,7 +63,12 @@ def evidence_source(evidence) -> dict:
         "ring_simulator": ("RING", "RING_EVENT"),
         "bee_simulator": ("BEE", "BEE_OBSERVATION"),
         "bee": ("BEE", "BEE_OBSERVATION"),
-    }.get(source, (source.upper()[:30], "NORMALIZED_EVIDENCE"))
+        "utility_bill": ("UTILITY_BILL", "NORMALIZED_EVIDENCE"),
+        "utility_usage": ("UTILITY_USAGE", "NORMALIZED_EVIDENCE"),
+        "tariff": ("TARIFF", "NORMALIZED_EVIDENCE"),
+        "weather": ("WEATHER", "NORMALIZED_EVIDENCE"),
+        "email": ("EMAIL", "NORMALIZED_EVIDENCE"),
+    }.get(source, ("DECLARED_SOURCE", "NORMALIZED_EVIDENCE"))
     reference = (
         raw.get("provider_record_ref")
         or raw.get("source_event_id")

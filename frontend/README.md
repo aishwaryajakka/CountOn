@@ -195,6 +195,11 @@ Mobile uses an accessible drawer, focus trap/Escape dismissal, single-column
 cards, stacked comparisons, and visible focus styles. The connection dialog uses
 native modal focus behavior. Reduced-motion preferences disable animation.
 
+The `/demos` page includes three persisted scenarios: Electricity Bill Surprise,
+Package Arrived and Plumber Commitment. They use normal authenticated backend
+APIs, clearly labeled DEMO/SIMULATED evidence and backend evaluation results.
+See [demo scenarios](docs/demo-scenarios.md) for execution, provenance and validation.
+
 ## Build, lint and tests
 
 ```sh
@@ -283,3 +288,39 @@ results, and Ring/Bee simulations use authenticated source-bound simulator APIs.
 explanation in the existing orchestrator. The ID is untrusted and MCP validates
 ownership. AI advice and provider recommendations are not fabricated in the UI.
 See [source decisions](../docs/consolidation-report.md).
+
+
+## Shared Alexa/web records
+
+The normal dashboard/list/detail all read the same owned FastAPI expectation and
+persisted evaluation APIs, including expectations created through the ASK adapter
+or `/alexa`. Known `compiler_metadata.creation_source` values display compact
+Alexa, Alexa web, Web or MCP labels; older records with no source remain unlabeled.
+Refresh buttons and existing 30-second/focus revalidation load fresh API data.
+Successful detail mutations reload both detail resources and the shared board;
+failed mutations retain the last persisted state. API requests use `cache: no-store`.
+
+Detail separates current criteria from the target snapshot stored with a past
+result. Evidence/provenance, all evaluation history and owned notification status
+come from backend records. Activity lifecycle labels come from `audit-events`, not
+synthesized current-state actions. Ring/Bee simulator labels remain explicit.
+
+The current backend history API persists explanation receipts and grounding flags,
+not the exact explanation wording. Detail shows the latest receipt for the current
+mismatch and offers **Get grounded explanation** through the existing authenticated
+server agent route, exactly as `/alexa` does. This is a fresh backend answer, not a
+reconstruction of past model text. Rendering/polling never automatically invokes
+Bedrock; MATCH/UNKNOWN hide this mismatch control and remain backend-authoritative.
+No new MCP tools, browser evaluator, separate Alexa dashboard or realtime service
+was added.
+
+Shared-UI validation (2026-10-23): 123 targeted tests passed across the screen,
+API, history/presentation, explanation, resource, provider, monitoring and tracking
+suites. Touched-file ESLint, `npm run typecheck` and `git diff --check` passed.
+These are local fixture/contract tests; no live Alexa, provider or production browser
+acceptance is implied.
+
+```sh
+npm test -- tests/screens.test.tsx tests/merge-regressions.test.tsx tests/expectation-explanation.test.tsx tests/reality-decision-card.test.tsx tests/resolution-panel.test.tsx tests/presentation.test.ts tests/resource.test.tsx tests/api.test.ts tests/providers.test.tsx tests/monitoring-plan.test.tsx tests/tracking.test.tsx
+npm run typecheck
+```

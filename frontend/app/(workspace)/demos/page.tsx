@@ -14,6 +14,7 @@ import {
 import { useBoard } from '@/components/app-shell';
 import { PageHeader, Badge, IconBox } from '@/components/ui';
 import { api } from '@/lib/api';
+import { DemoScenarios } from '@/components/demo-scenarios';
 import type { Evaluation } from '@/lib/types';
 import {
   generateRingEvent,
@@ -122,6 +123,11 @@ export default function DemosPage() {
         title="Interactive Demos & Simulators"
         description="SIMULATED evidence sent to your authenticated backend. Ring remains simulated; optional Bee CLI imports are managed under Connected Accounts."
       />
+
+      <DemoScenarios onSaved={board.reload} />
+      <details className="section">
+      <summary>Advanced simulator controls</summary>
+      <p className="caption">Send additional simulated evidence to an existing expectation.</p>
 
       {statusMessage && (
         <div
@@ -584,6 +590,7 @@ export default function DemosPage() {
           </section>
         </div>
       )}
+      </details>
     </>
   );
 }

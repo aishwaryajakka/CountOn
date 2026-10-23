@@ -7,7 +7,7 @@ import { useBoard } from '@/components/app-shell';
 import { useIdentity } from '@/components/auth-provider';
 import { EmptyState, ErrorState, Loading, PageHeader } from '@/components/ui';
 import { EvidenceTimeline } from '@/components/evidence-timeline';
-import { displayTitle, evaluationLabels, formatDate, humanize } from '@/lib/presentation';
+import { auditActionLabel, auditSourceLabel, displayTitle, evaluationLabels, formatDate, humanize } from '@/lib/presentation';
 import { api } from '@/lib/api';
 import type { AuditEvent, Evidence } from '@/lib/types';
 import { useResource } from '@/hooks/use-resource';
@@ -25,7 +25,7 @@ export default function Activity() {
     return results.flat();
   }, [rows]);
 
-  const evidenceState = useResource(loadEvidence);
+  const evidenceState = useResource(loadEvidence, 30000);
   const [expectationFilter, setExpectationFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [resultFilter, setResultFilter] = useState('');
@@ -41,7 +41,7 @@ export default function Activity() {
     }, signal),
     [expectationFilter, sourceFilter, resultFilter, afterFilter, beforeFilter],
   );
-  const auditState = useResource(loadAudit);
+  const auditState = useResource(loadAudit, 30000);
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'expectations' | 'evidence' | 'evaluations' | 'actions'>('all');
 
   const filteredAuditData = useMemo(() => {
@@ -55,34 +55,19 @@ export default function Activity() {
   }, [auditState.data, categoryFilter]);
 
 
-  const events = rows
-    .flatMap((row) => [
-      {
-        id: row.expectation.id,
-        at: row.expectation.created_at,
-        title: 'Expectation created',
-        detail: displayTitle(row.expectation),
-      },
-      ...(row.latest
-        ? [
-            {
-              id: row.latest.id,
-              at: row.latest.created_at,
-              title: 'Evaluation recorded',
-              detail: `${displayTitle(row.expectation)} · ${
-                evaluationLabels[row.latest.result]
-              }`,
-            },
-          ]
-        : []),
-    ])
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const events = (auditState.data ?? []).filter(event =>
+    /^(EXPECTATION_|EVALUATION_|EXPLANATION_|NOTIFICATION_|CLARIFICATION_)/.test(event.event_type)
+  ).map(event => ({
+    id: event.audit_event_id, at: event.occurred_at,
+    title: auditActionLabel(event), detail: event.expectation?.claim ?? 'Account activity',
+  }));
 
   return (
     <>
       <PageHeader
         title="Activity & Evidence Timeline"
-        description="A complete chronological log of expectations, deterministic evaluations, and incoming evidence."
+        description="Persisted audit history and recorded evidence for your account."
+        action={<button className="button secondary" onClick={() => { board.reload(); evidenceState.reload(); auditState.reload(); }}>Refresh</button>}
       />
 
       {board.loading ? (
@@ -131,7 +116,7 @@ export default function Activity() {
 
             <div className="form-grid" aria-label="Audit history filters">
               <label>Expectation<select value={expectationFilter} onChange={(event) => setExpectationFilter(event.target.value)}><option value="">All expectations</option>{rows.map(({ expectation }) => <option key={expectation.id} value={expectation.id}>{displayTitle(expectation)}</option>)}</select></label>
-              <label>Source<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">All sources</option>{['GMAIL','OUTLOOK','GOOGLE','MICROSOFT','RING','BEE'].map(source => <option key={source} value={source}>{humanize(source.toLowerCase())}</option>)}</select></label>
+              <label>Source<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">All sources</option>{['ALEXA','ALEXA_WEB','WEB','MCP','GMAIL','OUTLOOK','GOOGLE','MICROSOFT','RING','BEE'].map(source => <option key={source} value={source}>{humanize(source.toLowerCase())}</option>)}</select></label>
               <label>Result<select value={resultFilter} onChange={(event) => setResultFilter(event.target.value)}><option value="">All results</option>{(['MATCH','UNKNOWN','MISMATCH'] as const).map(result => <option key={result} value={result}>{evaluationLabels[result]}</option>)}</select></label>
               <label>From<input type="date" value={afterFilter} onChange={(event) => setAfterFilter(event.target.value)} /></label>
               <label>Through<input type="date" value={beforeFilter} onChange={(event) => setBeforeFilter(event.target.value)} /></label>
@@ -173,11 +158,11 @@ export default function Activity() {
                   >
                     <span role="cell">{event.expectation ? <Link href={`/expectations/${event.expectation.id}`}>{event.expectation.claim}</Link> : 'Account activity'}</span>
                     <span role="cell">{event.evidence ? Object.values(event.evidence.value).filter(value => ['string','number','boolean'].includes(typeof value)).slice(0, 2).join(' · ') || 'Evidence recorded' : '—'}</span>
-                    <span role="cell">{event.source_provider ? `${humanize(event.source_provider.toLowerCase())}${event.source_provenance ? ` · ${humanize(event.source_provenance.toLowerCase())}` : ''}` : 'CountOn'}</span>
+                    <span role="cell">{auditSourceLabel(event)}</span>
                     <span role="cell">{event.result_status ? evaluationLabels[event.result_status] : '—'}</span>
-                    <span role="cell">{humanize(event.action_taken.replaceAll('.', '_'))}</span>
-                    <time role="cell" dateTime={event.evidence?.observed_at ?? event.occurred_at}>
-                      {formatDate(event.evidence?.observed_at ?? event.occurred_at, timeZone)}
+                    <span role="cell">{auditActionLabel(event)}</span>
+                    <time role="cell" dateTime={event.occurred_at}>
+                      {formatDate(event.occurred_at, timeZone)}
                     </time>
                   </div>
                 ))}
@@ -194,10 +179,10 @@ export default function Activity() {
           <section className="section">
             <div className="section-heading">
               <h2>Expectation Lifecycle Events</h2>
-              <span className="caption">Created and evaluated expectations</span>
+              <span className="caption">Persisted lifecycle audit events</span>
             </div>
 
-            {events.length ? (
+            {auditState.loading ? <Loading label="Loading lifecycle history" /> : auditState.error ? <ErrorState error={auditState.error} retry={auditState.reload} /> : events.length ? (
               <section className="card activity-list">
                 {events.map((event) => (
                   <div key={event.id}>

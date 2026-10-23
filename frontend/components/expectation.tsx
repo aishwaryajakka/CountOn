@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Lightbulb, Moon, Package, Settings, Wrench, Zap, type LucideIcon } from 'lucide-react';
 import type { Evidence, Evaluation, Expectation, WatchedExpectation } from '@/lib/types';
-import { contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, evidenceSourceLabel, latestMetricEvidence, number, observedText, reasoningText } from '@/lib/presentation';
+import { contextSignals, creationSourceLabel, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, evidenceSourceLabel, latestMetricEvidence, number, observedText, reasoningText } from '@/lib/presentation';
 import { useIdentity } from './auth-provider';
 import { Badge, IconBox } from './ui';
 
@@ -40,6 +40,7 @@ export function ExpectationCard({ row, onManage }: { row: WatchedExpectation; on
         <Link href={`/expectations/${expectation.id}`}>{displayTitle(expectation)}</Link>
       </h3>
       <p className="claim">“{expectation.claim}”</p>
+      {creationSourceLabel(expectation) && <span className="caption">{creationSourceLabel(expectation)}</span>}
 
       {/* Structured Monitoring Criteria Summary */}
       <div
@@ -108,13 +109,13 @@ export function ExpectationCard({ row, onManage }: { row: WatchedExpectation; on
   );
 }
 export function ComparisonCards({ expectation, evaluation, evidence }: { expectation: Expectation; evaluation: Evaluation | null; evidence: Evidence[] }) {
-  const observedEvidence = evidence.find(item => item.id === evaluation?.observed.evidence_id) ?? latestMetricEvidence(evidence, expectation.metric);
+  const observedEvidence = evaluation ? evidence.find(item => item.id === evaluation.observed.evidence_id) : latestMetricEvidence(evidence, expectation.metric);
   const unit = observedEvidence?.unit;
   const status = getExpectationPresentationStatus(expectation, evaluation);
-  const target = expectation.target_value ?? expectation.baseline;
+  const target = evaluation?.expected.target;
   const actual = evaluation?.observed.value;
-  const difference = typeof actual === 'number' && target != null ? actual - target : null;
-  return <div className="comparison-grid"><div className="comparison expected"><span className="overline">What you expected</span><strong>{expectedText(expectation, unit)}</strong><p>Your criteria for {expectation.metric ? humanize(expectation.metric).toLowerCase() : 'this expectation'}.</p></div><div className={`comparison observed ${status}`}><div className="section-heading"><span className="overline">Latest evaluated observation</span><Badge status={status} /></div><strong>{observedText(evaluation, unit)}</strong><p>{difference != null ? `Difference from target: ${difference > 0 ? '+' : ''}${number(difference, unit)}` : evaluation ? 'Based on the latest evaluation.' : 'An evaluation has not been recorded yet.'}</p></div></div>;
+  const difference = typeof actual === 'number' && typeof target === 'number' ? actual - target : null;
+  return <div className="comparison-grid"><div className="comparison expected"><span className="overline">What you expected</span><strong>{expectedText(expectation, unit, evaluation)}</strong><p>{evaluation ? 'Criteria saved with this evaluation.' : 'Your current monitoring criteria.'}</p></div><div className={`comparison observed ${status}`}><div className="section-heading"><span className="overline">Latest evaluated observation</span><Badge status={status} /></div><strong>{observedText(evaluation, unit)}</strong><p>{difference != null ? `Difference from target: ${difference > 0 ? '+' : ''}${number(difference, unit)}` : evaluation ? 'Based on the latest evaluation.' : 'An evaluation has not been recorded yet.'}</p></div></div>;
 }
 export function EvidenceContext({ evaluation, evidence }: { evaluation: Evaluation | null; evidence: Evidence[] }) {
   const signals = contextSignals(evidence);
@@ -168,5 +169,5 @@ export function Timeline({ expectation, evidence, evaluations }: { expectation: 
   const events = [{ id: expectation.id, at: expectation.created_at, title: 'Expectation created', description: expectation.claim, tone: 'blue', rank: 0 }, ...evidence.map(item => ({ id: item.id, at: item.observed_at, title: `${evidenceSourceLabel(item)} observed`, description: `${humanize(item.metric ?? 'Observation')}: ${evidenceValue(item, timeZone)}`, tone: 'blue', rank: 1 })), ...evaluations.map(item => ({ id: item.id, at: item.created_at, title: item.result === 'MISMATCH' ? 'Mismatch detected' : item.result === 'MATCH' ? 'Matched' : 'Waiting for evidence', description: reasoningText(item), tone: item.result === 'MISMATCH' ? 'orange' : 'blue', rank: 2 }))].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.rank - b.rank || a.id.localeCompare(b.id));
   return <section className="card timeline-card"><div className="section-heading"><h2>Timeline</h2><span className="caption">Recorded activity</span></div><ol className="timeline">{events.map(event => <li key={event.id} className={event.tone}><span className="timeline-node" aria-hidden="true" /><div><strong>{event.title}</strong><p>{event.description}</p></div><time dateTime={event.at}>{formatDate(event.at, timeZone)}</time></li>)}</ol></section>;
 }
-export function HealthyCard() { return <div className="card healthy-card"><IconBox icon={CheckCircle2} tone="green" /><div><h2>Everything looks as expected.</h2><p>CountOn is still watching in the background.</p><span className="caption">Evidence updates appear when they’re available.</span></div></div>; }
+export function HealthyCard({ waiting = false }: { waiting?: boolean }) { return <div className="card healthy-card"><IconBox icon={waiting ? Clock3 : CheckCircle2} tone={waiting ? 'blue' : 'green'} /><div><h2>{waiting ? 'CountOn is still watching.' : 'Everything looks as expected.'}</h2><p>{waiting ? 'Some expectations are waiting for evidence or a recorded result.' : 'CountOn is still watching in the background.'}</p><span className="caption">Evidence updates appear when they’re available.</span></div></div>; }
 export { RealityDecisionCard } from './reality-decision-card';

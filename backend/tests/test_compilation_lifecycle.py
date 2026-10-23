@@ -85,7 +85,7 @@ def test_completed_capture_replay_creates_once_and_rejects_mutation(
     payload = compiled.state.compiled_expectation
     assert lifecycle.capture_compiled(ledger, payload, token, user) == persisted
     assert lifecycle.capture_compiled(ledger, payload, token, user) == persisted
-    create.assert_called_once_with(ledger, payload, user, commit=False)
+    create.assert_called_once_with(ledger, payload, user, commit=False, creation_source="mcp")
     with pytest.raises(StateError):
         lifecycle.capture_compiled(
             ledger, payload.model_copy(update={"baseline": 999}), token, user

@@ -1,4 +1,4 @@
-import type { Evidence, Evaluation, Expectation, Notification, WatchedExpectation } from './types';
+import type { AuditEvent, Evidence, Evaluation, Expectation, Notification, WatchedExpectation } from './types';
 
 export type PresentationStatus = 'match' | 'attention' | 'waiting' | 'monitoring' | 'resolved' | 'cancelled';
 export const statusLabels: Record<PresentationStatus, string> = { match: 'Matched', attention: 'Needs attention', waiting: 'Waiting for evidence', monitoring: 'Monitoring', resolved: 'Resolved', cancelled: 'Cancelled' };
@@ -22,10 +22,38 @@ export function displayTitle(expectation: Expectation): string {
   if (/\bno meetings? after 5\s*(?:pm|p\.m\.)\b/.test(claim)) return 'No meetings after 5 PM';
   return expectation.claim.length > 65 ? `${expectation.claim.slice(0, 62)}…` : expectation.claim;
 }
+export function creationSourceLabel(expectation: Expectation): string | null {
+  switch (expectation.compiler_metadata.creation_source) {
+    case 'alexa_skill': return 'Created via Alexa';
+    case 'alexa_web': return 'Created via Alexa web';
+    case 'web': return 'Created via Web';
+    case 'mcp': return 'Created via MCP';
+    default: return null;
+  }
+}
+export function auditSourceLabel(event: AuditEvent): string {
+  if (event.source_provenance === 'SIMULATED_RING' || event.evidence?.source === 'ring_simulator') return 'Ring — SIMULATED';
+  if (event.source_provenance === 'SIMULATED_BEE' || event.evidence?.source === 'bee_simulator') return 'Bee — SIMULATED';
+  if (event.source_provider === 'ALEXA') return 'Alexa Custom Skill';
+  if (event.source_provider === 'ALEXA_WEB') return 'Alexa web';
+  return event.source_provider ? `${humanize(event.source_provider.toLowerCase())}${event.source_provenance ? ` · ${humanize(event.source_provenance.toLowerCase())}` : ''}` : 'CountOn';
+}
+export function auditActionLabel(event: AuditEvent): string {
+  switch (event.event_type) {
+    case 'EXPECTATION_CONFIRMED':
+      return event.source_provider === 'ALEXA' ? 'Alexa created expectation' : event.source_provider === 'ALEXA_WEB' ? 'Alexa web created expectation' : 'Expectation confirmed';
+    case 'EXPECTATION_CREATED': return 'Expectation created';
+    case 'EVIDENCE_INGESTED': return `Evidence received from ${event.source_provider ? humanize(event.source_provider.toLowerCase()) : 'a declared source'}`;
+    case 'EVALUATION_COMPLETED': return event.result_status ? `CountOn evaluated ${event.result_status}` : 'Evaluation recorded';
+    case 'EXPLANATION_GENERATED': return event.action_metadata.bedrock_used === true && event.action_metadata.grounded === true ? 'Bedrock generated grounded explanation' : event.action_metadata.fallback_used === true ? 'CountOn recorded fallback explanation' : 'Explanation recorded';
+    case 'NOTIFICATION_CREATED': return 'Notification created';
+    default: return humanize(event.action_taken.replaceAll('.', '_'));
+  }
+}
 const sources: Record<string, string> = { utility_bill: 'Utility bill', utility_usage: 'Energy usage', tariff: 'Electricity rate', delivery: 'Delivery tracking', ring_simulator: 'Ring · SIMULATED', bee_simulator: 'Bee · SIMULATED', ring: 'Ring', bee: 'Bee wearable', gmail: 'Gmail', google_calendar: 'Google Calendar', outlook_calendar: 'Outlook Calendar', confirmation_email: 'Confirmation email' };
 export const humanize = (value: string) => sources[value] ?? value.replaceAll('_', ' ').replace(/^./, char => char.toUpperCase());
 export function evidenceSourceLabel(item: Pick<Evidence, 'source' | 'raw_data'>): string {
-  const label = humanize(item.source);
+  const label = ({ gmail_email: 'Gmail', outlook_email: 'Outlook', microsoft_calendar: 'Microsoft Calendar' } as Record<string, string>)[item.source] ?? humanize(item.source);
   return item.raw_data.simulated === true && !item.source.endsWith('_simulator') ? `${label} · SIMULATED` : label;
 }
 const currencies = new Set(Intl.supportedValuesOf('currency'));

@@ -8,7 +8,7 @@ import { expectation, evaluation } from './fixtures';
 const mocks = vi.hoisted(() => ({
   board: { data: null as WatchedExpectation[] | null, error: null as Error | null, loading: true, reload: vi.fn() },
   tracking: { get: vi.fn(), configure: vi.fn() },
-  api: { board: vi.fn(), expectation: vi.fn(), evidence: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), auditEvents: vi.fn(), addEvidence: vi.fn(), evaluate: vi.fn(), simulateRing: vi.fn(), simulateBee: vi.fn(), updateExpectation: vi.fn() },
+  api: { board: vi.fn(), expectation: vi.fn(), evidence: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), auditEvents: vi.fn(), notifications: vi.fn(), addEvidence: vi.fn(), evaluate: vi.fn(), simulateRing: vi.fn(), simulateBee: vi.fn(), updateExpectation: vi.fn() },
 }));
 vi.mock('@/lib/monitoring', () => ({ monitoring: mocks.tracking }));
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), api: mocks.api }));
@@ -42,6 +42,7 @@ beforeEach(() => {
   mocks.api.evaluations.mockResolvedValue([evaluation]);
   mocks.api.latest.mockResolvedValue(evaluation);
   mocks.api.auditEvents.mockResolvedValue([]);
+  mocks.api.notifications.mockResolvedValue([]);
   mocks.api.addEvidence.mockResolvedValue({});
   mocks.api.evaluate.mockResolvedValue({ ...evaluation, result: 'UNKNOWN' });
   mocks.api.simulateRing.mockResolvedValue({ evidence: {}, evaluation: { ...evaluation, result: 'UNKNOWN' } });
@@ -77,6 +78,7 @@ it.each([['ring', ring, 'Ring Delivery Simulator', 'Send Ring Evidence'], ['bee'
   'sends tagged %s evidence to the selected expectation and shows the actual backend outcome', async (kind, exp, tab, submit) => {
     Object.assign(mocks.board, { loading: false, data: rows(exp) });
     render(<Demos />);
+    await userEvent.click(screen.getByText('Advanced simulator controls'));
     await userEvent.click(screen.getByRole('button', { name: tab }));
     expect(screen.getByText(/Ring remains simulated/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: new RegExp(submit) }));
@@ -92,6 +94,7 @@ it('requires exact selection when multiple compatible expectations exist', async
   const second = { ...ring, id: 'second-ring', claim: 'Other package' };
   Object.assign(mocks.board, { loading: false, data: [...rows(ring), ...rows(second)] });
   render(<Demos />);
+  await userEvent.click(screen.getByText('Advanced simulator controls'));
   await userEvent.click(screen.getByRole('button', { name: 'Ring Delivery Simulator' }));
   const submit = screen.getByRole('button', { name: /Send Ring Evidence/ });
   expect(submit).toBeDisabled();

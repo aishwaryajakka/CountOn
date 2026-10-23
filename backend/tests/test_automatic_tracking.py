@@ -489,6 +489,8 @@ def outbox(scenario):
 
 
 def test_outbox_crash_after_provider_acceptance_is_idempotent(scenario):
+    from app.db.models import AuditEvent
+
     sessions, _, _, now, config = outbox(scenario)
     accepted, requests = {}, []
 
@@ -511,6 +513,15 @@ def test_outbox_crash_after_provider_acceptance_is_idempotent(scenario):
         delivery = db.get(NotificationDelivery, claim[0])
         assert delivery.status == "sent"
         assert db.get(Notification, delivery.notification_id).status == "pending"
+        delivered = list(db.scalars(select(AuditEvent).where(
+            AuditEvent.event_type == "NOTIFICATION_SENT",
+            AuditEvent.resource_id == delivery.notification_id,
+        )))
+        assert len(delivered) == 1
+        assert delivered[0].audit_metadata == {
+            "notification_id": str(delivery.notification_id),
+            "status": "delivered", "channel": "email",
+        }
 
 
 def test_outbox_concurrent_workers_claim_once(scenario):
@@ -526,6 +537,8 @@ def test_outbox_concurrent_workers_claim_once(scenario):
 
 
 def test_outbox_retry_and_dead_letter(scenario):
+    from app.db.models import AuditEvent
+
     sessions, _, _, now, config = outbox(scenario)
     channel = EmailChannel(
         config, transport=httpx.MockTransport(lambda _: httpx.Response(503))
@@ -535,6 +548,14 @@ def test_outbox_retry_and_dead_letter(scenario):
         item = db.scalar(select(NotificationDelivery))
         assert item.status == "pending"
         assert item.last_error == "PROVIDER_UNAVAILABLE"
+        failed = db.scalar(select(AuditEvent).where(
+            AuditEvent.event_type == "NOTIFICATION_DELIVERY_FAILED",
+            AuditEvent.resource_id == item.notification_id,
+        ))
+        assert failed.audit_metadata == {
+            "notification_id": str(item.notification_id),
+            "status": "failed", "channel": "email",
+        }
         item.first_attempt_at = now - timedelta(hours=24)
         item.next_run_at = now
         db.commit()
@@ -544,6 +565,10 @@ def test_outbox_retry_and_dead_letter(scenario):
             db.scalar(select(NotificationDelivery)).last_error
             == "DELIVERY_WINDOW_EXPIRED"
         )
+        failures = list(db.scalars(select(AuditEvent).where(
+            AuditEvent.event_type == "NOTIFICATION_DELIVERY_FAILED",
+        )))
+        assert len(failures) == 2  # Retryable attempt, then terminal dead letter.
 
 
 def test_quiet_hours_dst_and_unread_inbox(scenario):

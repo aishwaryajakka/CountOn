@@ -99,7 +99,7 @@ created; the existing compiler interprets language.
 | LaunchRequest | “Welcome to CountOn. What are you counting on?”; no business action. |
 | ListExpectationsIntent | Canonical list utterance → LIST_EXPECTATIONS → MCP list. Speech reads up to three actual claims. |
 | GetExpectationIntent | Topic slot → GET_EXPECTATION; existing owned lookup/disambiguation. |
-| CaptureExpectationIntent | Expectation language → COMPILE_EXPECTATION; pending replies/corrections → CONTINUE_CLARIFICATION; complete → MCP capture once per turn. |
+| CaptureExpectationIntent | Expectation language → COMPILE_EXPECTATION; pending replies/corrections → CONTINUE_CLARIFICATION; complete → explicit confirmation in production → canonical MCP capture exactly once. |
 | WhyExpectationIntent | Specified/current owned expectation → existing explanation tool. Only recorded MISMATCH runs investigator. MATCH/UNKNOWN/no evaluation skip it. |
 | AMAZON.HelpIntent / FallbackIntent | Concise help, no arbitrary capability execution. |
 | AMAZON.CancelIntent / StopIntent | Canonical cancellation, revoke conversation reference, close session. |
@@ -208,6 +208,137 @@ additional scopes). Configure real privacy-policy/domain details and an access-t
 lifetime matching the provider; verify refresh grant actually works. These values
 require provider setup, not just copying console fields.
 
+### Identity and multi-turn acceptance (2026-10-23)
+
+No authentication or conversation replacement was needed. `authenticated_context`
+in `backend/app/api/v1/alexa.py` verifies the linked access token with the same
+`TokenVerifier` as the web API and MCP. Its UUID `sub` selects the existing
+profile; the configured `ALEXA_OAUTH_CLIENT_ID` must match the verified `client_id`.
+Alexa's signed `userId` only scopes transport/replay state. It cannot select a
+CountOn owner, even if its text happens to be another CountOn user's UUID.
+There is no production demo-user fallback.
+
+The server retains the existing owner-bound, expiring, versioned conversation
+state: selected expectation, opaque session handle and signed clarification or
+pending-capture reference. The production store encrypts it and bounded replay
+receipts. Those receipts cache only safe response envelopes and body/request
+hashes, allowing an identical retry to return its previous answer. They do not
+store access tokens, voice request bodies, model prompts or chain of thought.
+Changed-body retries, consumed continuation handles and cross-user handles fail
+closed. The existing durable tests cover restart recovery, expiry and fencing.
+
+The safe bill conversation is:
+
+```text
+User:    I'm counting on my bill being lower.
+CountOn: Which bill or subject do you mean?
+User:    My electricity bill.
+CountOn: What should I compare it against?
+User:    My last bill.
+CountOn: What was the previous bill amount?
+User:    My last bill was $142.10.
+User:    Actually make that $150.
+User:    When my next bill arrives.
+CountOn: [Grounded summary] Should I save it?
+User:    Yes.
+CountOn: Got it. I'll track that.
+```
+
+The amount and timing are supplied in response to the next material question.
+“My last bill” alone is **not** a numerical baseline. This path does not resolve a
+prior bill automatically; it asks for the missing amount rather than inventing
+one. Before confirmation there is no expectation row. Cancel/Stop consumes the
+pending draft and clears the transport handle. Corrections and explicit topic
+replacement delegate to the existing compiler/clarification implementation.
+
+`tests/test_alexa_identity_lifecycle.py` adds signed-ASK, real-JWT, actual MCP HTTP
+and PostgreSQL acceptance for the dedicated linked-client token, the separate
+web token with the same `sub`, confirmation/cancellation, correction, missing
+baseline, repeated continuation and ownership. Only the certificate/JWKS trust
+fixtures and Bedrock transport are local test fixtures. The normal owned API sees
+the captured row. Loopback MCP tests now pass explicit test settings so a local
+deployment's hostname allowlist cannot redirect or reject the test server.
+
+### Remaining Console configuration: exact field mapping
+
+These are setup instructions, not a claim of a completed live account link.
+The field mapping follows [Amazon's authorization-code configuration](https://developer.amazon.com/en-US/docs/alexa/account-linking/configure-authorization-code-grant.html)
+and [Supabase's OAuth server setup](https://supabase.com/docs/guides/auth/oauth-server/getting-started).
+
+| Where | Field / action | Value |
+| --- | --- | --- |
+| Supabase → Authentication → OAuth Server | Enable OAuth server; Authorization Path | `/oauth/consent` |
+| Supabase → Authentication → URL Configuration | Site URL | Current deployed CountOn frontend origin, configured as `https://counton-frontend.vercel.app` |
+| Supabase signing configuration | Signing algorithm when requesting `openid` | Verify ES256 or RS256; ID-token issuance requires asymmetric signing |
+| Supabase OAuth client registration | Client type / token authentication | Confidential client / `client_secret_basic` |
+| Alexa → Build → Account Linking | Enable account linking | On; require linking for personal CountOn actions |
+| Alexa → Account Linking | Authorization Grant Type | Auth Code Grant |
+| Alexa → Account Linking | PKCE Authorization | Enabled, S256 |
+| Alexa → Account Linking | Web Authorization URI | `https://<existing-project-ref>.supabase.co/auth/v1/oauth/authorize` |
+| Alexa → Account Linking | Access Token URI | `https://<existing-project-ref>.supabase.co/auth/v1/oauth/token` |
+| Alexa → Account Linking | Client ID / Client Secret | The registered Supabase **Alexa OAuth client**, secret entered only in protected configuration |
+| Alexa → Account Linking | Client Authentication Scheme | HTTP Basic |
+| Alexa → Account Linking | Scope | `openid`; add `email`/`profile` only if actually needed |
+| Alexa → Account Linking | Redirect URLs | Copy **every exact URL displayed for this skill** into the Supabase client's redirect allowlist; no wildcards or invented skill IDs |
+| Alexa → Build → Endpoint | HTTPS default endpoint | `https://counton-api.7ak6j8v4ypay0.us-east-2.cs.amazonlightsail.com/api/v1/alexa`, after deploying this adapter |
+| Alexa → Build → Interaction Model → JSON Editor | Import / Save / Build | `backend/app/alexa/interaction-model.en-US.json`; invocation `count on` |
+| Alexa → Test | Test mode | Development; enable and link the skill using the intended CountOn account |
+
+Keep the real privacy-policy/domain settings and HTTPS certificate selection
+consistent with deployed hosting. Supabase owns state/PKCE/code exchange and token
+refresh. The existing CountOn consent page validates the client, signed-in user,
+allowed scopes and exact callback before explicit approval. No CountOn OAuth token
+endpoint or separate password/session authority is added.
+
+Required deployment configuration (no secret values included):
+
+```text
+API: ALEXA_SKILL_ID=<this skill>, ALEXA_OAUTH_CLIENT_ID=<registered client>,
+     OAUTH_ALLOWED_CLIENT_IDS=["<registered client>"],
+     ALEXA_REQUIRE_CONFIRMATION=true, CONVERSATION_STORE_BACKEND=postgres,
+     CONVERSATION_ENCRYPTION_KEY=<private base64 32-byte key>,
+     MCP_PUBLIC_URL=<actual public HTTPS MCP origin>/mcp
+API and MCP: existing Supabase configuration and shared private
+             COUNTON_CLARIFICATION_SIGNING_KEY
+MCP: OAUTH_ALLOWED_CLIENT_IDS includes the same registered Alexa client
+Frontend: NEXT_PUBLIC_ALEXA_OAUTH_CLIENT_ID=<registered client>,
+          NEXT_PUBLIC_ALEXA_REDIRECT_URIS=<comma-separated exact ASK callbacks>
+```
+
+For final manual acceptance, link while signed into the same CountOn account used
+on the dashboard, complete the bill conversation, and verify one owned row after
+reload. Repeat a draft with Cancel, relink to a second CountOn account and verify
+isolation, then exercise refresh/revocation and expiry. Check that issued **access
+tokens** satisfy the existing JWT issuer/audience/role/client contract. Never paste
+tokens into speech, URLs or logs. Live Supabase OAuth issuance/refresh, ASK Console
+recognition, Echo interaction and deployed inference latency remain unverified.
+Append the Alexa client to existing approved client allowlists; preserve other
+approved clients. If the project's OAuth Server feature is unavailable, this
+external setup remains blocked; CountOn does not substitute its own token issuer.
+
+Focused validation for this pass:
+
+```sh
+# In backend, use isolated ENVIRONMENT=test / DATABASE_TARGET=local settings,
+# a separate loopback TEST_DATABASE_URL ending in _test, valid conversation
+# configuration, BEDROCK_ENABLED=false and AWS_EC2_METADATA_DISABLED=true.
+.venv/bin/python -m pytest -q tests/test_alexa_identity_lifecycle.py tests/test_alexa.py tests/test_agent_sessions.py tests/test_production_conversations.py tests/test_production_security.py --tb=short
+.venv/bin/python -m pytest -q tests/test_auth.py tests/test_clarification.py --tb=short
+.venv/bin/ruff check tests/test_alexa_identity_lifecycle.py tests/test_alexa.py
+.venv/bin/mypy --strict --follow-imports=silent --ignore-missing-imports app/alexa app/api/v1/alexa.py
+# In frontend:
+npm test -- tests/oauth-consent.test.tsx tests/agent-route.test.ts
+npx eslint app/oauth/consent/page.tsx lib/oauth-consent.ts tests/oauth-consent.test.tsx
+```
+
+Results: **158 + 104 backend tests passed**, **34 frontend tests passed**; targeted
+Ruff, strict Mypy (four source files), consent ESLint and `git diff --check` passed.
+The backend cases exercised actual PostgreSQL and loopback MCP; JWTs and ASK
+certificates were locally signed fixtures and inference was mocked. Existing
+upstream ASK datetime/certificate deprecation warnings remain. No live Supabase
+authorization-code exchange, Amazon consent, ASK Console, Echo or paid model call
+was performed. Production configuration and credentials were unchanged.
+
 Before enabling business actions, verify the **access token**, not ID token, has
 the existing verifier's expected issuer, `aud=authenticated`, `role=authenticated`,
 UUID `sub`, expiry/issued-at claims and supported signature/JWKS. Supabase OAuth
@@ -262,6 +393,39 @@ remains blocked until issuance and refresh satisfy this contract.
 8. Verify response latency under eight seconds with the deployed model/network.
 
 ## Tests
+
+Shared-path audit (2026-10-23): no replacement runtime wiring was needed. Both
+adapters instantiate `AgentOrchestrator` with `StreamableMcpAdapter`; compiler,
+clarification, capture and investigator logic stay in the existing MCP/services.
+`explain_expectation_mismatch` owns the latest-evaluation read and checks its
+deterministic result before fetching investigation evidence or invoking the
+investigator. MATCH, UNKNOWN and no-evaluation responses never invoke it.
+
+The combined regression
+`test_web_and_signed_alexa_share_capture_schema_and_owned_api` exercises both
+public entry points together using locally signed ASK envelopes, real JWT
+verification, real loopback Streamable HTTP and the same isolated PostgreSQL
+database. Only model inference is mocked. It verifies explicit confirmation,
+clarification, exactly one canonical capture per approved draft, retry safety,
+cancellation with no new row, common API/schema visibility, and a second CountOn
+user with the same Alexa `userId` being unable to read either row.
+
+Targeted validation with `TEST_DATABASE_URL` set to the separate loopback
+`counton_test` database:
+
+```sh
+cd backend
+.venv/bin/pytest -q --tb=short tests/test_agent_api.py tests/test_alexa.py tests/test_agent_sessions.py tests/test_production_conversations.py tests/test_release_journey.py tests/test_mcp_network.py
+.venv/bin/ruff check tests/test_alexa.py app/alexa app/agent app/api/v1/agent.py app/api/v1/alexa.py
+cd ../frontend
+npm test -- tests/agent-route.test.ts tests/alexa.test.tsx
+```
+
+Results: **162 backend tests passed**, **48 frontend tests passed**, targeted Ruff
+passed, and `git diff --check` passed. No full-suite run or live acceptance is
+claimed for this audit. Existing ASK datetime/certificate deprecation warnings
+remain. Real account linking/token refresh, ASK NLU/console and Echo interaction,
+and deployed Bedrock/MCP latency inside Alexa's deadline still need live acceptance.
 
 From backend (isolated local PostgreSQL `TEST_DATABASE_URL` ending in `_test`):
 

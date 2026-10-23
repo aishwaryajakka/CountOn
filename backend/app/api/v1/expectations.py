@@ -22,7 +22,7 @@ Database = Annotated[Session, Depends(get_db)]
 
 @router.post("", response_model=ExpectationResponse, status_code=http_status.HTTP_201_CREATED, summary="Create an expectation")
 def create_expectation(payload: ExpectationCreate, db: Database, user: CurrentUser) -> Expectation:
-    return service.create_expectation(db, payload, user.id)
+    return service.create_expectation(db, payload, user.id, creation_source="web")
 
 
 @router.get("", response_model=list[ExpectationResponse], summary="List expectations")

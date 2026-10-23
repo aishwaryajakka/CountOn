@@ -91,7 +91,7 @@ def register_tools(
     def capture_expectation(request: CaptureExpectationInput, ctx: Context) -> ExpectationResult:
         def capture(db: Session, user_id: UUID) -> ExpectationResult:
             payload = ExpectationCreate.model_validate(request.model_dump(exclude={"compilation_state"}))
-            row = capture_compiled(db, payload, request.compilation_state, user_id) if request.compilation_state else expectation_service.create_expectation(db, payload, user_id)
+            row = capture_compiled(db, payload, request.compilation_state, user_id) if request.compilation_state else expectation_service.create_expectation(db, payload, user_id, creation_source="mcp")
             return ExpectationResult.model_validate(row)
         return run(ctx, "capture_expectation", capture)
 

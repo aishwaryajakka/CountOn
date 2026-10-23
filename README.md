@@ -267,3 +267,7 @@ CountOn sign-in uses Supabase Auth for email/password, confirmation and recovery
 with an optional `custom:amazon` OAuth2 provider. The native provider/secret setup
 and real Amazon login remain external acceptance gates. See [authentication audit,
 configuration and tests](docs/authentication.md). No identity migration is required.
+
+## License
+
+Licensed under the Apache License 2.0. See LICENSE.

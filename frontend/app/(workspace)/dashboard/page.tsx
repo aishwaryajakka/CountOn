@@ -362,7 +362,7 @@ export default function Dashboard() {
             </section>
           ) : (
             <section className="section">
-              <HealthyCard />
+              <HealthyCard waiting={counts.waiting > 0 || counts.monitoring > 0} />
             </section>
           )}
 

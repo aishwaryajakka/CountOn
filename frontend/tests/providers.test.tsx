@@ -77,3 +77,25 @@ it('identifies legacy Outlook scopes that cannot authorize body synchronization'
   expect(screen.getByRole('button', { name: 'Sync inbox' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Reconnect' })).toBeEnabled();
 });
+
+it.each([false, true])('refreshes shared detail only after a successful source removal (failure=%s)', async failed => {
+  let bindings = [{ id: 'binding-id', rule: { kind: 'bill' } }];
+  mocks.request.mockImplementation(async (path: string, options: RequestInit = {}) => {
+    if (options.method === 'DELETE') {
+      if (failed) throw new Error('Source removal failed');
+      bindings = []; return undefined;
+    }
+    return path.endsWith('/sources') ? bindings : [];
+  });
+  const updated = vi.fn();
+  render(<SourceBinding expectationId="expectation" onUpdated={updated} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Remove binding' }));
+  if (failed) {
+    expect(await screen.findByRole('alert')).toHaveTextContent('Source removal failed');
+    expect(updated).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Remove binding' })).toBeInTheDocument();
+  } else {
+    await waitFor(() => expect(updated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove binding' })).not.toBeInTheDocument());
+  }
+});

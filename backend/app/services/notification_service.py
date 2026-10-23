@@ -151,7 +151,7 @@ def for_evaluation(db, expectation, evaluation, *, dedupe_key=None):
             item.id,
             "notification.created",
             expectation.id,
-            metadata,
+            {**metadata, "notification_id": str(item.id), "status": "created", "channel": "in_app"},
             actor_type="SYSTEM",
             evidence_id=evidence.id if evidence else None,
             evaluation_id=evaluation.id,
@@ -197,7 +197,7 @@ def notice(db, expectation, kind, message, identity, *, evaluation=None, metadat
         id,
         "notification.created",
         expectation.id,
-        {},
+        {"notification_id": str(id), "status": "created", "channel": "in_app"},
         actor_type="SYSTEM",
         evidence_id=evidence.id if evidence else None,
         evaluation_id=evaluation.id if evaluation else None,
@@ -292,6 +292,9 @@ def list_notifications(db, user_id, **filters):
 
 def update(db, id, status, user_id):
     item = get(db, id, user_id)
+    # Serialize state transitions: retries of the current status are silent, but
+    # read -> dismissed -> read must retain all three real audit events.
+    db.refresh(item, with_for_update=True)
     if item.status == status:
         return item
     try:
@@ -306,15 +309,17 @@ def update(db, id, status, user_id):
             "notification.acknowledged",
             item.expectation_id,
             {
+                "notification_id": str(item.id), "status": status, "channel": "in_app",
+                **{
                 k: v
                 for k, v in item.notification_metadata.items()
                 if k in ("demo", "demo_tag")
+                },
             },
             actor_type="USER",
             evidence_id=evidence.id if evidence else None,
             evaluation_id=item.evaluation_id,
             result_status=evaluation.result.value if evaluation else None,
-            idempotency_key=f"NOTIFICATION_ACKNOWLEDGED:{item.id}",
             **source,
         )
         db.commit()

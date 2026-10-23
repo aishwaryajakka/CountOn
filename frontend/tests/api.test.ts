@@ -157,3 +157,18 @@ it.each(['ring', 'bee'] as const)('submits dedicated %s simulator route evidence
   expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
   expect(fetcher).toHaveBeenCalledOnce();
 });
+
+it('reloads Alexa-owned rows from the canonical API with persisted metadata and no browser cache', async () => {
+  let saved = { ...expectation, compiler_metadata: { creation_source: 'alexa_skill' }, deadline: '2026-10-30T20:00:00Z' };
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async input => {
+    const path = String(input);
+    return new Response(JSON.stringify(path.includes('/evaluations') ? [] : [saved]));
+  });
+  const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
+  expect((await api.board())[0].expectation.compiler_metadata.creation_source).toBe('alexa_skill');
+  saved = { ...saved, baseline: 150, deadline: '2026-11-01T20:00:00Z' };
+  const reloaded = await api.board();
+  expect(reloaded[0]).toEqual({ expectation: saved, latest: null });
+  expect(fetcher.mock.calls.every(([, options]) => options?.cache === 'no-store')).toBe(true);
+  expect(fetcher.mock.calls.filter(([path]) => !String(path).includes('/evaluations'))).toHaveLength(2);
+});

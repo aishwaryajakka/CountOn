@@ -931,7 +931,7 @@ def test_signed_alexa_request_real_jwt_real_mcp_http_and_durable_replay(
     runtime = wire_engine(compiled())
     _, sign = signing
     try:
-        with live_server(create_app(create_server(session_factory=factory))) as base:
+        with live_server(create_app(create_server(session_factory=factory), settings=settings)) as base:
             configured = settings.model_copy(
                 update={"alexa_skill_id": SKILL, "mcp_public_url": base + "/mcp"}
             )
@@ -969,6 +969,175 @@ def test_signed_alexa_request_real_jwt_real_mcp_http_and_durable_replay(
                 )
                 assert access_token not in caplog.text
                 assert "Authorization" not in caplog.text
+    finally:
+        app.dependency_overrides.pop(dependencies.get_db, None)
+
+
+@pytest.mark.parametrize("voice_outcome", ["confirm", "cancel"])
+def test_web_and_signed_alexa_share_capture_schema_and_owned_api(
+    db, users, verifier, settings, signing, monkeypatch, wire_engine, voice_outcome
+):
+    """Both public adapters use real JWT/MCP HTTP/SQL; only inference is mocked."""
+    from unittest.mock import Mock
+
+    from sqlalchemy import select
+
+    from app.agent import orchestrator
+    from app.api import dependencies
+    from app.api.v1 import agent as web_route
+    from app.db.models import AuditEvent, Expectation
+    from app.mcp import auth, tools
+    from app.mcp.server import create_app, create_server
+    from app.schemas.expectation import ExpectationResponse
+    from tests.test_agent_api import converse
+    from tests.test_clarification import decision, initial, patch
+    from tests.test_expectation_compiler import compiled
+    from tests.test_mcp_network import live_server
+
+    jwt_verifier, key = verifier
+    owner_token, _ = jwt_tests.token(jwt_verifier, key, sub=str(users[0].id))
+    other_token, _ = jwt_tests.token(jwt_verifier, key, sub=str(users[1].id))
+    monkeypatch.setattr(route, "get_token_verifier", lambda: jwt_verifier)
+    monkeypatch.setattr(auth, "get_token_verifier", lambda: jwt_verifier)
+    monkeypatch.setattr(dependencies, "get_token_verifier", lambda: jwt_verifier)
+    capture = Mock(wraps=tools.capture_compiled)
+    monkeypatch.setattr(tools, "capture_compiled", capture)
+
+    @contextmanager
+    def factory():
+        yield db
+
+    monkeypatch.setattr(route, "SessionLocal", factory)
+    app.dependency_overrides[dependencies.get_db] = lambda: db
+    _, sign = signing
+    try:
+        with live_server(create_app(create_server(session_factory=factory), settings=settings)) as base:
+            configured = settings.model_copy(
+                update={
+                    "alexa_skill_id": SKILL,
+                    "alexa_require_confirmation": True,
+                    "mcp_public_url": base + "/mcp",
+                }
+            )
+            monkeypatch.setattr(route, "get_settings", lambda: configured)
+            monkeypatch.setattr(web_route, "get_settings", lambda: configured)
+            monkeypatch.setattr(orchestrator, "get_settings", lambda: configured)
+            with TestClient(app) as client:
+                client.headers.update({"Authorization": "Bearer " + owner_token})
+                wire_engine(compiled())
+                web = converse(
+                    client, "I'm counting on my grocery bill staying under $120 this week"
+                )
+                assert not web["captured"]
+                assert client.get("/api/v1/expectations").json() == []
+                pending_web = web["session_reference"]
+                web = converse(client, "Yes", pending_web)
+                assert web["captured"]
+                assert converse(client, "Yes", pending_web)["code"] == "STATE_REJECTED"
+                assert capture.call_count == 1
+
+                runtime = wire_engine(
+                    initial("MISSING_BASELINE", "baseline"),
+                    decision(patch("baseline", 142.1, "$142.10")),
+                )
+                voice = post(
+                    client,
+                    sign,
+                    event_body(
+                        intent="CaptureExpectationIntent",
+                        text="my electricity bill being lower than my last bill when my next bill arrives",
+                        token=owner_token,
+                    ),
+                )
+                assert "directives" in voice["response"]
+                voice = post(
+                    client,
+                    sign,
+                    event_body(
+                        intent="CaptureExpectationIntent",
+                        text="My last bill was $142.10",
+                        attributes=voice["sessionAttributes"],
+                        token=owner_token,
+                    ),
+                )
+                assert "Should I save it?" in speech(voice)
+                assert len(client.get("/api/v1/expectations").json()) == 1
+                assert capture.call_count == 1
+                confirmation = event_body(
+                    intent="AMAZON.YesIntent"
+                    if voice_outcome == "confirm"
+                    else "AMAZON.CancelIntent",
+                    attributes=voice["sessionAttributes"],
+                    token=owner_token,
+                )
+                saved = post(client, sign, confirmation)
+                calls = runtime.converse.call_count
+                assert post(client, sign, confirmation) == saved
+                assert runtime.converse.call_count == calls
+                assert capture.call_count == (2 if voice_outcome == "confirm" else 1)
+
+                rows = client.get("/api/v1/expectations").json()
+                assert len(rows) == (2 if voice_outcome == "confirm" else 1)
+                assert web["saved_id"] in {row["id"] for row in rows}
+                for row in rows:
+                    ExpectationResponse.model_validate(row)
+                    owned = db.get(Expectation, row["id"])
+                    assert owned.user_id == users[0].id
+                    origin = "alexa_web" if row["id"] == web["saved_id"] else "alexa_skill"
+                    assert owned.compiler_metadata["creation_source"] == origin
+                    confirmed = db.scalar(select(AuditEvent).where(
+                        AuditEvent.expectation_id == owned.id,
+                        AuditEvent.event_type == "EXPECTATION_CONFIRMED",
+                    ))
+                    assert confirmed.audit_metadata == {"channel": origin, "status": "SUCCESS"}
+                    assert confirmed.source_provider == ("ALEXA_WEB" if origin == "alexa_web" else "ALEXA")
+                assert len(list(db.scalars(select(Expectation)))) == len(rows)
+
+                # Both list transports see the same two canonical rows, not a
+                # separate Alexa collection or browser-only capture result.
+                listed = converse(client, "What am I counting on?")
+                assert {row["id"] for row in listed["rows"]} == {row["id"] for row in rows}
+                voice_list = post(
+                    client,
+                    sign,
+                    event_body(token=owner_token, session_id="fresh-list-session"),
+                )
+                assert all(row["claim"] in speech(voice_list) for row in rows)
+
+                client.headers.update({"Authorization": "Bearer " + other_token})
+                assert client.get("/api/v1/expectations").json() == []
+                for row in rows:
+                    assert client.get("/api/v1/expectations/" + row["id"]).status_code == 404
+                    denied = client.post(
+                        "/api/v1/agent/converse",
+                        json={
+                            "text": "Why did it fail?",
+                            "session_reference": None,
+                            "expectation_id": row["id"],
+                        },
+                    ).json()
+                    assert denied["code"] == "NOT_FOUND" and denied["rows"] == []
+                other_voice = post(
+                    client,
+                    sign,
+                    # Same Alexa userId, different verified CountOn principal.
+                    event_body(token=other_token, session_id="other-counton-session"),
+                )
+                assert "aren't counting on anything" in speech(other_voice)
+                assert all(row["claim"] not in speech(other_voice) for row in rows)
+                other_detail = post(
+                    client,
+                    sign,
+                    event_body(
+                        intent="GetExpectationIntent",
+                        text="my grocery bill",
+                        token=other_token,
+                        attributes=other_voice["sessionAttributes"],
+                        session_id="other-counton-session",
+                    ),
+                )
+                assert "couldn't find" in speech(other_detail)
+                assert all(row["claim"] not in speech(other_detail) for row in rows)
     finally:
         app.dependency_overrides.pop(dependencies.get_db, None)
 

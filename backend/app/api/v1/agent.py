@@ -93,7 +93,7 @@ async def converse(
         session_store=store,
         require_capture_confirmation=True,
         audit_sink=lambda user, result, duration: record_run(
-            db, user, result, duration
+            db, user, result, duration, channel="ALEXA_WEB"
         ),
     )
     # Transport input contains no plan, identity, tool, provider or compiler state.

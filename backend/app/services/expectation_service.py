@@ -1,8 +1,8 @@
 """Expectation domain validation and transactional lifecycle operations."""
 
 import logging
-from typing import Any
-from uuid import UUID
+from typing import Any, Literal
+from uuid import UUID, uuid4
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -27,15 +27,36 @@ def validate_expectation(values: dict[str, Any]) -> None:
             raise InvalidExpectationError("Numeric expectations require a baseline or target_value")
 
 
-def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None, commit: bool = True) -> Expectation:
-    validate_expectation(payload.model_dump())
+def create_expectation(db: Session, payload: ExpectationCreate, user_id: UUID, *, compiler_metadata: dict | None = None, commit: bool = True, creation_source: Literal["web", "mcp"] | None = None) -> Expectation:
+    from app.repositories import audit
+
+    try:
+        validate_expectation(payload.model_dump())
+    except InvalidExpectationError:
+        # A valid authenticated request with invalid domain fields has no row ID.
+        # Store a safe attempt ID, never the rejected claim/payload or exception.
+        if creation_source:
+            ensure_profile(db, user_id)
+            audit.record(db, user_id, "expectation", uuid4(), "expectation.creation_failed",
+                metadata={"channel": creation_source, "status": "FAILED"},
+                actor_type="USER", source_provider=creation_source.upper())
+            if commit:
+                db.commit()
+        raise
     try:
         ensure_profile(db, user_id)
-        expectation = repository.create_expectation(db, payload, user_id, compiler_metadata)
+        metadata = dict(compiler_metadata or {})
+        if creation_source:
+            metadata["creation_source"] = creation_source
+        expectation = repository.create_expectation(db, payload, user_id, metadata)
         operations.ensure_job(db, expectation)
         operations.audit(
             db, expectation, "expectation.created", actor_type="USER",
             idempotency_key=f"EXPECTATION_CREATED:{expectation.id}",
+            source_provider=creation_source.upper() if creation_source else None,
+            source_type="EXPECTATION_CAPTURE",
+            source_provenance="AUTHENTICATED_WEB" if creation_source == "web" else "AUTHENTICATED_MCP" if creation_source == "mcp" else None,
+            metadata={"status": "SUCCESS", **({"channel": creation_source} if creation_source else {})},
         )
         if commit:
             db.commit()

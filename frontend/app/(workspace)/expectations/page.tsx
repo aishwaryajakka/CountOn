@@ -130,7 +130,7 @@ export default function Expectations() {
         eyebrow="Monitoring Center"
         title="What you're counting on"
         description="Clear signals from real evidence. Matched expectations stay quiet; mismatches get attention."
-        action={<NewExpectationLink />}
+        action={<div className="actions"><button className="button secondary" onClick={board.reload}>Refresh</button><NewExpectationLink /></div>}
       />
 
       {/* Main Status Filter Tabs */}

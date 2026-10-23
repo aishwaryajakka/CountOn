@@ -28,8 +28,9 @@ six-tool discovery for connection status; browser tool calls and the former
 - “What am I counting on?” lists owned current records.
 - “Tell me about my electricity bill” resolves owned records through bounded MCP
   list/get. Multiple matches ask for selection; “the second one” is supported.
-- A complete claim compiles then captures once. Incomplete claims ask one question
-  and retain the existing signed clarification state only on the backend.
+- A complete claim compiles, asks for explicit save confirmation, then captures
+  once through MCP. Incomplete claims ask one question and retain the existing
+  signed clarification state only on the backend. Declining or cancelling saves nothing.
 - Answers, correction (“Actually make that $150”), cancellation and explicit new
   topics delegate to the canonical clarification engine, preserving grounded facts.
 - “Why did it fail?” re-authorizes the selected expectation through MCP get before
@@ -37,11 +38,13 @@ six-tool discovery for connection status; browser tool calls and the former
   deterministic MISMATCH permits grounded Bedrock explanation. Failures use the
   existing deterministic fallback, without invented evidence or causes.
 
-The browser holds only an opaque, rotated handle in memory. It contains no facts,
-tokens or signed compiler state. Refresh/user change clears it. The backend store
-is fixed-TTL (15 minutes by default), bounded and single-process. Expired/tampered/
-cross-user/replayed handles fail safely and ask the user to restate. Sessions are
-not generic chat memory. No automatic save retry occurs after a lost response.
+The browser's conversation handle is opaque and rotated. It contains no facts,
+tokens or signed compiler state. Refresh/user change clears it. Backend conversation
+state has a fixed TTL (15 minutes by default) and is user-scoped and bounded.
+Development can use in-memory stores; production requires encrypted PostgreSQL
+conversation state shared across requests/workers. Expired/tampered/cross-user/replayed
+handles fail safely and ask the user to restate. Sessions are not generic chat memory.
+No automatic save retry occurs after a lost response.
 
 Speech displays only approved server answers. Compact recorded expectation cards
 and the saved record link remain; provenance/raw JSON is not spoken. Expandable

@@ -2,7 +2,11 @@
 
 import { use, useCallback, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Edit3, FlaskConical, Link2, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, FlaskConical, Link2, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
+import { useBoard } from '@/components/app-shell';
+import { useIdentity } from '@/components/auth-provider';
+import { NotificationCard } from '@/components/notification';
+import { ExpectationExplanation } from '@/components/expectation-explanation';
 import { SourceBinding } from '@/components/source-binding';
 import { TrackingControls } from '@/components/tracking-controls';
 import { api } from '@/lib/api';
@@ -10,7 +14,7 @@ import { useResource } from '@/hooks/use-resource';
 import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui';
 import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline, RealityDecisionCard } from '@/components/expectation';
 import { ResolutionPanel } from '@/components/resolution-panel';
-import { displayTitle, getExpectationPresentationStatus, humanize } from '@/lib/presentation';
+import { creationSourceLabel, displayTitle, formatDate, getExpectationPresentationStatus, humanize } from '@/lib/presentation';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
 import {
   generateRingEvent,
@@ -20,6 +24,8 @@ import {
 
 export default function ExpectationDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const board = useBoard();
+  const { timeZone } = useIdentity();
   const [manageOpen, setManageOpen] = useState(false);
   const [simBusy, setSimBusy] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
@@ -35,6 +41,15 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
   }, [id]);
 
   const state = useResource(load, 30000);
+  const loadNotifications = useCallback(async (signal: AbortSignal) => (await api.notifications(signal)).filter(item => item.expectation_id === id), [id]);
+  const notifications = useResource(loadNotifications, 30000);
+  const loadAudit = useCallback((signal: AbortSignal) => api.auditEvents({ expectationId: id }, signal), [id]);
+  const audit = useResource(loadAudit, 30000);
+  const explanation = state.data?.latest?.result === 'MISMATCH' ? audit.data?.find(event => event.event_type === 'EXPLANATION_GENERATED' && event.evaluation_id === state.data?.latest?.id) : null;
+  const notificationRow = state.data ? { expectation: state.data.expectation, latest: state.data.latest } : undefined;
+  function refresh() {
+    state.reload(); notifications.reload(); audit.reload(); board.reload();
+  }
 
   async function triggerSimulation(type: 'ring_match' | 'ring_mismatch' | 'bee_confirm' | 'bee_cancel' | 'utility_high' | 'utility_low') {
     if (!state.data) return;
@@ -56,7 +71,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
         evaluation = await api.evaluate(exp.id, `simulation:${evidencePayload.external_event_id}`);
       }
       setSimMessage(`SIMULATED evidence · Backend evaluation: ${evaluation.result}`);
-      state.reload();
+      refresh();
     } catch (err) {
       setSimMessage(err instanceof Error ? `Simulation error: ${err.message}` : 'Failed to simulate');
     } finally {
@@ -91,9 +106,11 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   <Badge status={getExpectationPresentationStatus(state.data.expectation, state.data.latest)} />
                 </div>
                 <p className="claim">“{state.data.expectation.claim}”</p>
+                {creationSourceLabel(state.data.expectation) && <span className="caption">{creationSourceLabel(state.data.expectation)}</span>}
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="button secondary" onClick={refresh}><RefreshCw size={16} />Refresh</button>
                 <button className="button secondary" onClick={() => setManageOpen(true)}>
                   <Edit3 size={16} />
                   Manage / Edit
@@ -133,7 +150,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   evaluation={state.data.latest}
                   evidence={state.data.evidence}
                   onManage={() => setManageOpen(true)}
-                  onRefresh={() => state.reload()}
+                  onRefresh={refresh}
                 />
 
                 <ComparisonCards
@@ -146,9 +163,15 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   <EvidenceContext evaluation={state.data.latest} evidence={state.data.evidence} />
                   <p className="caption reasoning-note">
                     <ShieldCheck size={15} />
-                    Deterministic evaluation · no AI-generated explanation
+                    Deterministic evaluation remains authoritative
                   </p>
                 </section>
+                {state.data.latest?.result === 'MISMATCH' && <section className="card explanation-card" aria-label="Grounded explanation">
+                  <h2>Grounded explanation</h2>
+                  {audit.loading && <Loading label="Loading explanation record" />}
+                  {audit.error && <ErrorState error={audit.error} retry={audit.reload} />}
+                  <ExpectationExplanation key={state.data.latest.id} expectationId={id} record={explanation ?? null} loaded={!audit.loading && !audit.error} recorded={audit.reload} />
+                </section>}
 
                 {/* Evidence Simulator Quick Controls for this Expectation */}
                 <section className="card" style={{ padding: '1.25rem', backgroundColor: '#fbfcfd' }}>
@@ -249,7 +272,20 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
               </div>
 
               <aside className="detail-aside">
-                <TrackingControls key={id} expectation={state.data.expectation} refresh={state.reload} />
+                <TrackingControls key={JSON.stringify([id, state.data.expectation.baseline, state.data.expectation.target_value, state.data.expectation.comparison, state.data.expectation.deadline, state.data.expectation.materiality_threshold])} expectation={state.data.expectation} refresh={refresh} />
+                <section className="card" aria-label="Current monitoring criteria">
+                  <h2>Current monitoring criteria</h2>
+                  <dl>
+                    <div><dt>Comparison</dt><dd>{state.data.expectation.comparison ? humanize(state.data.expectation.comparison) : 'Not specified'}</dd></div>
+                    <div><dt>Baseline</dt><dd>{state.data.expectation.baseline ?? 'Not specified'}</dd></div>
+                    <div><dt>Target</dt><dd>{state.data.expectation.target_value ?? 'Not specified'}</dd></div>
+                    <div><dt>Deadline</dt><dd>{state.data.expectation.deadline ? formatDate(state.data.expectation.deadline, timeZone) : 'No deadline'}</dd></div>
+                  </dl>
+                </section>
+                <section className="section" aria-label="Expectation notifications">
+                  <h2>Notifications</h2>
+                  {notifications.loading ? <Loading label="Loading notifications" /> : notifications.error ? <ErrorState error={notifications.error} retry={notifications.reload} /> : notifications.data?.length ? notifications.data.map(item => <NotificationCard key={item.id} item={item} refresh={refresh} row={notificationRow} />) : <p>No notifications recorded for this expectation.</p>}
+                </section>
                 <section className="card">
                   <h2>
                     <Link2 size={19} />
@@ -268,7 +304,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   <Link className="button secondary full" href="/integrations">
                     View connected accounts
                   </Link>
-                  <SourceBinding key={id} expectationId={id} />
+                  <SourceBinding key={id} expectationId={id} onUpdated={refresh} />
                 </section>
 
                 <section className="soft-card">
@@ -287,7 +323,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                 key={exp.id}
                 isOpen={manageOpen}
                 onClose={() => setManageOpen(false)}
-                onUpdated={() => state.reload()}
+                onUpdated={refresh}
               />
             )}
           </>
