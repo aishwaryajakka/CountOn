@@ -96,4 +96,4 @@ Workaround:
 We introduced a deterministic three-state model: MATCH, UNKNOWN, and MISMATCH. Missing evidence remains UNKNOWN until the evaluation conditions justify a final result.
 
 Actionable suggestion:
-Provide more event-driven examples that distinguish "not yet observed" from "failed" when building proactive agent workflows.
+Provide more event-driven examples that distinguish "not yet observed" from "failed" when building proactive agent workflows. 
