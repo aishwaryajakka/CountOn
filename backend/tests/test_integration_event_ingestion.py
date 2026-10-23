@@ -1,9 +1,9 @@
 
 import pytest
-from app.integrations.email import normalize_email_event
 
-from app.integrations.ring import normalize_ring_event
 from app.integrations.bee import normalize_bee_event
+from app.integrations.email import normalize_email_event
+from app.integrations.ring import normalize_ring_event
 
 
 def test_normalize_ring_event():
@@ -16,7 +16,7 @@ def test_normalize_ring_event():
     evidence = normalize_ring_event(event)
 
     assert evidence.external_event_id == "ring-1"
-    assert evidence.source == "ring"
+    assert evidence.source == "ring_simulator"
     assert evidence.metric == "camera_event"
     assert evidence.value == {"event_type": "motion"}
     assert evidence.confidence == 1.0
@@ -34,7 +34,7 @@ def test_normalize_bee_event():
     evidence = normalize_bee_event(event)
 
     assert evidence.external_event_id == "bee-1"
-    assert evidence.source == "bee"
+    assert evidence.source == "bee_simulator"
     assert evidence.metric == "steps"
     assert evidence.value == {"amount": 5200}
     assert evidence.unit == "steps"
@@ -95,7 +95,7 @@ pytestmark = pytest.mark.integration
 def test_ring_event_ingestion_api(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201
     expectation_id = expectation.json()["id"]
@@ -111,7 +111,7 @@ def test_ring_event_ingestion_api(client, numeric_payload):
 
     assert response.status_code == 201, response.text
     evidence = response.json()
-    assert evidence["source"] == "ring"
+    assert evidence["source"] == "ring_simulator"
     assert evidence["external_event_id"] == "ring-api-1"
     assert evidence["metric"] == "camera_event"
 
@@ -119,7 +119,7 @@ def test_ring_event_ingestion_api(client, numeric_payload):
 def test_bee_event_ingestion_api(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201
     expectation_id = expectation.json()["id"]
@@ -137,7 +137,7 @@ def test_bee_event_ingestion_api(client, numeric_payload):
 
     assert response.status_code == 201, response.text
     evidence = response.json()
-    assert evidence["source"] == "bee"
+    assert evidence["source"] == "bee_simulator"
     assert evidence["external_event_id"] == "bee-api-1"
     assert evidence["value"] == {"amount": 130}
 
@@ -145,7 +145,7 @@ def test_bee_event_ingestion_api(client, numeric_payload):
 def test_ring_event_replay_is_idempotent(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201
     expectation_id = expectation.json()["id"]
@@ -168,7 +168,7 @@ def test_ring_event_replay_is_idempotent(client, numeric_payload):
 def test_bee_event_rejects_invalid_payload(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201
     expectation_id = expectation.json()["id"]
@@ -183,7 +183,7 @@ def test_bee_event_rejects_invalid_payload(client, numeric_payload):
 def test_bee_event_replay_is_idempotent(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201
     expectation_id = expectation.json()["id"]
@@ -222,7 +222,7 @@ def test_normalize_billing_email():
     assert evidence.metric == "billing_amount"
     assert evidence.value == {"amount": 1250.50}
     assert evidence.unit == "INR"
-    assert evidence.raw_data == event
+    assert evidence.raw_data == {"provenance": "USER_SUBMITTED", "provider_record_ref": event["message_id"]}
 
 
 def test_normalize_delivery_email():
@@ -283,7 +283,7 @@ def test_invalid_email_events_are_rejected(event):
 def test_email_event_ingestion_api(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
     expectation_id = expectation.json()["id"]
@@ -311,7 +311,7 @@ def test_email_event_ingestion_api(client, numeric_payload):
 def test_email_event_replay_is_idempotent(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
     expectation_id = expectation.json()["id"]

@@ -3,11 +3,11 @@
 Uses the backend-only secret key for admin create/delete, never for API auth.
 No emails are sent. Deletes only identities created by this invocation.
 """
-from uuid import UUID, uuid4
 import os
 import secrets
 import subprocess
 import sys
+from uuid import UUID, uuid4
 
 from _common import BACKEND_ROOT, require_target, run_cli
 
@@ -18,6 +18,7 @@ def main() -> int:
     import httpx
     from dotenv import dotenv_values
     from sqlalchemy import text
+
     from app.core.auth import get_token_verifier
     from app.core.config import get_settings
     from app.db.session import engine
@@ -61,8 +62,9 @@ def main() -> int:
                         verified=get_token_verifier().verify(token)
                     except Exception:
                         # Safe diagnostics: no token, identity, URL or key output.
-                        import jwt
                         from time import time
+
+                        import jwt
                         decoded=jwt.decode(token,options={"verify_signature":False})
                         print('JWT clock offset (seconds):', round(decoded.get('iat',0)-time()))
                         print('JWT issuer matches:', decoded.get('iss')==get_token_verifier().issuer)
@@ -150,13 +152,14 @@ def main() -> int:
             finally:
                 # No broad deletes: each ID came from this run's admin create.
                 cleanup_ok=True
-                from sqlalchemy import create_engine,delete
+                from sqlalchemy import create_engine, delete
+
                 from app.db.models import Profile
                 local_engine=create_engine(settings.local_database_url)
                 try:
                     with local_engine.begin() as local_connection:
                         local_connection.execute(delete(Profile).where(Profile.id.in_(created)))
-                except Exception:
+                except Exception:  # noqa: BLE001 - Continue exact cleanup without exposing credentials
                     cleanup_ok=False
                 finally:
                     local_engine.dispose()

@@ -12,9 +12,9 @@ from db.scripts._demo_identity import ensure_auth_user, ensure_demo_profile
 
 
 def settings(**overrides):
-    values = dict(supabase_secret_key=SecretStr("sb_secret_test_fixture"),
-                  counton_demo_email=DEMO_EMAIL, counton_demo_user_id=None,
-                  counton_demo_password=SecretStr("unit-test-only-generated-password"))
+    values = {"supabase_secret_key": SecretStr("sb_secret_test_fixture"),
+                  "counton_demo_email": DEMO_EMAIL, "counton_demo_user_id": None,
+                  "counton_demo_password": SecretStr("unit-test-only-generated-password")}
     return SimpleNamespace(**(values | overrides))
 
 
@@ -94,18 +94,16 @@ def test_failed_lookup_never_creates_user():
     def handler(request):
         assert request.method == "GET"
         return httpx.Response(503)
-    with httpx.Client(base_url="https://test.supabase.co", transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(httpx.HTTPStatusError):
-            ensure_auth_user(client, settings())
+    with httpx.Client(base_url="https://test.supabase.co", transport=httpx.MockTransport(handler)) as client, pytest.raises(httpx.HTTPStatusError):
+        ensure_auth_user(client, settings())
 
 
 def test_missing_password_does_not_create_account():
     def handler(request):
         assert request.method == "GET"
         return httpx.Response(200, json={"users": []})
-    with httpx.Client(base_url="https://test.supabase.co", transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(RuntimeError, match="password required"):
-            ensure_auth_user(client, settings(counton_demo_password=None))
+    with httpx.Client(base_url="https://test.supabase.co", transport=httpx.MockTransport(handler)) as client, pytest.raises(RuntimeError, match="password required"):
+        ensure_auth_user(client, settings(counton_demo_password=None))
 
 
 def test_concurrent_creation_reuses_winner_without_reset():
@@ -136,10 +134,10 @@ def test_profile_created_reused_and_canonical_name(db):
 
 @pytest.mark.integration
 def test_verified_auth_adopts_profile_without_deleting_application_data(db, users, numeric_payload):
+    from app.db.models import Expectation, Profile
     from app.schemas.expectation import ExpectationCreate
     from app.services.expectation_service import create_expectation
-    from app.db.models import Expectation, Profile
-    from db.scripts._demo import seed, clear
+    from db.scripts._demo import clear, seed
     owner = users[0].id
     original = create_expectation(db, ExpectationCreate(**numeric_payload), owner)
     with pytest.raises(RuntimeError, match="unrelated profile"):

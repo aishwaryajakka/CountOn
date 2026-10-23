@@ -9,9 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import CurrentUser, get_db
-from app.db.models import Expectation, ExpectationStatus, Notification
-
 from app.api.v1.notifications import NotificationResponse
+from app.db.models import Expectation, ExpectationStatus, Notification
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

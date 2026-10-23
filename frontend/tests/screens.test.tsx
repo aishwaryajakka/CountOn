@@ -4,14 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { WatchedExpectation } from '@/lib/types';
 import { evidence, evaluation, expectation, integration, notification } from './fixtures';
-const mocks = vi.hoisted(() => ({ board: { data: null as WatchedExpectation[] | null, error: null as Error | null, loading: false, reload: vi.fn() }, signIn: vi.fn(), replace: vi.fn(), push: vi.fn(), evidence: vi.fn(), expectation: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), integrations: vi.fn(), notifications: vi.fn(), updateNotification: vi.fn() }));
+const mocks = vi.hoisted(() => ({ board: { data: null as WatchedExpectation[] | null, error: null as Error | null, loading: false, reload: vi.fn() }, signIn: vi.fn(), replace: vi.fn(), push: vi.fn(), evidence: vi.fn(), expectation: vi.fn(), evaluations: vi.fn(), latest: vi.fn(), integrations: vi.fn(), notifications: vi.fn(), auditEvents: vi.fn(), updateNotification: vi.fn(), request: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace, push: mocks.push }) }));
 vi.mock('@/components/app-shell', () => ({ useBoard: () => mocks.board }));
 vi.mock('@/components/auth-provider', () => ({ useAuth: () => ({ session: null, loading: false, error: null }), useIdentity: () => ({ firstName: 'Test', name: 'Test User', timeZone: 'America/Chicago' }) }));
 vi.mock('@/lib/supabase', () => ({ getSupabase: () => ({ auth: { signInWithPassword: mocks.signIn } }) }));
 vi.mock('@/lib/api', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/api')>();
-  return { ...actual, api: { evidence: mocks.evidence, expectation: mocks.expectation, evaluations: mocks.evaluations, latest: mocks.latest, integrations: mocks.integrations, notifications: mocks.notifications, updateNotification: mocks.updateNotification } };
+  return { ...actual, api: { evidence: mocks.evidence, expectation: mocks.expectation, evaluations: mocks.evaluations, latest: mocks.latest, integrations: mocks.integrations, notifications: mocks.notifications, auditEvents: mocks.auditEvents, updateNotification: mocks.updateNotification, request: mocks.request } };
 });
 import Dashboard from '@/app/(workspace)/dashboard/page';
 import Expectations from '@/app/(workspace)/expectations/page';
@@ -24,16 +24,37 @@ import { NotificationCard } from '@/components/notification';
 import { ErrorState } from '@/components/ui';
 import { Timeline } from '@/components/expectation';
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.board.data = [{ expectation, latest: evaluation }]; mocks.board.error = null; mocks.board.loading = false;
-  mocks.evidence.mockResolvedValue(evidence); mocks.expectation.mockResolvedValue(expectation); mocks.evaluations.mockResolvedValue([evaluation]); mocks.latest.mockResolvedValue(evaluation); mocks.integrations.mockResolvedValue([integration]); mocks.notifications.mockResolvedValue([notification]);
+  vi.clearAllMocks(); mocks.request.mockImplementation((path: string) => Promise.resolve(path.endsWith('/monitoring') ? { status: 'pending', next_run_at: '2026-10-16T17:00:00Z', last_run_at: null, interval_seconds: 3600, recurring: false, max_evidence_age_seconds: 86400, max_attempts: 5, attempt_count: 0, connection_id: null, window_start_at: null, provider_config: {} } : path === '/notification-preferences' ? { email_enabled: false, mismatch_enabled: true, deadline_enabled: false, connection_enabled: true, quiet_enabled: false, quiet_start_hour: 22, quiet_end_hour: 8, timezone: 'UTC' } : [])); mocks.board.data = [{ expectation, latest: evaluation }]; mocks.board.error = null; mocks.board.loading = false;
+  mocks.evidence.mockResolvedValue(evidence); mocks.expectation.mockResolvedValue(expectation); mocks.evaluations.mockResolvedValue([evaluation]); mocks.latest.mockResolvedValue(evaluation); mocks.integrations.mockResolvedValue([integration]); mocks.notifications.mockResolvedValue([notification]); mocks.auditEvents.mockResolvedValue([]);
 });
 it('shows readable result labels in activity rather than raw evaluator enums', () => {
   render(<Activity />);
   expect(screen.getByText('Electricity bill · Needs attention')).toBeInTheDocument();
   expect(screen.queryByText(/MISMATCH/)).not.toBeInTheDocument();
 });
+it('renders persisted audit history from the backend', async () => {
+  mocks.auditEvents.mockResolvedValue([{
+    audit_event_id: 'audit-id', counton_user_id: expectation.user_id,
+    expectation_id: expectation.id, event_type: 'SOURCE_AUTHORIZED',
+    occurred_at: expectation.created_at, source_provider: 'GMAIL',
+    source_type: 'EMAIL', source_provenance: 'OFFICIAL_OAUTH',
+    source_reference: null, evidence_id: null, evaluation_id: null,
+    result_status: null, action_taken: 'provider.source_bound', actor_type: 'USER',
+    action_metadata: {}, request_id: 'request-id',
+    expectation: { id: expectation.id, claim: expectation.claim, status: expectation.status },
+    evidence: null,
+  }]);
+  render(<Activity />);
+  expect(await screen.findByRole('table', { name: 'Audit History' })).toBeInTheDocument();
+  for (const heading of ['Expectation', 'Evidence', 'Source', 'Result', 'Action', 'Timestamp']) {
+    expect(screen.getByRole('columnheader', { name: heading })).toBeInTheDocument();
+  }
+  expect(screen.getByText('Provider source bound')).toBeInTheDocument();
+  expect(screen.getByText('Gmail · Official oauth')).toBeInTheDocument();
+  expect(screen.queryByText('Source authorized')).not.toBeInTheDocument();
+});
 it('renders the login form and submits through Supabase Auth', async () => {
-  mocks.signIn.mockResolvedValue({ data: {}, error: null });
+  mocks.signIn.mockResolvedValue({ data: { session: { access_token: 'fixture-token', user: { id: 'fixture-user' } } }, error: null });
   render(<Login />); const user = userEvent.setup();
   await user.type(screen.getByLabelText('Email address'), 'user@example.test');
   await user.type(screen.getByLabelText('Password'), 'fixture-only-password');
@@ -68,7 +89,8 @@ it('renders detail evidence and an actual timestamp timeline', async () => {
   await act(async () => { render(<Suspense fallback={<span>Loading detail</span>}><Detail params={params} /></Suspense>); await params; });
   expect(await screen.findByRole('heading', { name: 'Evidence gathered' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Timeline' })).toBeInTheDocument();
-  expect(screen.getAllByText('$162.00')).toHaveLength(2);
+  // Comparison, decision and resolution panels all use the same persisted observation.
+  expect(screen.getAllByText('$162.00')).toHaveLength(4);
 });
 it('renders backend connections with an honest demo badge', async () => {
   render(<Integrations />);

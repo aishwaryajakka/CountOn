@@ -1,0 +1,1312 @@
+{
+  "source": "integration/counton-canonical",
+  "source_commit": "cc1e58758db0e7e208121d58d81a2b93d845aeee",
+  "target_parent": "1af8aefd8fb3a1c122fd4f118654503737979c13",
+  "conflicts": {
+    "backend/.gitignore": "Root canonical ignore supersedes nested ignore and protects all credentials/build artifacts.",
+    "backend/alembic/env.py": "One canonical settings/metadata graph; reject legacy credential model registration.",
+    "backend/app/api/operations.py": "Retain canonical logging, exact CORS and budgets, avoiding duplicated middleware.",
+    "backend/app/api/v1/integrations.py": "Retain canonical owned CRUD; separately port compatible manual-event/calendar/read/sync surfaces through canonical authority.",
+    "backend/app/api/v1/notifications.py": "Retain owned preferences/inbox serialization; dashboard API uses this response model.",
+    "backend/app/api/v1/router.py": "One route registration, canonical six-tool/ASK/provider/agent stack; add reviewed main routes separately.",
+    "backend/app/core/config.py": "Canonical validated settings, no duplicate fields/session authority; port SMTP options separately.",
+    "backend/app/db/models/__init__.py": "Canonical metadata only, not alternate OAuth/calendar/delivery schemas.",
+    "backend/app/db/models/integration.py": "Current encrypted credential/lifecycle model; sync health is canonical ProviderSyncState.",
+    "backend/app/db/models/operations.py": "Current owned mandatory monitoring, fenced leases and single outbox contract.",
+    "backend/app/integrations/bee/__init__.py": "Retain simulated/context boundary; add manual numeric compatibility adapter with explicit simulated provenance.",
+    "backend/app/integrations/ring/__init__.py": "Retain simulation boundary; port manual event compatibility adapter without claiming live Ring.",
+    "backend/app/main.py": "Canonical single app/lifespan with durable conversations and separately supervised workers, no insecure duplicate startup loops.",
+    "backend/app/repositories/integration.py": "Canonical owned queries and lifecycle invalidation.",
+    "backend/app/repositories/notification.py": "Current deduplicated owner/evaluation/expectation constraints.",
+    "backend/app/schemas/integration.py": "Canonical public safe credential-state response, no token fields.",
+    "backend/app/services/evidence_service.py": "Current minimized provenance, replay conflict checking, audits and monitoring wake.",
+    "backend/app/services/monitoring_service.py": "Canonical durable leases/scheduling/source permissions replace unsafe in-API polling.",
+    "backend/app/services/notification_service.py": "Canonical inbox/preferences/episode dedupe; preserve SMTP through same outbox separately.",
+    "backend/requirements.txt": "Current security-patched SDK/crypto constraints, both MCP HTTPX2 and provider HTTPX.",
+    "backend/tests/test_operational_data.py": "Retain stronger canonical persisted history/ownership expectations.",
+    "frontend/components/integration.tsx": "Retain complete canonical source/consent/CLI/status controls; main OAuth helper calls map to current provider UI.",
+    "frontend/lib/api.ts": "Canonical authenticated client, safe public HTTPS config and real simulator APIs; preserve dashboard helpers separately."
+  },
+  "superseded_duplicate_files": [
+    {
+      "path": "backend/.gitignore",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Redundant nested ignore; canonical root covers these rules and preserves credential-free templates.",
+      "coverage": "root gitignore checks and Gitleaks source/history scan"
+    },
+    {
+      "path": "backend/alembic/versions/07bc7f5ce116_add_notification_delivery_queue.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/298fc0cf83dc_add_integration_sync_health.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/4c35f2c88019_add_oauth_state_records.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/501e82ab1613_prevent_duplicate_monitoring_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/70e96a04757b_add_calendar_event_persistence.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/8b10af011a55_allow_standalone_monitoring_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/e5e411421101_add_notification_delivery_processing_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/e8b2dc123ad7_add_encrypted_oauth_credentials.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/alembic/versions/f7a9c2d1b640_add_oauth_credentials.py",
+      "functions": [
+        "_table_exists",
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Incompatible alternative main-only migration history. Required canonical 13-revision graph retained; canonical owned credentials/projections/outbox provide the capability. Applying both histories duplicates tables/constraints.",
+      "coverage": "backend/tests/test_migrations.py; test_auth_rls.py; test_provider_sync.py; test_automatic_tracking.py"
+    },
+    {
+      "path": "backend/app/db/models/calendar_event.py",
+      "functions": [
+        "CalendarEvent"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/app/db/models/oauth_credential.py",
+      "functions": [
+        "OAuthCredential"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/db/models/oauth_state.py",
+      "syntax": "INVALID: positional argument follows keyword argument (<unknown>, line 69)",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/repositories/notification_delivery.py",
+      "functions": [
+        "enqueue_delivery",
+        "claim_due_deliveries",
+        "get_delivery",
+        "recover_stale_deliveries"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_automatic_tracking.py; test_monitoring.py; test_connected_accounts.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/app/repositories/oauth_credential.py",
+      "functions": [
+        "get_by_connection_id",
+        "save",
+        "delete"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/repositories/oauth_state.py",
+      "functions": [
+        "hash_state",
+        "create_state",
+        "consume_state"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/gmail_service.py",
+      "functions": [
+        "fetch_gmail_messages"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/google_calendar_service.py",
+      "functions": [
+        "list_google_calendar_events"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/app/services/google_calendar_token_service.py",
+      "functions": [
+        "get_valid_google_access_token"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/app/services/google_oauth_service.py",
+      "functions": [
+        "GoogleOAuthError",
+        "build_authorization_url",
+        "exchange_authorization_code",
+        "fetch_google_userinfo",
+        "refresh_google_access_token",
+        "build_gmail_authorization_url",
+        "exchange_gmail_authorization_code"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/google_oauth_state.py",
+      "functions": [
+        "create_oauth_state",
+        "consume_oauth_state"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/integration_sync_health.py",
+      "functions": [
+        "_get_connection",
+        "start_attempt",
+        "record_failure",
+        "record_success"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_integration_retry.py"
+    },
+    {
+      "path": "backend/app/services/microsoft_calendar_service.py",
+      "functions": [
+        "MicrosoftCalendarError",
+        "_parse_event_datetime",
+        "list_microsoft_calendar_events"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/app/services/microsoft_oauth_service.py",
+      "functions": [
+        "_tenant",
+        "_client_credentials",
+        "_scopes",
+        "build_authorization_url",
+        "exchange_authorization_code",
+        "refresh_access_token",
+        "fetch_user_profile"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/microsoft_outlook_service.py",
+      "functions": [
+        "MicrosoftOutlookError",
+        "list_outlook_emails"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_release_journey.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/app/services/microsoft_token_service.py",
+      "functions": [
+        "MicrosoftOAuthError",
+        "get_valid_microsoft_access_token",
+        "_refresh_token"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/notification_delivery_service.py",
+      "functions": [
+        "DeliveryAdapter",
+        "enqueue_notification_delivery",
+        "_retry_delay",
+        "_record_failure",
+        "run_delivery_cycle"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_automatic_tracking.py; test_monitoring.py; test_connected_accounts.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/app/services/oauth_credential_service.py",
+      "functions": [
+        "save_credentials",
+        "get_credentials",
+        "delete_credentials",
+        "save_google_connection"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/oauth_crypto.py",
+      "functions": [
+        "_get_fernet",
+        "encrypt_token",
+        "decrypt_token"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/oauth_state_service.py",
+      "functions": [
+        "create_state",
+        "consume_state"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/oauth_token_encryption.py",
+      "functions": [
+        "TokenEncryptionError",
+        "_get_cipher",
+        "encrypt_token",
+        "decrypt_token"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/app/services/outlook_sync_service.py",
+      "functions": [
+        "_extract_evidence",
+        "sync_outlook_emails"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_release_journey.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/tests/test_google_calendar_service.py",
+      "functions": [
+        "test_list_events_success",
+        "test_calendar_http_error_is_sanitized",
+        "test_network_error_is_sanitized",
+        "test_invalid_json_shape_is_rejected"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/tests/test_google_calendar_token_service.py",
+      "functions": [
+        "setup_service",
+        "test_valid_token_is_reused",
+        "test_expired_token_is_refreshed_and_saved",
+        "test_other_user_cannot_access_connection",
+        "test_missing_refresh_token_fails"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_source_correlation.py; test_calendar_api.py"
+    },
+    {
+      "path": "backend/tests/test_google_gmail_oauth.py",
+      "functions": [
+        "gmail_settings",
+        "test_build_gmail_authorization_url",
+        "test_build_gmail_authorization_url_requires_configuration",
+        "test_build_gmail_authorization_url_requires_state",
+        "test_exchange_gmail_authorization_code_success",
+        "test_exchange_gmail_authorization_code_requires_code",
+        "test_exchange_gmail_authorization_code_rejects_invalid_token",
+        "test_exchange_gmail_authorization_code_handles_http_error"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/tests/test_google_gmail_oauth_callback.py",
+      "functions": [
+        "callback_setup",
+        "make_request",
+        "test_gmail_callback_rejects_mismatched_state",
+        "test_gmail_callback_rejects_unknown_state",
+        "test_gmail_callback_rejects_missing_cookie",
+        "test_gmail_callback_rejects_missing_code",
+        "test_gmail_callback_rejects_missing_readonly_scope",
+        "test_gmail_callback_rejects_invalid_identity",
+        "test_gmail_callback_saves_connection_and_credentials"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/tests/test_integration_sync_health.py",
+      "functions": [
+        "FakeDB",
+        "setup_connection",
+        "test_start_attempt_updates_status_and_timestamp",
+        "test_transient_failure_schedules_retry",
+        "test_authentication_failure_does_not_schedule_retry",
+        "test_success_resets_failure_state",
+        "test_other_users_connection_is_not_accessible",
+        "test_retry_limit_stops_scheduling",
+        "test_permanent_failure_does_not_schedule_retry"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_automatic_tracking.py; test_integration_retry.py"
+    },
+    {
+      "path": "backend/tests/test_monitoring_service.py",
+      "functions": [
+        "make_expectation",
+        "make_job",
+        "test_missing_evidence_creates_notification",
+        "test_overdue_expectation_creates_notification",
+        "test_overdue_and_missing_evidence_create_both_notifications",
+        "test_terminal_expectation_completes_job",
+        "test_monitoring_job_is_rescheduled_for_next_check",
+        "test_existing_monitoring_notification_is_not_created_again",
+        "test_monitoring_job_creates_real_notifications_and_reschedules"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_monitoring.py; test_automatic_tracking.py; test_release_journey.py"
+    },
+    {
+      "path": "backend/tests/test_notification_delivery.py",
+      "functions": [
+        "test_retry_delay_uses_exponential_backoff",
+        "test_retry_delay_never_exceeds_six_hours",
+        "test_record_failure_schedules_retry",
+        "test_record_failure_marks_delivery_failed_at_max_attempts",
+        "test_record_failure_uses_one_minute_delay_for_first_attempt",
+        "test_delivery_cycle_returns_zero_counts_when_queue_is_empty",
+        "test_delivery_cycle_marks_successful_delivery"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_automatic_tracking.py; test_monitoring.py; test_connected_accounts.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/tests/test_notification_email_enqueue.py",
+      "functions": [
+        "test_new_mismatch_enqueues_email_once",
+        "test_existing_mismatch_does_not_enqueue_another_email",
+        "test_match_does_not_enqueue_email",
+        "test_unknown_does_not_enqueue_email"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_automatic_tracking.py; test_monitoring.py; test_connected_accounts.py; test_main_merge_compatibility.py"
+    },
+    {
+      "path": "backend/tests/test_oauth_credential_service.py",
+      "functions": [
+        "fake_db",
+        "test_save_credentials_encrypts_tokens",
+        "test_save_credentials_without_refresh_token",
+        "test_get_credentials_decrypts_tokens",
+        "test_get_credentials_returns_none_when_missing",
+        "test_delete_credentials_delegates_to_repository",
+        "test_save_fails_closed_when_encryption_fails"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/tests/test_oauth_token_encryption.py",
+      "functions": [
+        "key",
+        "test_token_round_trip",
+        "test_wrong_key_cannot_decrypt",
+        "test_tampered_ciphertext_is_rejected",
+        "test_missing_key_fails_closed",
+        "test_empty_token_is_rejected"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_source_planning.py; test_production_security.py"
+    },
+    {
+      "path": "backend/tests/test_outlook_sync.py",
+      "functions": [
+        "test_extract_structured_outlook_evidence",
+        "test_ignore_normal_outlook_email",
+        "test_ignore_evidence_without_timezone",
+        "test_sync_creates_evidence_and_evaluates_matching_expectation",
+        "test_sync_skips_email_without_matching_expectation",
+        "test_sync_creates_evidence_and_evaluates_matching_expectation",
+        "test_sync_skips_email_without_matching_expectation",
+        "test_sync_processes_repeated_outlook_message",
+        "test_extract_structured_evidence_with_lowercase_marker",
+        "test_sync_skips_email_without_message_id"
+      ],
+      "syntax": "valid",
+      "resolution": "Superseded duplicate implementation/test contract; canonical behavior coverage retained; see merge report mapping.",
+      "why": "Obsolete alternate implementation/schema contract, replaced by the already-tested canonical authority, not removal of the user capability. Main history and safety references preserve original source. These implementation-specific tests were not counted as executed; canonical scenarios and retained/new public-interface regressions are the supported contract. No canonical tests removed/skipped.",
+      "coverage": "backend/tests/test_provider_sync.py; test_microsoft_provider.py; test_release_journey.py; test_main_merge_compatibility.py"
+    }
+  ],
+  "preserved_main_additions": [
+    "dashboard summary/unresolved mismatch APIs",
+    "calendar projected-event URL",
+    "legacy OAuth/sync/manual-event URLs backed by canonical services",
+    "explicit numeric Bee and camera/email manual simulation normalization",
+    "bounded retry helper",
+    "SMTP adapter on the single canonical outbox",
+    "Quality Hub route backed by owned audit history; nonexistent review/benchmark APIs disclosed"
+  ],
+  "incoming_files": [
+    {
+      "path": "backend/.gitignore"
+    },
+    {
+      "path": "backend/alembic/env.py",
+      "functions": [
+        "include_object",
+        "run_migrations_offline",
+        "run_with_connection",
+        "run_migrations_online"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/07bc7f5ce116_add_notification_delivery_queue.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/298fc0cf83dc_add_integration_sync_health.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/4c35f2c88019_add_oauth_state_records.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/501e82ab1613_prevent_duplicate_monitoring_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/70e96a04757b_add_calendar_event_persistence.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/8b10af011a55_allow_standalone_monitoring_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/e5e411421101_add_notification_delivery_processing_.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/e8b2dc123ad7_add_encrypted_oauth_credentials.py",
+      "functions": [
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/alembic/versions/f7a9c2d1b640_add_oauth_credentials.py",
+      "functions": [
+        "_table_exists",
+        "upgrade",
+        "downgrade"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/api/operations.py",
+      "functions": [
+        "ExplicitCORSMiddleware",
+        "OperationalMiddleware"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/api/v1/calendar.py",
+      "functions": [
+        "list_events"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/api/v1/dashboard.py",
+      "functions": [
+        "DashboardSummaryResponse",
+        "dashboard_summary",
+        "unresolved_mismatches"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/api/v1/integrations.py",
+      "syntax": "INVALID: invalid syntax (<unknown>, line 107)"
+    },
+    {
+      "path": "backend/app/api/v1/notifications.py",
+      "functions": [
+        "NotificationResponse",
+        "NotificationUpdate",
+        "notifications",
+        "get",
+        "update"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/api/v1/oauth.py",
+      "syntax": "INVALID: positional argument follows keyword argument (<unknown>, line 1052)"
+    },
+    {
+      "path": "backend/app/api/v1/router.py",
+      "syntax": "INVALID: unmatched ')' (<unknown>, line 19)"
+    },
+    {
+      "path": "backend/app/core/config.py",
+      "functions": [
+        "Settings",
+        "get_settings"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/db/models/__init__.py",
+      "functions": [],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/db/models/calendar_event.py",
+      "functions": [
+        "CalendarEvent"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/db/models/integration.py",
+      "functions": [
+        "Provider",
+        "ConnectionType",
+        "ConnectionStatus",
+        "IntegrationConnection"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/db/models/oauth_credential.py",
+      "functions": [
+        "OAuthCredential"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/db/models/oauth_state.py",
+      "syntax": "INVALID: positional argument follows keyword argument (<unknown>, line 69)"
+    },
+    {
+      "path": "backend/app/db/models/operations.py",
+      "functions": [
+        "MonitoringJob",
+        "Notification",
+        "NotificationDelivery",
+        "NotificationDelivery",
+        "AuditEvent"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/integrations/bee/__init__.py",
+      "syntax": "INVALID: expected an indented block (<unknown>, line 31)"
+    },
+    {
+      "path": "backend/app/integrations/email/__init__.py",
+      "functions": [
+        "normalize_email_event"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/integrations/ring/__init__.py",
+      "functions": [
+        "normalize_ring_event"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/main.py",
+      "syntax": "INVALID: unexpected indent (<unknown>, line 213)"
+    },
+    {
+      "path": "backend/app/repositories/integration.py",
+      "functions": [
+        "create",
+        "get",
+        "list_connections",
+        "update",
+        "delete"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/repositories/notification.py",
+      "functions": [
+        "create_mismatch",
+        "create_monitoring_notification",
+        "get",
+        "list_notifications",
+        "update_status",
+        "create_monitoring_notification"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/repositories/notification_delivery.py",
+      "functions": [
+        "enqueue_delivery",
+        "claim_due_deliveries",
+        "get_delivery",
+        "recover_stale_deliveries"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/repositories/oauth_credential.py",
+      "functions": [
+        "get_by_connection_id",
+        "save",
+        "delete"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/repositories/oauth_state.py",
+      "functions": [
+        "hash_state",
+        "create_state",
+        "consume_state"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/schemas/integration.py",
+      "functions": [
+        "ConnectionMetadata",
+        "IntegrationCreate",
+        "IntegrationUpdate",
+        "IntegrationResponse"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/email_delivery.py",
+      "functions": [
+        "SmtpEmailDelivery"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/evidence_service.py",
+      "functions": [
+        "add_evidence",
+        "list_evidence"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/gmail_service.py",
+      "functions": [
+        "fetch_gmail_messages"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/google_calendar_service.py",
+      "functions": [
+        "list_google_calendar_events"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/google_calendar_token_service.py",
+      "functions": [
+        "get_valid_google_access_token"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/google_oauth_service.py",
+      "functions": [
+        "GoogleOAuthError",
+        "build_authorization_url",
+        "exchange_authorization_code",
+        "fetch_google_userinfo",
+        "refresh_google_access_token",
+        "build_gmail_authorization_url",
+        "exchange_gmail_authorization_code"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/google_oauth_state.py",
+      "functions": [
+        "create_oauth_state",
+        "consume_oauth_state"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/integration_event_service.py",
+      "syntax": "INVALID: unmatched ')' (<unknown>, line 45)"
+    },
+    {
+      "path": "backend/app/services/integration_retry.py",
+      "functions": [
+        "SyncStatus",
+        "SyncErrorKind",
+        "RetryDecision",
+        "calculate_retry"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/integration_sync_health.py",
+      "functions": [
+        "_get_connection",
+        "start_attempt",
+        "record_failure",
+        "record_success"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/microsoft_calendar_service.py",
+      "functions": [
+        "MicrosoftCalendarError",
+        "_parse_event_datetime",
+        "list_microsoft_calendar_events"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/microsoft_oauth_service.py",
+      "functions": [
+        "_tenant",
+        "_client_credentials",
+        "_scopes",
+        "build_authorization_url",
+        "exchange_authorization_code",
+        "refresh_access_token",
+        "fetch_user_profile"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/microsoft_outlook_service.py",
+      "functions": [
+        "MicrosoftOutlookError",
+        "list_outlook_emails"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/microsoft_token_service.py",
+      "functions": [
+        "MicrosoftOAuthError",
+        "get_valid_microsoft_access_token",
+        "_refresh_token"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/monitoring_service.py",
+      "functions": [
+        "process_monitoring_job",
+        "run_monitoring_cycle"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/notification_delivery_service.py",
+      "functions": [
+        "DeliveryAdapter",
+        "enqueue_notification_delivery",
+        "_retry_delay",
+        "_record_failure",
+        "run_delivery_cycle"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/notification_service.py",
+      "functions": [
+        "for_evaluation",
+        "get",
+        "list_notifications",
+        "update"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/oauth_credential_service.py",
+      "functions": [
+        "save_credentials",
+        "get_credentials",
+        "delete_credentials",
+        "save_google_connection"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/oauth_crypto.py",
+      "functions": [
+        "_get_fernet",
+        "encrypt_token",
+        "decrypt_token"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/oauth_state_service.py",
+      "functions": [
+        "create_state",
+        "consume_state"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/oauth_token_encryption.py",
+      "functions": [
+        "TokenEncryptionError",
+        "_get_cipher",
+        "encrypt_token",
+        "decrypt_token"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/outlook_sync_service.py",
+      "functions": [
+        "_extract_evidence",
+        "sync_outlook_emails"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/app/services/supabase_user_service.py",
+      "functions": [
+        "get_user_email"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/requirements.txt"
+    },
+    {
+      "path": "backend/tests/test_bee_integration.py",
+      "functions": [
+        "bee_event",
+        "test_normalize_bee_event",
+        "test_invalid_bee_events_are_rejected",
+        "test_bee_event_ingestion_api",
+        "test_bee_event_replay_is_idempotent",
+        "test_bee_event_invalid_payload_returns_422",
+        "test_bee_event_missing_expectation_returns_404",
+        "test_bee_event_cannot_be_added_to_another_users_expectation"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_calendar_api.py",
+      "functions": [
+        "test_calendar_events_success",
+        "test_calendar_events_google_error_is_sanitized",
+        "test_calendar_events_reject_invalid_connection_id",
+        "test_calendar_events_requires_authentication"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_dashboard.py",
+      "functions": [
+        "test_dashboard_summary_counts_statuses",
+        "test_dashboard_summary_empty",
+        "test_unresolved_mismatches_returns_pending_mismatches",
+        "test_unresolved_mismatches_pagination_validation"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_email_delivery.py",
+      "functions": [
+        "settings",
+        "notification",
+        "test_deliver_sends_email_using_tls",
+        "test_deliver_fails_when_smtp_is_not_configured",
+        "test_deliver_fails_when_recipient_is_rejected"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_google_calendar_service.py",
+      "functions": [
+        "test_list_events_success",
+        "test_calendar_http_error_is_sanitized",
+        "test_network_error_is_sanitized",
+        "test_invalid_json_shape_is_rejected"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_google_calendar_token_service.py",
+      "functions": [
+        "setup_service",
+        "test_valid_token_is_reused",
+        "test_expired_token_is_refreshed_and_saved",
+        "test_other_user_cannot_access_connection",
+        "test_missing_refresh_token_fails"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_google_gmail_oauth.py",
+      "functions": [
+        "gmail_settings",
+        "test_build_gmail_authorization_url",
+        "test_build_gmail_authorization_url_requires_configuration",
+        "test_build_gmail_authorization_url_requires_state",
+        "test_exchange_gmail_authorization_code_success",
+        "test_exchange_gmail_authorization_code_requires_code",
+        "test_exchange_gmail_authorization_code_rejects_invalid_token",
+        "test_exchange_gmail_authorization_code_handles_http_error"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_google_gmail_oauth_callback.py",
+      "functions": [
+        "callback_setup",
+        "make_request",
+        "test_gmail_callback_rejects_mismatched_state",
+        "test_gmail_callback_rejects_unknown_state",
+        "test_gmail_callback_rejects_missing_cookie",
+        "test_gmail_callback_rejects_missing_code",
+        "test_gmail_callback_rejects_missing_readonly_scope",
+        "test_gmail_callback_rejects_invalid_identity",
+        "test_gmail_callback_saves_connection_and_credentials"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_integration_event_ingestion.py",
+      "functions": [
+        "test_normalize_ring_event",
+        "test_normalize_bee_event",
+        "test_invalid_ring_events_are_rejected",
+        "test_invalid_bee_events_are_rejected",
+        "test_ring_event_ingestion_api",
+        "test_bee_event_ingestion_api",
+        "test_ring_event_replay_is_idempotent",
+        "test_bee_event_rejects_invalid_payload",
+        "test_bee_event_replay_is_idempotent",
+        "test_normalize_billing_email",
+        "test_normalize_delivery_email",
+        "test_invalid_email_events_are_rejected",
+        "test_email_event_ingestion_api",
+        "test_email_event_replay_is_idempotent"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_integration_retry.py",
+      "functions": [
+        "test_transient_error_schedules_first_retry",
+        "test_exponential_backoff_increases_with_failures",
+        "test_non_retryable_errors_are_not_retried",
+        "test_retry_limit_is_enforced",
+        "test_backoff_is_capped",
+        "test_rate_limit_respects_retry_after_with_a_cap",
+        "test_invalid_failure_count_is_rejected"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_integration_sync_health.py",
+      "functions": [
+        "FakeDB",
+        "setup_connection",
+        "test_start_attempt_updates_status_and_timestamp",
+        "test_transient_failure_schedules_retry",
+        "test_authentication_failure_does_not_schedule_retry",
+        "test_success_resets_failure_state",
+        "test_other_users_connection_is_not_accessible",
+        "test_retry_limit_stops_scheduling",
+        "test_permanent_failure_does_not_schedule_retry"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_monitoring_service.py",
+      "functions": [
+        "make_expectation",
+        "make_job",
+        "test_missing_evidence_creates_notification",
+        "test_overdue_expectation_creates_notification",
+        "test_overdue_and_missing_evidence_create_both_notifications",
+        "test_terminal_expectation_completes_job",
+        "test_monitoring_job_is_rescheduled_for_next_check",
+        "test_existing_monitoring_notification_is_not_created_again",
+        "test_monitoring_job_creates_real_notifications_and_reschedules"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_notification_delivery.py",
+      "functions": [
+        "test_retry_delay_uses_exponential_backoff",
+        "test_retry_delay_never_exceeds_six_hours",
+        "test_record_failure_schedules_retry",
+        "test_record_failure_marks_delivery_failed_at_max_attempts",
+        "test_record_failure_uses_one_minute_delay_for_first_attempt",
+        "test_delivery_cycle_returns_zero_counts_when_queue_is_empty",
+        "test_delivery_cycle_marks_successful_delivery"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_notification_email_enqueue.py",
+      "functions": [
+        "test_new_mismatch_enqueues_email_once",
+        "test_existing_mismatch_does_not_enqueue_another_email",
+        "test_match_does_not_enqueue_email",
+        "test_unknown_does_not_enqueue_email"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_oauth_credential_service.py",
+      "functions": [
+        "fake_db",
+        "test_save_credentials_encrypts_tokens",
+        "test_save_credentials_without_refresh_token",
+        "test_get_credentials_decrypts_tokens",
+        "test_get_credentials_returns_none_when_missing",
+        "test_delete_credentials_delegates_to_repository",
+        "test_save_fails_closed_when_encryption_fails"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_oauth_token_encryption.py",
+      "functions": [
+        "key",
+        "test_token_round_trip",
+        "test_wrong_key_cannot_decrypt",
+        "test_tampered_ciphertext_is_rejected",
+        "test_missing_key_fails_closed",
+        "test_empty_token_is_rejected"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_operational_data.py",
+      "functions": [
+        "test_acceptance_idempotency_and_atomic_effects",
+        "test_jobs_enforce_contract",
+        "test_pagination_and_filtering",
+        "test_evaluation_selects_metric_before_pagination",
+        "test_concurrent_evidence_retries_create_one_row",
+        "test_audit_failure_rolls_back_evidence",
+        "test_cleanup_preserves_other_records_for_same_owner"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_outlook_sync.py",
+      "functions": [
+        "test_extract_structured_outlook_evidence",
+        "test_ignore_normal_outlook_email",
+        "test_ignore_evidence_without_timezone",
+        "test_sync_creates_evidence_and_evaluates_matching_expectation",
+        "test_sync_skips_email_without_matching_expectation",
+        "test_sync_creates_evidence_and_evaluates_matching_expectation",
+        "test_sync_skips_email_without_matching_expectation",
+        "test_sync_processes_repeated_outlook_message",
+        "test_extract_structured_evidence_with_lowercase_marker",
+        "test_sync_skips_email_without_message_id"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "backend/tests/test_supabase_user_service.py",
+      "functions": [
+        "user_id",
+        "settings",
+        "test_get_user_email_returns_verified_email",
+        "test_get_user_email_rejects_unverified_email",
+        "test_get_user_email_handles_api_failure"
+      ],
+      "syntax": "valid"
+    },
+    {
+      "path": "frontend/app/(workspace)/quality/page.tsx"
+    },
+    {
+      "path": "frontend/components/integration.tsx"
+    },
+    {
+      "path": "frontend/lib/api.ts"
+    }
+  ]
+}

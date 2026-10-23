@@ -1,7 +1,55 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, createApiClient } from '@/lib/api';
 import { expectation } from './fixtures';
 describe('FastAPI client', () => {
+  beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  it.each(['ftp://api.test', 'https://user:secret@api.test', 'https://api.test/path', 'https://api.test?key=private', 'https://api.test#fragment'])('rejects invalid API origins without echoing credentials', baseUrl => {
+    expect(() => createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), baseUrl })).toThrow('must be an HTTP(S) origin');
+  });
+  it('bounds requests while preserving caller cancellation', async () => {
+    const controller = new AbortController();
+    const deadline = vi.spyOn(AbortSignal, 'timeout');
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'));
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
+    await api.expectations(controller.signal);
+    expect(deadline).toHaveBeenCalledWith(20_000);
+    const signal = fetcher.mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+    deadline.mockRestore();
+  });
+  it('reports deadlines safely without retrying a possibly completed write', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new DOMException('private upstream detail', 'TimeoutError'));
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), fetcher });
+    await expect(api.request('/expectations', { method: 'POST', body: '{"claim":"private"}' })).rejects.toMatchObject({ status: 0 });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(/private upstream|private-token/);
+  });
+  it('preserves explicit caller aborts', async () => {
+    const aborted = new DOMException('Aborted', 'AbortError');
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher: vi.fn<typeof fetch>().mockRejectedValue(aborted) });
+    await expect(api.expectations()).rejects.toBe(aborted);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+  it('logs network diagnostics without credentials, query values or upstream details', async () => {
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), baseUrl: 'https://api.test', fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError('private provider detail')) });
+    await expect(api.request('/expectations?private=value')).rejects.toMatchObject({ status: 0 });
+    expect(console.warn).toHaveBeenCalledWith('CountOn API request failed', expect.objectContaining({ failure: 'network', status: 0, origin: 'https://api.test', route: '/api/v1/expectations', method: 'GET' }));
+    const logged = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(logged).not.toContain('private-token');
+    expect(logged).not.toContain('private=value');
+    expect(logged).not.toContain('private provider detail');
+  });
+  it('logs HTTP status and request reference without response or request payloads', async () => {
+    const api = createApiClient({ token: async () => 'private-token', unauthorized: vi.fn(), fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response('{"error":{"message":"private SQL detail"}}', { status: 503, headers: { 'X-Request-ID': 'support-reference' } })) });
+    await expect(api.request('/expectations', { method: 'POST', body: '{"claim":"private claim"}' })).rejects.toMatchObject({ status: 503 });
+    expect(console.warn).toHaveBeenCalledWith('CountOn API request failed', expect.objectContaining({ failure: 'http', status: 503, requestId: 'support-reference', method: 'POST' }));
+    const logged = JSON.stringify(vi.mocked(console.warn).mock.calls);
+    expect(logged).not.toContain('private SQL detail');
+    expect(logged).not.toContain('private claim');
+    expect(logged).not.toContain('private-token');
+  });
   it('explains rate limits without silently retrying requests', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 429 }));
     const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
@@ -54,10 +102,58 @@ describe('FastAPI client', () => {
     await api.updateNotification('notification-id', 'dismissed');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ status: 'dismissed' });
   });
+  it('serializes owner-scoped audit filters without a caller-supplied user id', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'));
+    const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
+    await api.auditEvents({
+      expectationId: expectation.id,
+      source: 'RING',
+      result: 'MATCH',
+      after: '2026-10-01T00:00:00Z',
+      before: '2026-10-14T00:00:00Z',
+    });
+    const url = String(fetcher.mock.calls[0][0]);
+    expect(url).toContain(`expectation_id=${expectation.id}`);
+    expect(url).toContain('source_provider=RING');
+    expect(url).toContain('result_status=MATCH');
+    expect(url).toContain('occurred_after=2026-10-01T00%3A00%3A00Z');
+    expect(url).toContain('occurred_before=2026-10-14T00%3A00%3A00Z');
+    expect(url).not.toContain('user_id');
+  });
   it('reads a bounded history for unevaluated board rows without routine 404s', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify([expectation]))).mockResolvedValueOnce(new Response('[]'));
     const api = createApiClient({ token: async () => 'fixture', unauthorized: vi.fn(), fetcher });
     expect(await api.board()).toEqual([{ expectation, latest: null }]);
     expect(fetcher.mock.calls[1][0]).toContain('/evaluations?limit=1');
   });
+});
+
+it.each(['ring', 'bee'] as const)('submits authorized %s simulator evidence and idempotent evaluation', async kind => {
+  const { generateRingEvent, generateBeeEvent } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? generateRingEvent('package_not_detected') : generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false });
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  if (kind === 'ring') await client.simulateRing(expectation.id, payload as ReturnType<typeof generateRingEvent>);
+  else await client.simulateBee(expectation.id, payload as ReturnType<typeof generateBeeEvent>);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/simulators/${kind}/expectations/${expectation.id}/events`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ simulated: true });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it.each(['ring', 'bee'] as const)('submits dedicated %s simulator route evidence', async kind => {
+  const { generateRingEvent, generateBeeEvent } = await import('@/lib/simulators');
+  const payload = kind === 'ring' ? generateRingEvent('package_not_detected') : generateBeeEvent({ summary: 'SIMULATED cancellation', confirmed: false });
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+  const client = createApiClient({ token: async () => 'fixture-token', unauthorized: vi.fn(), fetcher, baseUrl: 'https://api.test' });
+  if (kind === 'ring') await client.simulateRing(expectation.id, payload as ReturnType<typeof generateRingEvent>);
+  else await client.simulateBee(expectation.id, payload as ReturnType<typeof generateBeeEvent>);
+  const [url, options] = fetcher.mock.calls[0];
+  expect(url).toBe(`https://api.test/api/v1/simulators/${kind}/expectations/${expectation.id}/events`);
+  expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer fixture-token');
+  expect(JSON.parse(String(options?.body))).toMatchObject({ simulated: true });
+  expect(JSON.parse(String(options?.body))).not.toHaveProperty('user_id');
+  expect(fetcher).toHaveBeenCalledOnce();
 });

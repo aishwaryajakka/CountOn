@@ -1,165 +1,119 @@
+"""Owner-authenticated scheduling on the existing job table; invalidate stale leases."""
 
-"""Background monitoring for CountOn expectations."""
-
-import logging
-from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import (
-    Expectation,
-    ExpectationStatus,
-    Evidence,
-    MonitoringJob,
-)
-from app.db.session import SessionLocal
-from app.repositories.notification import create_monitoring_notification
-
-logger = logging.getLogger(__name__)
-
-CHECK_INTERVAL_MINUTES = 60
-BATCH_SIZE = 50
+from app.core.exceptions import InvalidExpectationError, ResourceNotFoundError
+from app.db.models import Expectation, ExpectationStatus, MonitoringJob
+from app.db.models.integration import IntegrationConnection, IntegrationCredential
+from app.repositories import operations
+from app.schemas.monitoring import MonitoringSchedule
+from app.services.expectation_service import get_expectation
 
 
-def process_monitoring_job(db: Session, job: MonitoringJob) -> None:
-    """Process one monitoring job within the caller's transaction."""
-    now = datetime.now(timezone.utc)
+def get(db: Session, expectation_id: UUID, user_id: UUID) -> MonitoringJob:
+    get_expectation(db, expectation_id, user_id)
+    job = db.scalar(
+        select(MonitoringJob)
+        .where(
+            MonitoringJob.expectation_id == expectation_id,
+            MonitoringJob.user_id == user_id,
+        )
+        .order_by(
+            MonitoringJob.status.in_(["pending", "running", "paused"]).desc(),
+            MonitoringJob.created_at.desc(),
+            MonitoringJob.id.desc(),
+        )
+        .limit(1)
+    )
+    if job is None:
+        raise ResourceNotFoundError(
+            "MONITORING_NOT_FOUND", "Monitoring schedule not found"
+        )
+    return job
 
+
+def configure(
+    db: Session, expectation_id: UUID, user_id: UUID, schedule: MonitoringSchedule
+) -> MonitoringJob:
+    get_expectation(db, expectation_id, user_id)
     expectation = db.scalar(
-        select(Expectation).where(
-            Expectation.id == job.expectation_id,
-            Expectation.user_id == job.user_id,
-        )
+        select(Expectation)
+        .where(Expectation.id == expectation_id, Expectation.user_id == user_id)
+        .with_for_update()
     )
-
-    # Cancel jobs whose expectation no longer exists.
-    if expectation is None:
-        job.status = "cancelled"
-        job.last_error = None
-        job.last_run_at = now
-        return
-
-    # Stop monitoring terminal expectations.
-    if expectation.status in (
-        ExpectationStatus.resolved,
+    if expectation is None or expectation.status in (
         ExpectationStatus.cancelled,
-        ExpectationStatus.fulfilled,
-        ExpectationStatus.contradicted,
+        ExpectationStatus.resolved,
     ):
-        job.status = "completed"
-        job.last_error = None
-        job.last_run_at = now
-        return
-
-    # Check whether relevant evidence exists.
-    evidence_statement = select(Evidence.id).where(
-        Evidence.expectation_id == expectation.id
-    )
-
-    if expectation.metric is not None:
-        evidence_statement = evidence_statement.where(
-            Evidence.metric == expectation.metric
+        raise InvalidExpectationError("Terminal expectations cannot be monitored")
+    if schedule.recurring and expectation.type.value in ("temporal", "event"):
+        raise InvalidExpectationError(
+            "Recurring temporal deadlines require explicit per-period criteria; use a single deadline"
         )
-
-    has_evidence = (
-        db.scalar(evidence_statement.limit(1)) is not None
-    )
-
-    # Notify when the expectation's deadline has passed.
-    if expectation.deadline is not None and expectation.deadline <= now:
-        logger.info(
-            "Monitoring found overdue expectation id=%s",
-            expectation.id,
-        )
-
-        create_monitoring_notification(
-            db=db,
-            expectation=expectation,
-            notification_type="expectation_overdue",
-            message="An expectation has passed its deadline.",
-        )
-
-    # Check independently so both alerts can be created when applicable.
-    if not has_evidence:
-        logger.info(
-            "Monitoring found missing evidence expectation id=%s",
-            expectation.id,
-        )
-
-        create_monitoring_notification(
-            db=db,
-            expectation=expectation,
-            notification_type="missing_evidence",
-            message="An expectation is missing relevant evidence.",
-        )
-
-    # Schedule the next recurring check.
-    job.last_run_at = now
-    job.attempt_count += 1
-    job.last_error = None
-    job.next_run_at = now + timedelta(
-        minutes=CHECK_INTERVAL_MINUTES
-    )
-    job.status = "pending"
-
-
-def run_monitoring_cycle() -> dict[str, int]:
-    """Process a bounded batch of due monitoring jobs."""
-    now = datetime.now(timezone.utc)
-    processed = 0
-    failed = 0
-
-    with SessionLocal() as db:
-        try:
-            jobs = list(
-                db.scalars(
-                    select(MonitoringJob)
-                    .where(
-                        MonitoringJob.status == "pending",
-                        MonitoringJob.next_run_at <= now,
-                    )
-                    .order_by(
-                        MonitoringJob.next_run_at,
-                        MonitoringJob.id,
-                    )
-                    .limit(BATCH_SIZE)
-                    .with_for_update(skip_locked=True)
-                )
+    if schedule.connection_id:
+        connection = db.scalar(
+            select(IntegrationConnection).where(
+                IntegrationConnection.id == schedule.connection_id,
+                IntegrationConnection.user_id == user_id,
             )
-
-            for job in jobs:
-                try:
-                    # A savepoint helps isolate an individual job failure.
-                    with db.begin_nested():
-                        process_monitoring_job(db, job)
-
-                    processed += 1
-
-                except Exception:
-                    logger.exception(
-                        "Monitoring job failed id=%s",
-                        job.id,
-                    )
-
-                    # Keep the failed job eligible for a later retry.
-                    job.last_error = "MONITORING_JOB_FAILED"
-                    job.last_run_at = now
-                    job.attempt_count += 1
-                    job.next_run_at = now + timedelta(
-                        minutes=CHECK_INTERVAL_MINUTES
-                    )
-                    job.status = "pending"
-                    failed += 1
-
-            db.commit()
-
-        except Exception:
-            db.rollback()
-            logger.exception("Monitoring cycle failed")
-            raise
-
-    return {
-        "processed": processed,
-        "failed": failed,
-    }
+        )
+        if connection is None:
+            raise ResourceNotFoundError(
+                "INTEGRATION_NOT_FOUND", "Integration not found"
+            )
+        if (
+            connection.provider != "microsoft"
+            or connection.connection_type != "email"
+            or connection.status != "connected"
+            or "Mail.ReadBasic" not in connection.scopes
+            or db.get(IntegrationCredential, connection.id) is None
+            or expectation.type.value != "numeric_comparison"
+            or not expectation.metric
+            or "outlook_email" not in expectation.evidence_sources
+        ):
+            raise InvalidExpectationError(
+                "Outlook monitoring requires a connected email account and an explicit numeric outlook_email source"
+            )
+    # Reuse the active row, or the latest completed/dead-letter row. No duplicate job.
+    job = db.scalar(
+        select(MonitoringJob)
+        .where(
+            MonitoringJob.expectation_id == expectation_id,
+            MonitoringJob.user_id == user_id,
+        )
+        .order_by(
+            MonitoringJob.status.in_(["pending", "running", "paused"]).desc(),
+            MonitoringJob.created_at.desc(),
+            MonitoringJob.id.desc(),
+        )
+        .with_for_update()
+        .limit(1)
+    )
+    if job is None:
+        job = MonitoringJob(expectation_id=expectation_id, user_id=user_id)
+        db.add(job)
+    for field in (
+        "next_run_at",
+        "interval_seconds",
+        "recurring",
+        "window_start_at",
+        "max_evidence_age_seconds",
+        "max_attempts",
+        "status",
+        "connection_id",
+    ):
+        setattr(job, field, getattr(schedule, field))
+    job.scheduled_at = schedule.next_run_at
+    job.provider_config = (
+        schedule.outlook_rule.model_dump() if schedule.outlook_rule else {}
+    )
+    job.run_key = uuid4()
+    job.lease_token = job.lease_expires_at = job.last_error = None
+    job.attempt_count = 0
+    operations.audit(db, expectation, "monitoring.configured")
+    db.commit()
+    db.refresh(job)
+    return job

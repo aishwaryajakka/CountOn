@@ -5,10 +5,9 @@ import pytest
 from sqlalchemy import func, select
 
 from app.api.dependencies import get_current_user
-from app.db.models import Profile, AuditEvent
+from app.db.models import AuditEvent, Profile
 from app.main import app
 from app.services.profile_service import ensure_profile
-
 
 pytestmark=pytest.mark.integration
 
@@ -56,18 +55,20 @@ def test_profile_upsert_preserves_data(db,users):
 
 
 def test_verified_token_bootstraps_profile(client,db,monkeypatch,numeric_payload):
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from types import SimpleNamespace
     from time import time
+    from types import SimpleNamespace
     from uuid import uuid4
+
     import jwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     from app.core.auth import TokenVerifier
     from app.core.config import Settings
     verifier=TokenVerifier(Settings(_env_file=None,database_target='local',
         local_database_url='postgresql+psycopg://fixture@localhost/fixture',supabase_url='https://auth.example.test'))
     key=ec.generate_private_key(ec.SECP256R1())
     monkeypatch.setattr(verifier.jwks,'get_signing_key_from_jwt',lambda _:SimpleNamespace(key=key.public_key()))
-    claims=dict(sub=str(uuid4()),iss=verifier.issuer,aud='authenticated',role='authenticated',iat=int(time())-1,exp=int(time())+300)
+    claims={'sub': str(uuid4()),'iss': verifier.issuer,'aud': 'authenticated','role': 'authenticated','iat': int(time())-1,'exp': int(time())+300}
     encoded=jwt.encode(claims,key,algorithm='ES256',headers={'kid':'test-key'})
     monkeypatch.setattr('app.api.dependencies.get_token_verifier',lambda:verifier)
     app.dependency_overrides.pop(get_current_user)
@@ -75,3 +76,38 @@ def test_verified_token_bootstraps_profile(client,db,monkeypatch,numeric_payload
     assert response.status_code==201
     assert response.json()['user_id']==claims['sub']
     assert db.get(Profile,UUID(claims['sub'])) is not None
+
+
+def test_password_and_amazon_supabase_tokens_preserve_the_same_profile(client, db, monkeypatch, numeric_payload):
+    from time import time
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from app.core.auth import TokenVerifier
+    from app.core.config import Settings
+
+    verifier = TokenVerifier(Settings(_env_file=None, database_target='local',
+        local_database_url='postgresql+psycopg://fixture@localhost/fixture', supabase_url='https://auth.example.test'))
+    key = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(verifier.jwks, 'get_signing_key_from_jwt', lambda _: SimpleNamespace(key=key.public_key()))
+    monkeypatch.setattr('app.api.dependencies.get_token_verifier', lambda: verifier)
+    app.dependency_overrides.pop(get_current_user)
+    owner = uuid4()
+    claims = {'sub': str(owner), 'iss': verifier.issuer, 'aud': 'authenticated', 'role': 'authenticated',
+              'iat': int(time()) - 1, 'exp': int(time()) + 300}
+    def token(provider):
+        return jwt.encode(claims | {'app_metadata': {'provider': provider}}, key, algorithm='ES256', headers={'kid': 'fixture'})
+    email_headers = {'Authorization': 'Bearer ' + token('email')}
+    amazon_headers = {'Authorization': 'Bearer ' + token('custom:amazon')}
+    created = client.post('/api/v1/expectations', json=numeric_payload, headers=email_headers)
+    assert created.status_code == 201
+    profile = db.get(Profile, owner)
+    profile.display_name = 'Preserved account'
+    db.commit()
+    assert client.get('/api/v1/expectations', headers=amazon_headers).json()[0]['id'] == created.json()['id']
+    assert db.get(Profile, owner).display_name == 'Preserved account'
+    assert db.scalar(select(func.count()).select_from(Profile).where(Profile.id == owner)) == 1
+    assert db.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.user_id == owner, AuditEvent.action == 'profile.created')) == 1

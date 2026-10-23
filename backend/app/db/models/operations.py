@@ -1,9 +1,9 @@
 """Durable contracts for monitoring, notifications and redacted audit history."""
-
 from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -15,312 +15,98 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.db.base import Base
 
 
 class MonitoringJob(Base):
-    __tablename__ = "monitoring_jobs"
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["expectation_id", "user_id"],
-            ["expectations.id", "expectations.user_id"],
-            ondelete="CASCADE",
-            name="fk_job_owned_expectation",
-        ),
-        CheckConstraint(
-            "status IN ('pending','running','paused','completed','failed','cancelled')",
-            name="ck_job_status",
-        ),
-        CheckConstraint("attempt_count >= 0", name="ck_job_attempts"),
-        Index(
-            "uq_job_active_expectation",
-            "expectation_id",
-            unique=True,
-            postgresql_where=text(
-                "status IN ('pending','running','paused')"
-            ),
-        ),
-        Index("ix_job_due", "status", "next_run_at"),
+    __tablename__='monitoring_jobs'
+    __table_args__=(
+        ForeignKeyConstraint(['expectation_id','user_id'],['expectations.id','expectations.user_id'],ondelete='CASCADE',name='fk_job_owned_expectation'),
+        CheckConstraint("status IN ('pending','running','paused','completed','failed','cancelled')",name='ck_job_status'),
+        CheckConstraint('attempt_count >= 0',name='ck_job_attempts'),
+        CheckConstraint('interval_seconds >= 60 AND max_attempts BETWEEN 1 AND 20 AND max_evidence_age_seconds > 0', name='ck_job_schedule'),
+        ForeignKeyConstraint(['connection_id','user_id'], ['integration_connections.id','integration_connections.user_id'], ondelete='CASCADE', name='fk_job_owned_connection'),
+        Index('uq_job_active_expectation','expectation_id',unique=True,postgresql_where=text("status IN ('pending','running','paused')")),
+        Index('ix_job_due','status','next_run_at'),
     )
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
-    expectation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
-    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
-    status: Mapped[str] = mapped_column(
-        String(20), server_default="pending", default="pending"
-    )
-    next_run_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_run_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    attempt_count: Mapped[int] = mapped_column(
-        Integer, server_default="0", default=0
-    )
-    # Store a safe error code, never raw exception text.
-    last_error: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+    id: Mapped[UUID]=mapped_column(PGUUID,primary_key=True,default=uuid4)
+    expectation_id: Mapped[UUID]=mapped_column(PGUUID)
+    user_id: Mapped[UUID]=mapped_column(PGUUID,index=True)
+    status: Mapped[str]=mapped_column(String(20),server_default='pending',default='pending')
+    next_run_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    last_run_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int]=mapped_column(Integer,server_default='0',default=0)
+    last_error: Mapped[str|None]=mapped_column(String(100))  # safe error code, never exception text
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=3600, server_default='3600')
+    recurring: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    window_start_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+    max_evidence_age_seconds: Mapped[int] = mapped_column(Integer, default=86400, server_default='86400')
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5, server_default='5')
+    run_key: Mapped[UUID] = mapped_column(PGUUID, default=uuid4, server_default=func.gen_random_uuid())
+    lease_token: Mapped[UUID|None] = mapped_column(PGUUID)
+    lease_expires_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True), index=True)
+    connection_id: Mapped[UUID|None] = mapped_column(PGUUID)
+    provider_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
 
 
 class Notification(Base):
-    __tablename__ = "notifications"
+    __tablename__='notifications'
+    __table_args__=(CheckConstraint("status IN ('pending','read','sent','failed','dismissed')",name='ck_notification_status'),
+        UniqueConstraint('id', 'user_id', name='uq_notification_owner'),
+        UniqueConstraint('evaluation_id',name='uq_notification_evaluation'),
+        UniqueConstraint('expectation_id', 'dedupe_key', name='uq_notification_observation'),
+        ForeignKeyConstraint(['expectation_id','user_id'],['expectations.id','expectations.user_id'],ondelete='CASCADE',name='fk_notification_owner'),
+        Index('ix_notification_owner_created','user_id','created_at'),
+        ForeignKeyConstraint(['evaluation_id','expectation_id'],['evaluations.id','evaluations.expectation_id'],ondelete='CASCADE',name='fk_notification_evaluation'),)
+    id: Mapped[UUID]=mapped_column(PGUUID,primary_key=True,default=uuid4)
+    expectation_id: Mapped[UUID]=mapped_column(PGUUID,ForeignKey('expectations.id',ondelete='CASCADE'),index=True)
+    user_id: Mapped[UUID]=mapped_column(PGUUID,ForeignKey('profiles.id',ondelete='CASCADE'))
+    type: Mapped[str]=mapped_column(String(50),default='expectation_mismatch',server_default='expectation_mismatch')
+    channel: Mapped[str]=mapped_column(String(20),default='in_app',server_default='in_app')
+    message: Mapped[str]=mapped_column(String(500),default='An expectation was contradicted by the latest evidence.',server_default='An expectation was contradicted by the latest evidence.')
+    notification_metadata: Mapped[dict]=mapped_column('metadata',JSONB,default=dict,server_default=text("'{}'::jsonb"))
+    sent_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
+    evaluation_id: Mapped[UUID|None]=mapped_column(PGUUID)
+    status: Mapped[str]=mapped_column(String(20),server_default='pending',default='pending')
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())
+    dedupe_key: Mapped[str|None] = mapped_column(String(64))
+    acknowledged_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('pending','read','sent','failed','dismissed')",
-            name="ck_notification_status",
-        ),
-        UniqueConstraint("evaluation_id", name="uq_notification_evaluation"),
-        ForeignKeyConstraint(
-            ["expectation_id", "user_id"],
-            ["expectations.id", "expectations.user_id"],
-            ondelete="CASCADE",
-            name="fk_notification_owner",
-        ),
-        Index("ix_notification_owner_created", "user_id", "created_at"),
-        ForeignKeyConstraint(
-            ["evaluation_id", "expectation_id"],
-            ["evaluations.id", "evaluations.expectation_id"],
-            ondelete="CASCADE",
-            name="fk_notification_evaluation",
-        ),
-    )
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
-    expectation_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("expectations.id", ondelete="CASCADE"),
-        index=True,
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="CASCADE"),
-    )
-    type: Mapped[str] = mapped_column(
-        String(50),
-        default="expectation_mismatch",
-        server_default="expectation_mismatch",
-    )
-    channel: Mapped[str] = mapped_column(
-        String(20), default="in_app", server_default="in_app"
-    )
-    message: Mapped[str] = mapped_column(
-        String(500),
-        default="An expectation was contradicted by the latest evidence.",
-        server_default="An expectation was contradicted by the latest evidence.",
-    )
-    notification_metadata: Mapped[dict] = mapped_column(
-        "metadata", JSONB, default=dict, server_default=text("'{}'::jsonb")
-    )
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    evaluation_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), nullable=True
-    )
-    status: Mapped[str] = mapped_column(
-        String(20), server_default="pending", default="pending"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-class NotificationDelivery(Base):
-    __tablename__ = "notification_deliveries"
-
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('pending', 'processing', 'delivered', 'failed')",
-            name="ck_notification_delivery_status",
-        ),
-        CheckConstraint(
-            "attempt_count >= 0",
-            name="ck_notification_delivery_attempt_count",
-        ),
-        CheckConstraint(
-            "max_attempts > 0",
-            name="ck_notification_delivery_max_attempts",
-        ),
-        UniqueConstraint(
-            "notification_id",
-            "channel",
-            name="uq_notification_delivery_channel",
-        ),
-        Index(
-            "ix_notification_deliveries_due",
-            "status",
-            "next_attempt_at",
-        ),
-        Index(
-            "ix_notification_deliveries_notification",
-            "notification_id",
-        ),
-    )
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
-    notification_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("notifications.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    channel: Mapped[str] = mapped_column(String(30), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", server_default="pending"
-    )
-    attempt_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0"
-    )
-    max_attempts: Mapped[int] = mapped_column(
-        Integer, default=5, server_default="5"
-    )
-    next_attempt_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    processing_started_at: Mapped[datetime | None] = mapped_column(
-    DateTime(timezone=True),
-    nullable=True,
-    )
-    delivered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    # Store safe error codes only, never raw provider exception messages.
-    last_error: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-class NotificationDelivery(Base):
-    __tablename__ = "notification_deliveries"
-
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('pending', 'processing', 'delivered', 'failed')",
-            name="ck_notification_delivery_status",
-        ),
-        CheckConstraint(
-            "attempt_count >= 0",
-            name="ck_notification_delivery_attempt_count",
-        ),
-        CheckConstraint(
-            "max_attempts > 0",
-            name="ck_notification_delivery_max_attempts",
-        ),
-        UniqueConstraint(
-            "notification_id",
-            "channel",
-            name="uq_notification_delivery_channel",
-        ),
-        Index(
-            "ix_notification_deliveries_due",
-            "status",
-            "next_attempt_at",
-        ),
-        Index(
-            "ix_notification_deliveries_notification",
-            "notification_id",
-        ),
-    )
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
-    notification_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("notifications.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    channel: Mapped[str] = mapped_column(String(30), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", server_default="pending"
-    )
-    attempt_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0"
-    )
-    max_attempts: Mapped[int] = mapped_column(
-        Integer, default=5, server_default="5"
-    )
-    next_attempt_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    processing_started_at: Mapped[datetime | None] = mapped_column(
-    DateTime(timezone=True),
-    nullable=True,
-    )
-    delivered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    # Store safe error codes only, never raw provider exception messages.
-    last_error: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
 
 class AuditEvent(Base):
-    __tablename__ = "audit_events"
-
-    __table_args__ = (Index("ix_audit_owner_created", "user_id", "created_at"),)
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    __tablename__='audit_events'
+    __table_args__=(
+        Index('ix_audit_owner_created','user_id','created_at'),
+        Index('ix_audit_owner_source_created','user_id','source_provider','created_at'),
+        Index('ix_audit_owner_result_created','user_id','result_status','created_at'),
+        UniqueConstraint('user_id','idempotency_key',name='uq_audit_owner_idempotency'),
+        CheckConstraint("actor_type IN ('USER','SYSTEM','PROVIDER')",name='ck_audit_actor_type'),
+        CheckConstraint("result_status IS NULL OR result_status IN ('MATCH','UNKNOWN','MISMATCH')",name='ck_audit_result_status'),
     )
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="CASCADE"),
-        index=True,
-    )
-    expectation_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("expectations.id", ondelete="SET NULL"),
-        index=True,
-    )
-    entity_type: Mapped[str] = mapped_column(
-        String(50), default="expectation", server_default="expectation"
-    )
-    audit_metadata: Mapped[dict] = mapped_column(
-        "metadata", JSONB, default=dict, server_default=text("'{}'::jsonb")
-    )
-    entity_id = synonym("resource_id")
-    resource_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
-    action: Mapped[str] = mapped_column(String(50))
-    request_id: Mapped[str | None] = mapped_column(String(36))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    id: Mapped[UUID]=mapped_column(PGUUID,primary_key=True,default=uuid4)
+    user_id: Mapped[UUID]=mapped_column(PGUUID,ForeignKey('profiles.id',ondelete='CASCADE'),index=True)
+    expectation_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('expectations.id',ondelete='SET NULL'),index=True)
+    entity_type: Mapped[str]=mapped_column(String(50),default='expectation',server_default='expectation')
+    audit_metadata: Mapped[dict]=mapped_column('metadata',JSONB,default=dict,server_default=text("'{}'::jsonb"))
+    entity_id = synonym('resource_id')
+    resource_id: Mapped[UUID]=mapped_column(PGUUID)
+    action: Mapped[str]=mapped_column(String(50))
+    event_type: Mapped[str]=mapped_column(String(50),default='OPERATION_RECORDED',server_default='OPERATION_RECORDED')
+    actor_type: Mapped[str]=mapped_column(String(10),default='SYSTEM',server_default='SYSTEM')
+    source_provider: Mapped[str|None]=mapped_column(String(30))
+    source_type: Mapped[str|None]=mapped_column(String(40))
+    source_provenance: Mapped[str|None]=mapped_column(String(40))
+    source_reference: Mapped[str|None]=mapped_column(String(80))
+    evidence_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('evidence.id',ondelete='SET NULL'),index=True)
+    evaluation_id: Mapped[UUID|None]=mapped_column(PGUUID,ForeignKey('evaluations.id',ondelete='SET NULL'),index=True)
+    result_status: Mapped[str|None]=mapped_column(String(10))
+    idempotency_key: Mapped[str|None]=mapped_column(String(128))
+    request_id: Mapped[str|None]=mapped_column(String(36))
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),server_default=func.now())

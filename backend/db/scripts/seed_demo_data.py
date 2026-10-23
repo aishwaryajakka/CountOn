@@ -1,6 +1,6 @@
 """Seed/reuse tagged Ashley Mccormick mock data for the selected database."""
 from _common import run_cli
-from _demo import run,seed
+from _demo import run, seed
 
 
 def main():

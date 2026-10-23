@@ -1,0 +1,28 @@
+# Keep default rules. Exceptions below are public protocol/test constants or public client identifiers.
+[extend]
+useDefault = true
+[[allowlists]]
+description = "ASK HTTP header name, not a secret"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(?:^|/)backend/app/alexa/verification\.py$''']
+regexes = ['''Signature-256''']
+[[allowlists]]
+description = "Offline HS256 fixture; not used by runtime auth"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(?:^|/)backend/tests/test_auth\.py$''']
+regexes = ['''fixture-secret-at-least-32-characters''']
+
+# Supabase explicitly classifies sb_publishable_ keys as public client identifiers:
+# https://supabase.com/docs/guides/getting-started/api-keys
+# Restrict this exception to the browser template assignment and public prefix.
+# sb_secret_, service-role JWTs and all other paths remain scanned.
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Public Supabase browser key in frontend template (including history)"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(?:^|/)frontend/\.env\.example$''']
+regexes = ['''NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\s*=\s*["\x27]?sb_publishable_[A-Za-z0-9_-]+["\x27]?''']

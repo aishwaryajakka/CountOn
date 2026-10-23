@@ -1,87 +1,83 @@
+"""Main calendar URLs retain ownership and bounded canonical projection reads."""
+
+from unittest.mock import patch
+from uuid import UUID
 
 import pytest
-from unittest.mock import patch
 
 from app.api.dependencies import get_current_user
+from app.db.models import ProviderSyncState
+from app.integrations.provider import ProviderError
 from app.main import app
-
 
 pytestmark = pytest.mark.integration
 
 
+def calendar(client, db, users):
+    connection = client.post(
+        "/api/v1/integrations",
+        json={
+            "provider": "google",
+            "connection_type": "calendar",
+            "display_name": "Test calendar",
+        },
+    ).json()
+    db.add(
+        ProviderSyncState(
+            connection_id=UUID(connection["id"]),
+            user_id=users[0].id,
+            stream="selected-calendar",
+        )
+    )
+    db.commit()
+    return connection["id"]
+
+
 def test_calendar_events_success(client, db, users):
-    connection_response = client.post(
-        "/api/v1/integrations",
-        json={
-            "provider": "google",
-            "connection_type": "calendar",
-            "status": "connected",
-            "display_name": "Test Calendar",
-        },
-    )
-    assert connection_response.status_code == 201
-    connection_id = connection_response.json()["id"]
-
-    expected = {
-        "items": [
-            {"id": "event-1", "summary": "Test event"}
-        ]
-    }
-
-    with patch(
-        "app.api.v1.calendar.list_google_calendar_events",
-        return_value=expected,
-    ) as mock_list:
-        response = client.get(
-            f"/api/v1/calendar/connections/{connection_id}/events"
-        )
-
+    identity = calendar(client, db, users)
+    facts = [
+        {
+            "id": "event-1",
+            "facts": {"title": "Test event", "start": "2026-10-23T12:00:00Z"},
+        }
+    ]
+    with patch("app.api.v1.calendar.provider_sync_service.events", return_value=facts):
+        response = client.get(f"/api/v1/calendar/connections/{identity}/events")
     assert response.status_code == 200
-    assert response.json() == expected
-    mock_list.assert_called_once()
+    assert response.json()["items"][0]["id"] == "event-1"
+    assert response.json()["items"][0]["summary"] == "Test event"
 
 
-def test_calendar_events_google_error_is_sanitized(client):
-    from app.services.google_oauth_service import GoogleOAuthError
-
-    connection_response = client.post(
-        "/api/v1/integrations",
-        json={
-            "provider": "google",
-            "connection_type": "calendar",
-            "status": "connected",
-        },
-    )
-    connection_id = connection_response.json()["id"]
-
+def test_calendar_events_google_error_is_sanitized(client, db, users):
+    identity = calendar(client, db, users)
     with patch(
-        "app.api.v1.calendar.list_google_calendar_events",
-        side_effect=GoogleOAuthError("sensitive provider details"),
+        "app.api.v1.calendar.provider_sync_service.events",
+        side_effect=ProviderError("PROVIDER_UNAVAILABLE"),
     ):
-        response = client.get(
-            f"/api/v1/calendar/connections/{connection_id}/events"
-        )
-
+        response = client.get(f"/api/v1/calendar/connections/{identity}/events")
     assert response.status_code == 502
-    assert "sensitive provider details" not in response.text
+    assert response.json()["error"]["message"] == "Http error"
 
 
 def test_calendar_events_reject_invalid_connection_id(client):
-    response = client.get(
-        "/api/v1/calendar/connections/not-a-uuid/events"
+    assert (
+        client.get("/api/v1/calendar/connections/not-a-uuid/events").status_code == 422
     )
 
-    assert response.status_code == 422
 
-
-def test_calendar_events_requires_authentication(client, monkeypatch):
-    from app.api.dependencies import get_current_user
-
+def test_calendar_events_requires_authentication(client):
     app.dependency_overrides.pop(get_current_user, None)
-
-    response = client.get(
-        "/api/v1/calendar/connections/"
-        "10000000-0000-4000-8000-000000000001/events"
+    assert (
+        client.get(
+            "/api/v1/calendar/connections/10000000-0000-4000-8000-000000000001/events"
+        ).status_code
+        == 401
     )
 
-    assert response.status_code == 401
+
+def test_calendar_events_cannot_read_another_user(client, db, users):
+    identity = calendar(client, db, users)
+    app.dependency_overrides[get_current_user] = lambda: users[1]
+    assert (
+        client.get(f"/api/v1/calendar/connections/{identity}/events").status_code == 404
+    )

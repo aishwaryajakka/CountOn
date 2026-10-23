@@ -1,19 +1,20 @@
 """Strict metadata-only account contracts; token/credential input is unsupported."""
 from datetime import datetime
-from typing import Annotated,Literal
+from typing import Annotated, Literal
 from uuid import UUID
-from pydantic import AliasChoices,BaseModel,ConfigDict,Field
-from app.db.models.integration import Provider,ConnectionType,ConnectionStatus
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from app.db.models.integration import ConnectionStatus, ConnectionType, Provider
 
 
 class ConnectionMetadata(BaseModel):
     model_config=ConfigDict(extra='forbid')
     mock: bool = False
-    email: str | None = None
-    display_name: str | None = None
     demo: bool = False
     demo_tag: Literal['counton-demo-v1'] | None = None
     account_kind: Literal['personal','work','family'] | None = None
+    connector: Literal['official_cli'] | None = None
 
 
 class IntegrationCreate(BaseModel):
@@ -48,11 +49,9 @@ class IntegrationResponse(BaseModel):
     scopes: list[str]
     metadata: ConnectionMetadata = Field(validation_alias=AliasChoices('connection_metadata','metadata'))
     last_synced_at: datetime|None
-    sync_status: Literal['idle', 'success', 'error', 'retrying'] = 'idle'
-    last_attempt_at: datetime | None
-    last_error_code: str | None
-    consecutive_failures: int = 0
-    next_retry_at: datetime | None
+    connected_at: datetime|None
+    revoked_at: datetime|None
+    failure_status: str|None
     created_at: datetime
     updated_at: datetime
-    credential_state: Literal['configured', 'not_configured'] = 'not_configured'
+    credential_state: Literal['not_configured', 'configured'] = 'not_configured'

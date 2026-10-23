@@ -1,9 +1,10 @@
-
 """Normalize billing and delivery emails into CountOn evidence."""
 
-from datetime import datetime
 import math
+from datetime import datetime
 from typing import Any
+
+from pydantic import JsonValue
 
 from app.schemas.evidence import EvidenceCreate
 
@@ -50,16 +51,14 @@ def normalize_email_event(event: dict[str, Any]) -> EvidenceCreate:
         if currency is not None and not isinstance(currency, str):
             raise ValueError("Billing email currency must be a string")
 
-        value = {"amount": amount}
+        value: dict[str, JsonValue] = {"amount": amount}
         unit = currency
 
     else:
         status = event.get("delivery_status")
 
         if not isinstance(status, str) or not status.strip():
-            raise ValueError(
-                "Delivery email must include a non-empty delivery_status"
-            )
+            raise ValueError("Delivery email must include a non-empty delivery_status")
 
         metric = "delivery_status"
         value = {"status": status.strip()}
@@ -73,6 +72,8 @@ def normalize_email_event(event: dict[str, Any]) -> EvidenceCreate:
         unit=unit,
         observed_at=timestamp,
         confidence=1.0,
-        raw_data=event,
+        raw_data={
+            "provenance": "USER_SUBMITTED",
+            "provider_record_ref": event_id.strip(),
+        },
     )
-

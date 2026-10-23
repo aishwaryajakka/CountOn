@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, latestMetricEvidence, notificationTitle, number, summary } from '@/lib/presentation';
+import { contextSignals, displayTitle, evidenceValue, expectedText, formatDate, getExpectationPresentationStatus, humanize, latestMetricEvidence, notificationTitle, number, summary, reasoningText } from '@/lib/presentation';
 import { manualExpectation } from '@/lib/manual-expectation';
 import { evidence, evaluation, expectation, notification } from './fixtures';
 describe('real contract presentation', () => {
@@ -52,4 +52,16 @@ describe('manual creation adapter', () => {
   });
   it('rejects an empty numeric target', () => expect(() => manualExpectation({ ...input, target: '' })).toThrow('numerical target'));
   it('rejects invalid tolerances', () => expect(() => manualExpectation({ ...input, threshold: '101' })).toThrow('Tolerance'));
+  it('keeps explicit baseline and deadline fields from the imported builder', () => {
+    expect(manualExpectation({ ...input, baseline: '142.10', deadline: '2026-11-01T12:00:00Z' })).toMatchObject({ baseline: 142.1, deadline: '2026-11-01T12:00:00.000Z' });
+  });
+  it('rejects malformed optional fields instead of silently dropping user intent', () => {
+    expect(() => manualExpectation({ ...input, baseline: 'invalid' })).toThrow('baseline');
+    expect(() => manualExpectation({ ...input, deadline: 'invalid' })).toThrow('deadline');
+  });
+});
+
+it('explains verified coverage gaps and source ambiguity without claiming temporal support is missing', () => {
+  expect(reasoningText({ ...evaluation, result: 'UNKNOWN', reasoning: { reason: 'incomplete_mailbox_coverage' } })).toContain('cannot safely claim a reply was absent');
+  expect(reasoningText({ ...evaluation, result: 'UNKNOWN', reasoning: { reason: 'ambiguous_sources' } })).toContain('Choose one source');
 });

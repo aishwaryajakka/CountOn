@@ -1,0 +1,124 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "count on",
+      "intents": [
+        {
+          "name": "ListExpectationsIntent",
+          "slots": [],
+          "samples": [
+            "what am I counting on",
+            "what are my expectations",
+            "what am I tracking",
+            "show my expectations",
+            "tell me what I'm counting on"
+          ]
+        },
+        {
+          "name": "GetExpectationIntent",
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "tell me about {text}",
+            "check {text}",
+            "what is happening with {text}"
+          ]
+        },
+        {
+          "name": "CaptureExpectationIntent",
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "I'm counting on {text}",
+            "I'm expecting {text}",
+            "I expect {text}",
+            "keep track of {text}",
+            "my answer is {text}"
+          ]
+        },
+        {
+          "name": "WhyExpectationIntent",
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "why did it fail",
+            "why didn't that match",
+            "why did this expectation fail",
+            "explain what happened",
+            "why did {text} fail",
+            "why didn't {text} match",
+            "why was {text} higher"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
+        }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "delegationStrategy": "SKILL_RESPONSE",
+      "intents": [
+        {
+          "name": "CaptureExpectationIntent",
+          "confirmationRequired": false,
+          "slots": [
+            {
+              "name": "text",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {
+                "elicitation": "CountOnClarification"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": [
+      {
+        "id": "CountOnClarification",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What should I monitor?"
+          }
+        ]
+      }
+    ]
+  }
+}

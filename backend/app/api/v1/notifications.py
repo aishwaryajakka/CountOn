@@ -1,11 +1,13 @@
-"""Owned in-app notifications; no email, SMS or push endpoints."""
+"""Owned in-app inbox; optional email preferences/delivery are separate endpoints."""
 from datetime import datetime
-from typing import Annotated,Literal
+from typing import Annotated, Literal
 from uuid import UUID
-from fastapi import APIRouter,Depends,Query
-from pydantic import AliasChoices,BaseModel,ConfigDict,Field
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
-from app.api.dependencies import CurrentUser,get_db
+
+from app.api.dependencies import CurrentUser, get_db
 from app.services import notification_service as service
 
 router=APIRouter(prefix='/notifications',tags=['notifications'])
@@ -17,9 +19,7 @@ class NotificationResponse(BaseModel):
     id: UUID
     user_id: UUID
     expectation_id: UUID
-
-    evaluation_id: UUID | None = None
-
+    evaluation_id: UUID|None
     type: str
     channel: str
     status: str
@@ -27,6 +27,7 @@ class NotificationResponse(BaseModel):
     metadata: dict = Field(validation_alias=AliasChoices('notification_metadata','metadata'))
     sent_at: datetime|None
     created_at: datetime
+    acknowledged_at: datetime|None
 
 
 class NotificationUpdate(BaseModel):

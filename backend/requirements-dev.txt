@@ -1,0 +1,4 @@
+# Optional scoped infrastructure verification tools; not production dependencies.
+-c constraints.txt
+ruff>=0.16.10,<0.17
+mypy>=2.4,<3.0

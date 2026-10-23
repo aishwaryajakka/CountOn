@@ -1,9 +1,6 @@
 """PostgreSQL-backed dashboard API tests."""
 
 import pytest
-from sqlalchemy import select
-
-from app.db.models import Expectation, Notification
 
 pytestmark = pytest.mark.integration
 

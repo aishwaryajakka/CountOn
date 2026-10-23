@@ -68,12 +68,11 @@ def test_get_user_email_rejects_unverified_email(user_id, settings):
         patch(
             "app.services.supabase_user_service.httpx.get",
             return_value=response,
-        ),
+        ),pytest.raises(
+        RuntimeError, match="SUPABASE_USER_EMAIL_UNVERIFIED"
+    )
     ):
-        with pytest.raises(
-            RuntimeError, match="SUPABASE_USER_EMAIL_UNVERIFIED"
-        ):
-            get_user_email(user_id)
+        get_user_email(user_id)
 
 
 def test_get_user_email_handles_api_failure(user_id, settings):
@@ -85,9 +84,8 @@ def test_get_user_email_handles_api_failure(user_id, settings):
         patch(
             "app.services.supabase_user_service.httpx.get",
             side_effect=httpx.ConnectError("test error"),
-        ),
+        ),pytest.raises(
+        RuntimeError, match="SUPABASE_USER_LOOKUP_FAILED"
+    )
     ):
-        with pytest.raises(
-            RuntimeError, match="SUPABASE_USER_LOOKUP_FAILED"
-        ):
-            get_user_email(user_id)
+        get_user_email(user_id)

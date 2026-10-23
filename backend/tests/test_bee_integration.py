@@ -25,7 +25,7 @@ def test_normalize_bee_event():
     evidence = normalize_bee_event(bee_event())
 
     assert evidence.external_event_id == "bee-test-001"
-    assert evidence.source == "bee"
+    assert evidence.source == "bee_simulator"
     assert evidence.metric == "steps"
     assert evidence.value == {"amount": 5200}
     assert evidence.unit == "steps"
@@ -66,7 +66,7 @@ def test_invalid_bee_events_are_rejected(event):
 def test_bee_event_ingestion_api(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
     expectation_id = expectation.json()["id"]
@@ -79,7 +79,7 @@ def test_bee_event_ingestion_api(client, numeric_payload):
     assert response.status_code == 201, response.text
     evidence = response.json()
     assert evidence["expectation_id"] == expectation_id
-    assert evidence["source"] == "bee"
+    assert evidence["source"] == "bee_simulator"
     assert evidence["external_event_id"] == "bee-test-001"
     assert evidence["metric"] == "steps"
     assert evidence["value"] == {"amount": 5200}
@@ -88,7 +88,7 @@ def test_bee_event_ingestion_api(client, numeric_payload):
 def test_bee_event_replay_is_idempotent(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
     expectation_id = expectation.json()["id"]
@@ -106,7 +106,7 @@ def test_bee_event_replay_is_idempotent(client, numeric_payload):
 def test_bee_event_invalid_payload_returns_422(client, numeric_payload):
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
 
@@ -136,7 +136,7 @@ def test_bee_event_cannot_be_added_to_another_users_expectation(
 
     expectation = client.post(
         "/api/v1/expectations",
-        json=numeric_payload,
+        json={**numeric_payload, "evidence_sources": [*numeric_payload["evidence_sources"], "bee_simulator", "ring_simulator", "email"]},
     )
     assert expectation.status_code == 201, expectation.text
     expectation_id = expectation.json()["id"]

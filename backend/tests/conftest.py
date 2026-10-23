@@ -6,22 +6,23 @@ is rolled back; service commits release savepoints rather than test isolation.
 """
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from alembic import command
+from app.api.dependencies import get_current_user, get_db
 from app.core.auth import AuthenticatedUser
-from app.repositories.profile import ensure_profile
 from app.core.config import get_settings
 from app.main import app
+from app.repositories.profile import ensure_profile
 
 
 @pytest.fixture(scope="session")
@@ -48,13 +49,23 @@ def postgres_engine():
 
 
 @pytest.fixture
-def db(postgres_engine):
+def db(postgres_engine, monkeypatch):
     with postgres_engine.connect() as connection:
         transaction = connection.begin()
         session = Session(
             bind=connection, join_transaction_mode="create_savepoint",
             autoflush=False, expire_on_commit=False,
         )
+        # The orchestration audit sink opens its own session rather than using
+        # FastAPI's get_db dependency. Keep actual audit writes in the same
+        # isolated transaction; never connect to the application database here.
+        from app.services import agent_audit
+
+        @contextmanager
+        def audit_session():
+            yield session
+
+        monkeypatch.setattr(agent_audit, "SessionLocal", audit_session)
         try:
             yield session
         finally:

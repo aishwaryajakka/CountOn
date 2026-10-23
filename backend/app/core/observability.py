@@ -32,6 +32,6 @@ def record(name: str, label: str = '', amount: float = 1) -> None:
     """Exporter failures must not fail successful requests or committed writes."""
     try:
         metrics.increment(name,label,amount)
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - Exporter errors must not fail writes
         import logging
         logging.getLogger(__name__).warning('Metric sink unavailable error_type=%s',type(error).__name__)

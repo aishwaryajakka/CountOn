@@ -1,48 +1,38 @@
-
 """Alembic environment using application settings and registered models."""
 
-import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
 
+from alembic import context
 from app.core.config import settings
+from app.db import models  # noqa: F401 -- register future models with metadata
 from app.db.base import Base
-from app.db import models  # noqa: F401 -- register models
 
 config = context.config
-
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
-# Prefer the dedicated test database when TEST_DATABASE_URL is set.
-database_url = os.getenv("TEST_DATABASE_URL") or settings.database_url
-
 
 def include_object(obj, name, type_, reflected, compare_to):
-    """Preserve the explicitly managed Supabase authentication foreign key."""
-    return not (
-        type_ == "foreign_key_constraint"
-        and reflected
-        and name == "fk_profiles_auth_user"
-        and compare_to is None
-    )
+    # The portable metadata intentionally omits Supabase-owned auth.users.
+    # Preserve only this explicitly managed cloud FK during autogeneration.
+    return not (type_ == "foreign_key_constraint" and reflected
+                and name == "fk_profiles_auth_user" and compare_to is None)
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=database_url,
+        url=settings.database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         include_object=include_object,
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
@@ -54,25 +44,17 @@ def run_with_connection(connection: Connection) -> None:
         compare_type=True,
         include_object=include_object,
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    """Run migrations using a supplied connection or the configured database."""
     # Tests can supply an explicitly isolated PostgreSQL connection.
     connection = config.attributes.get("connection")
-
     if connection is not None:
         run_with_connection(connection)
         return
-
-    connectable = create_engine(
-        database_url,
-        poolclass=pool.NullPool,
-    )
-
+    connectable = create_engine(settings.database_url, poolclass=pool.NullPool)
     try:
         with connectable.connect() as connection:
             run_with_connection(connection)

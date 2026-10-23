@@ -1,78 +1,49 @@
 """Every connected-account read is owner-scoped; no provider HTTP calls."""
+from datetime import datetime, timezone
+
 from sqlalchemy import select
-from app.db.models.integration import IntegrationConnection
-from app.db.models.oauth_credential import OAuthCredential
+
+from app.db.models.bee_connector import BeeCliCredential
+from app.db.models.integration import IntegrationConnection, IntegrationCredential
+
+
+def mark_credentials(db, items, user_id):
+    ids = [item.id for item in items]
+    configured = set(db.scalars(select(IntegrationCredential.connection_id).where(
+        IntegrationCredential.connection_id.in_(ids), IntegrationCredential.user_id == user_id))) if ids else set()
+    if ids:
+        configured.update(db.scalars(select(BeeCliCredential.connection_id).where(
+            BeeCliCredential.connection_id.in_(ids), BeeCliCredential.user_id == user_id,
+            BeeCliCredential.revoked_at.is_(None), BeeCliCredential.expires_at > datetime.now(timezone.utc))))
+    for item in items:
+        item.__dict__['_credential_state'] = 'configured' if item.id in configured else 'not_configured'
+    return items
+
 
 def create(db,payload,user_id):
     values=payload.model_dump()
     values['connection_metadata']=values.pop('metadata')
+    now = datetime.now(timezone.utc)
+    if str(values.get('status')) == 'connected':
+        values['connected_at'] = now
+    elif str(values.get('status')) == 'disconnected':
+        values['revoked_at'] = now
     item=IntegrationConnection(user_id=user_id,**values)
     db.add(item);db.flush()
     return item
 
 
-def get(db, id, user_id, *, for_update=False):
-    stmt = select(IntegrationConnection).where(
-        IntegrationConnection.id == id,
-        IntegrationConnection.user_id == user_id,
-    )
-
-    if for_update:
-        stmt = stmt.with_for_update()
-
-    return db.scalar(stmt)
+def get(db,id,user_id):
+    item = db.scalar(select(IntegrationConnection).where(IntegrationConnection.id==id,IntegrationConnection.user_id==user_id))
+    if item is not None: mark_credentials(db, [item], user_id)
+    return item
 
 
-
-def list_connections(
-    db,
-    user_id,
-    provider=None,
-    connection_type=None,
-    status=None,
-    limit=100,
-    offset=0,
-):
-    stmt = select(IntegrationConnection).where(
-        IntegrationConnection.user_id == user_id
-    )
-
-    for field, value in [
-        ("provider", provider),
-        ("connection_type", connection_type),
-        ("status", status),
-    ]:
-        if value is not None:
-            stmt = stmt.where(
-                getattr(IntegrationConnection, field) == value
-            )
-
-    connections = list(
-        db.scalars(
-            stmt.order_by(
-                IntegrationConnection.created_at.desc(),
-                IntegrationConnection.id.desc(),
-            )
-            .limit(limit)
-            .offset(offset)
-        )
-    )
-
-    for connection in connections:
-        credential = db.scalars(
-            select(OAuthCredential).where(
-                OAuthCredential.integration_id == connection.id,
-                OAuthCredential.user_id == user_id,
-                OAuthCredential.provider == connection.provider,
-            )
-        ).first()
-
-        connection.credential_state = (
-            "configured" if credential is not None else "not_configured"
-        )
-
-    return connections
-
+def list_connections(db,user_id,provider=None,connection_type=None,status=None,limit=100,offset=0):
+    stmt=select(IntegrationConnection).where(IntegrationConnection.user_id==user_id)
+    for field,value in [('provider',provider),('connection_type',connection_type),('status',status)]:
+        if value is not None:stmt=stmt.where(getattr(IntegrationConnection,field)==value)
+    return mark_credentials(db, list(db.scalars(stmt.order_by(IntegrationConnection.created_at.desc(),IntegrationConnection.id.desc()).limit(limit).offset(offset))), user_id)
 
 
 def update(db,item,changes):
