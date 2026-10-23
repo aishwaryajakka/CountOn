@@ -25,8 +25,9 @@ def test_acceptance_idempotency_and_atomic_effects(client,db,users,numeric_paylo
     notices=client.get('/api/v1/notifications?status=pending&limit=1').json()
     assert len(notices)==1 and notices[0]['expectation_id']==str(eid)
     events=list(db.scalars(select(AuditEvent).where(AuditEvent.expectation_id==eid)))
+
     assert {e.action for e in events}=={'expectation.created','evidence.ingested','expectation.evaluated','notification.created'}
-    assert len(events)==4 and all(e.request_id for e in events)
+    assert len(events) == 4 and all(e.request_id for e in events)
     from app.db.models import Expectation
     expectation=db.get(Expectation,eid)
     ensure_job(db,expectation);ensure_job(db,expectation);db.commit()

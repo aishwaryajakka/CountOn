@@ -17,7 +17,7 @@ export function createApiClient(deps: Dependencies) {
     try { response = await (deps.fetcher ?? fetch)(`${base}/api/v1${path}`, { ...options, headers, cache: 'no-store' }); }
     catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error;
-      throw new ApiError('We couldn’t reach CountOn. Check your connection and try again.', 0);
+      throw new ApiError('We couldnâ€™t reach CountOn. Check your connection and try again.', 0);
     }
     if (!response.ok) {
       if (response.status === 401) await deps.unauthorized();
@@ -29,7 +29,7 @@ export function createApiClient(deps: Dependencies) {
     }
     if (response.status === 204) return undefined as T;
     try { return await response.json() as T; }
-    catch { throw new ApiError('We couldn’t read this response. Please try again.', response.status, response.headers.get('X-Request-ID') ?? undefined); }
+    catch { throw new ApiError('We couldnâ€™t read this response. Please try again.', response.status, response.headers.get('X-Request-ID') ?? undefined); }
   }
   // FastAPI returns arrays, with limit/offset rather than a pagination envelope.
   async function all<T>(path: string, signal?: AbortSignal): Promise<T[]> {
@@ -56,6 +56,47 @@ export function createApiClient(deps: Dependencies) {
     notifications: (signal?: AbortSignal) => all<Notification>('/notifications', signal),
     updateNotification: (id: string, status: 'read' | 'dismissed') => request<Notification>(`/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     integrations: (signal?: AbortSignal) => all<Integration>('/integrations', signal),
+
+
+  async startGoogleOAuth(): Promise<void> {
+    const token = await deps.token();
+
+    if (!token) {
+      await deps.unauthorized();
+      throw new ApiError('Authentication required.', 401);
+    }
+
+    const response = await (deps.fetcher ?? fetch)(
+      `${base}/api/v1/oauth/google/login`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
+        cache: 'no-store',
+      }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        'Could not start Google authorization. Please try again.',
+        response.status
+      );
+    }
+
+    const data = (await response.json()) as {
+      authorization_url: string;
+    };
+
+    if (!data.authorization_url) {
+      throw new ApiError('Google authorization URL is missing.', 500);
+    }
+
+    window.location.assign(data.authorization_url);
+  },
+
+
     async board(signal?: AbortSignal): Promise<WatchedExpectation[]> {
       const expectations = await all<Expectation>('/expectations', signal);
       const rows: WatchedExpectation[] = [];

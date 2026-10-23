@@ -18,3 +18,5 @@ from app.db.models.operations import (
 )
 
 from app.db.models.integration import IntegrationConnection
+from app.db.models.oauth_credential import OAuthCredential
+from app.db.models.oauth_state import OAuthState

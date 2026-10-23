@@ -1,7 +1,7 @@
 """Every connected-account read is owner-scoped; no provider HTTP calls."""
 from sqlalchemy import select
 from app.db.models.integration import IntegrationConnection
-
+from app.db.models.oauth_credential import OAuthCredential
 
 def create(db,payload,user_id):
     values=payload.model_dump()
@@ -15,11 +15,56 @@ def get(db,id,user_id):
     return db.scalar(select(IntegrationConnection).where(IntegrationConnection.id==id,IntegrationConnection.user_id==user_id))
 
 
-def list_connections(db,user_id,provider=None,connection_type=None,status=None,limit=100,offset=0):
-    stmt=select(IntegrationConnection).where(IntegrationConnection.user_id==user_id)
-    for field,value in [('provider',provider),('connection_type',connection_type),('status',status)]:
-        if value is not None:stmt=stmt.where(getattr(IntegrationConnection,field)==value)
-    return list(db.scalars(stmt.order_by(IntegrationConnection.created_at.desc(),IntegrationConnection.id.desc()).limit(limit).offset(offset)))
+
+def list_connections(
+    db,
+    user_id,
+    provider=None,
+    connection_type=None,
+    status=None,
+    limit=100,
+    offset=0,
+):
+    stmt = select(IntegrationConnection).where(
+        IntegrationConnection.user_id == user_id
+    )
+
+    for field, value in [
+        ("provider", provider),
+        ("connection_type", connection_type),
+        ("status", status),
+    ]:
+        if value is not None:
+            stmt = stmt.where(
+                getattr(IntegrationConnection, field) == value
+            )
+
+    connections = list(
+        db.scalars(
+            stmt.order_by(
+                IntegrationConnection.created_at.desc(),
+                IntegrationConnection.id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    )
+
+    for connection in connections:
+        credential = db.scalars(
+            select(OAuthCredential).where(
+                OAuthCredential.integration_id == connection.id,
+                OAuthCredential.user_id == user_id,
+                OAuthCredential.provider == connection.provider,
+            )
+        ).first()
+
+        connection.credential_state = (
+            "configured" if credential is not None else "not_configured"
+        )
+
+    return connections
+
 
 
 def update(db,item,changes):
