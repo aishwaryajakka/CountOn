@@ -1,6 +1,7 @@
 """add notification delivery queue
 
 Revision ID: 07bc7f5ce116
+Revises: 5d201f68ac90
 Revises: 4c35f2c88019
 Create Date: 2026-10-15 19:11:00.544990
 """
@@ -13,6 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "07bc7f5ce116"
+down_revision: Union[str, Sequence[str], None] = "5d201f68ac90"
 down_revision: Union[str, Sequence[str], None] = "4c35f2c88019"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

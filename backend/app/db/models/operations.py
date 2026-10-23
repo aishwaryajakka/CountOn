@@ -216,6 +216,83 @@ class NotificationDelivery(Base):
         onupdate=func.now(),
     )
 
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'delivered', 'failed')",
+            name="ck_notification_delivery_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_notification_delivery_attempt_count",
+        ),
+        CheckConstraint(
+            "max_attempts > 0",
+            name="ck_notification_delivery_max_attempts",
+        ),
+        UniqueConstraint(
+            "notification_id",
+            "channel",
+            name="uq_notification_delivery_channel",
+        ),
+        Index(
+            "ix_notification_deliveries_due",
+            "status",
+            "next_attempt_at",
+        ),
+        Index(
+            "ix_notification_deliveries_notification",
+            "notification_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    notification_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("notifications.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending"
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, default=5, server_default="5"
+    )
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+    DateTime(timezone=True),
+    nullable=True,
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # Store safe error codes only, never raw provider exception messages.
+    last_error: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

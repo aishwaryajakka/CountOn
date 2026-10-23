@@ -6,9 +6,10 @@ import logging
 import os
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
 
+from app.api.errors import ErrorEnvelope, error_response
 from app.db.session import get_db
 from app.core.config import get_settings
 from app.api.operations import (
@@ -18,13 +19,18 @@ from app.api.operations import (
 from app.api.errors import error_response, ErrorEnvelope
 from app.services.readiness import database_ready
 from app.api.errors import register_exception_handlers
+from app.api.operations import OperationalMiddleware, ExplicitCORSMiddleware
 from app.api.v1.router import router
+from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.session import get_db
+from app.services.readiness import database_ready
 from starlette.middleware.sessions import SessionMiddleware
 
 logger = logging.getLogger(__name__)
 
 MONITORING_INTERVAL_SECONDS = 60
+DELIVERY_INTERVAL_SECONDS = 5
 
 
 async def monitoring_loop() -> None:
@@ -46,6 +52,41 @@ async def monitoring_loop() -> None:
 
         await asyncio.sleep(MONITORING_INTERVAL_SECONDS)
 
+
+async def notification_delivery_loop() -> None:
+    """Process queued notification emails periodically."""
+    from app.services.email_delivery import SmtpEmailDelivery
+    from app.services.notification_delivery_service import (
+        run_delivery_cycle,
+    )
+
+    adapter = SmtpEmailDelivery(get_settings())
+    adapters = {"email": adapter}
+
+    while True:
+        try:
+            result = await asyncio.to_thread(
+                run_delivery_cycle,
+                adapters,
+            )
+
+            if result["processed"] > 0 or result["failed"] > 0:
+                logger.info(
+                    "Notification delivery cycle completed: "
+                    "processed=%s delivered=%s retried=%s failed=%s",
+                    result["processed"],
+                    result["delivered"],
+                    result["retried"],
+                    result["failed"],
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Background notification delivery cycle failed"
+            )
+
+        await asyncio.sleep(DELIVERY_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -74,7 +115,49 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError):
                 await monitoring_task
 
+    monitoring_task = None
+    delivery_task = None
 
+    if os.getenv("COUNTON_DISABLE_BACKGROUND_MONITORING") != "1":
+        monitoring_task = asyncio.create_task(
+            monitoring_loop(),
+            name="counton-background-monitoring",
+        )
+
+    if os.getenv("COUNTON_DISABLE_BACKGROUND_DELIVERY") != "1":
+        delivery_task = asyncio.create_task(
+            notification_delivery_loop(),
+            name="counton-background-notification-delivery",
+        )
+
+    try:
+        yield
+    finally:
+        tasks = [
+            task
+            for task in (monitoring_task, delivery_task)
+            if task is not None
+        ]
+
+        for task in tasks:
+            task.cancel()
+
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+app = FastAPI(
+    title="CountOn API",
+    version="0.1.0",
+    lifespan=lifespan,
+    responses={
+        status: {"model": ErrorEnvelope}
+        for status in (400, 401, 404, 405, 409, 422, 429, 500, 503)
+    },
+)
+
+settings = get_settings()
 app = FastAPI(
     title="CountOn API",
     version="0.1.0",
@@ -108,6 +191,7 @@ app.add_middleware(
     ],
     expose_headers=["X-Request-ID", "Retry-After"],
 )
+app.add_middleware(OperationalMiddleware, settings=settings)
 
 app.add_middleware(OperationalMiddleware, settings=settings)
 
@@ -124,6 +208,8 @@ def health() -> dict[str, str]:
 def ready(db: Session = Depends(get_db)):
     if not database_ready(db):
         return error_response(
+            503, "NOT_READY", "Service dependencies are not ready"
+        )
             503,
             "NOT_READY",
             "Service dependencies are not ready",
