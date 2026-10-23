@@ -35,3 +35,11 @@ it('keeps orchestration and Supabase business mutations out of the browser page'
   expect(source).not.toMatch(/routeAlexaPrompt|matchExpectations|\.from\s*\(|call_tool|arguments:\s*\{|user_id\s*:/);
   expect(source).toContain('requestAgent(token,');
 });
+
+it('forwards only a typed expectation selection without treating it as an identity', async () => {
+  const expectationId = 'b3767384-bd03-4bb8-a4ac-15e782e38802';
+  const response = await POST(request({ text: 'Why did it fail?', session_reference: null, expectation_id: expectationId }));
+  expect(response.status).toBe(200);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body as string)).toEqual({ text: 'Why did it fail?', session_reference: null, expectation_id: expectationId });
+  expect(JSON.stringify(await response.json())).not.toContain(token);
+});

@@ -209,9 +209,9 @@ Normal Vitest tests mock Auth/API and need no live services. Tests cover session
 restoration/sign-out, login, authorization, pagination, statuses, manual creation,
 screen rendering, empty/error states and notification mutation recovery.
 ESLint uses its [official compatibility utilities](https://eslint.org/blog/2024/05/eslint-compatibility-utilities/)
-for Next's plugins on ESLint 10, without disabling rules. npm currently reports
-non-blocking peer warnings from those plugins; TypeScript is pinned to 6 because
-the lint parser does not yet support 7.
+for Next's plugins without disabling rules. The current package/lockfile uses
+ESLint 9 and TypeScript 6; the final audit records the actual install/lint/type
+results rather than assuming historical peer warnings still apply.
 
 Optional **live browser** verification requires a seeded demo account, the backend,
 and a running production frontend. Supply `COUNTON_E2E_EMAIL` and
@@ -271,3 +271,15 @@ Proxy verifies protected pages with `getUser`; browser API/MCP requests still
 forward the Supabase bearer token. Existing local-storage sessions require signing
 in again after rollout; account UUIDs and data are unchanged. Production additionally
 requires exact `NEXT_PUBLIC_APP_URL`. [Setup and live acceptance](../docs/authentication.md).
+
+## Consolidated UI
+
+The canonical frontend preserves Supabase authentication and the FastAPI/MCP
+paths. `/settings/integrations` reuses `/integrations`; settings expose existing
+notification preferences. The expectation builder still requires an explicit
+preview/confirmation. Result and resolution panels display persisted evaluator
+results, and Ring/Bee simulations use authenticated source-bound simulator APIs.
+`/alexa?expectationId=<owned-uuid>&starter=Why%20did%20it%20fail%3F` opens an
+explanation in the existing orchestrator. The ID is untrusted and MCP validates
+ownership. AI advice and provider recommendations are not fabricated in the UI.
+See [source decisions](../docs/consolidation-report.md).

@@ -113,7 +113,7 @@ fields and video URLs are discarded. No detection is not proof of nondelivery.
 
 Simulator evidence is labeled `SIMULATED_BEE`. The optional local CLI stages a
 bounded summary for explicit review; CountOn never imports audio or a full
-transcript. Only an explicitly completed todo can support an outcome. A recorded
+transcript. Only an explicitly completed selected todo for the `todo_completed` boolean metric can support an outcome; other metrics retain it as context. A recorded
 promise remains context and cannot prove fulfillment. Imported CLI evidence is
 labeled `LIVE_BEE_CLI`, and staged private text is cleared after import.
 
@@ -211,3 +211,14 @@ Bee consent/import/replay/disconnect, evidence minimization, deterministic
 `MATCH`/`UNKNOWN`/`MISMATCH`, notification deduplication, audit idempotency and
 reload, cross-user denial, worker restart/lease recovery, safe errors, MCP/Alexa
 contracts, Bedrock grounding, and frontend rendering/build checks.
+
+## User-submitted evidence versus verified provider provenance
+
+`POST /api/v1/expectations/{id}/evidence` is an authenticated manual-fact endpoint.
+Its `raw_data` accepts only safe user references/category/simulation labeling; a
+supplied provenance is normalized to `USER_SUBMITTED`. Connection, grant, source
+version, authenticated-sender and absence-coverage claims from this payload are
+discarded. An ordinary manual submission with no provenance remains compatible.
+Only the existing internal provider workers and dedicated simulator/connector
+services attach verified operational metadata after their permission checks.
+This does not turn manual facts into authenticated provider observations.

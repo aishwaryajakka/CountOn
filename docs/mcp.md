@@ -157,8 +157,9 @@ DATABASE_TARGET=local python db/scripts/mcp_smoke.py
 The token prompt is hidden; alternatively use the existing configured demo
 credentials with `--demo-login`. If FastAPI uses port 8004, pass
 `--api-url http://127.0.0.1:8004`. Never pass tokens as CLI arguments.
-The smoke uses the real SDK network client, verifies all three tools and the
-same row through FastAPI, exercises four error paths, and removes only its exact
+The smoke uses the real SDK network client, discovers all six tools and checks
+their nested-request/object-response contracts. It calls the three core CRUD tools
+and checks the same row through FastAPI, exercises four error paths, and removes only its exact
 unique smoke-tagged rows. Normal audit records remain. Cleanup failure exits
 nonzero. The local script accepts only loopback URLs without credentials/query/fragment.
 The separate remote script accepts HTTPS endpoints, as documented below.
@@ -317,11 +318,14 @@ and the 401 bearer boundary. It does **not** publish fake PRM/OAuth endpoints.
 The resource hook is `MCP_PUBLIC_URL`; the identity hook is existing
 `auth.authenticated_user_from_header` and the trusted HTTP request state.
 
-Authorization/consent/code/token/refresh endpoints, static Alexa client
-registration, approved redirects, PRM contents, scopes, and real account linking
-are **NOT IMPLEMENTED**. Supabase sign-in alone does not prove these OAuth
-requirements are met. There is no Alexa add-on ID or client configuration in
-this repository. This repository does not establish a completed real Alexa+/Echo connection.
+For **native Alexa+ MCP onboarding**, MCP-hosted protected-resource/authorization
+metadata, resource handling and an accepted add-on registration are **NOT IMPLEMENTED**.
+The separate traditional ASK adapter already uses Supabase's native OAuth server
+and CountOn's implemented `/oauth/consent` page, client allowlist and linked JWT
+checks; its live issuance/refresh/console/Echo acceptance remains unverified.
+See [traditional ASK setup](traditional-alexa.md). Neither ordinary Supabase sign-in
+nor the local consent implementation proves completed Alexa+ onboarding or Echo
+acceptance. No competing OAuth token issuer should be added to MCP.
 
 Next action: verify the deployed HTTPS endpoint and provision a compatible OAuth
 authorization server, then register the Alexa client and all provided redirects. Once metadata

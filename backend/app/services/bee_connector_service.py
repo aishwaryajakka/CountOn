@@ -116,7 +116,7 @@ def authenticate_connector(db, token: str):
             BeeCliCredential.token_digest == _digest(token),
             BeeCliCredential.revoked_at.is_(None),
             BeeCliCredential.expires_at > now,
-        )
+        ).with_for_update()
     )
     if credential is None:
         raise AuthenticationError()
@@ -178,7 +178,7 @@ def status(db, user_id):
         return {"simulator_available": True, "state": "not_paired", "pending_candidates": 0}
     credential = db.scalar(select(BeeCliCredential).where(BeeCliCredential.connection_id == connection.id, BeeCliCredential.user_id == user_id))
     pending = db.scalar(select(func.count()).select_from(BeeImportCandidate).where(BeeImportCandidate.connection_id == connection.id, BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending")) or 0
-    if connection.status == "disconnected" or credential is None or credential.revoked_at:
+    if connection.status == "disconnected" or credential is None or credential.revoked_at or credential.expires_at <= now:
         state = "disconnected"
     elif credential.last_error:
         state = "error"
@@ -206,8 +206,9 @@ def candidates(db, user_id):
 
 
 def import_candidates(db, user_id, payload):
+    now = datetime.now(timezone.utc)
     expectation = get_expectation(db, payload.expectation_id, user_id)
-    rows = list(db.scalars(select(BeeImportCandidate).where(BeeImportCandidate.id.in_(payload.candidate_ids), BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending").with_for_update()))
+    rows = list(db.scalars(select(BeeImportCandidate).where(BeeImportCandidate.id.in_(payload.candidate_ids), BeeImportCandidate.user_id == user_id, BeeImportCandidate.status == "pending", BeeImportCandidate.created_at > now - CANDIDATE_TTL)))
     if len(rows) != len(set(payload.candidate_ids)):
         raise ResourceNotFoundError("BEE_CANDIDATE_NOT_FOUND", "One or more Bee records are unavailable")
     connection_ids = {row.connection_id for row in rows}
@@ -215,9 +216,20 @@ def import_candidates(db, user_id, payload):
         raise InvalidExpectationError("Select records from one Bee connection")
     connection_id = connection_ids.pop()
     connection = db.scalar(select(IntegrationConnection).where(IntegrationConnection.id == connection_id, IntegrationConnection.user_id == user_id, IntegrationConnection.status == "connected"))
-    credential = db.scalar(select(BeeCliCredential).where(BeeCliCredential.connection_id == connection_id, BeeCliCredential.user_id == user_id, BeeCliCredential.revoked_at.is_(None)))
-    if connection is None or credential is None:
+    credential = db.scalar(select(BeeCliCredential).where(BeeCliCredential.connection_id == connection_id, BeeCliCredential.user_id == user_id, BeeCliCredential.revoked_at.is_(None), BeeCliCredential.expires_at > now).with_for_update())
+    if connection is None or credential is None or credential.expires_at <= datetime.now(timezone.utc):
         raise ResourceNotFoundError("BEE_CONNECTION_UNAVAILABLE", "Bee CLI is disconnected")
+    # Match disconnect/staging lock order: credential before private candidates.
+    # Re-read after taking authority lock so revocation cannot race publication.
+    rows = list(db.scalars(select(BeeImportCandidate).where(
+        BeeImportCandidate.id.in_(payload.candidate_ids),
+        BeeImportCandidate.user_id == user_id,
+        BeeImportCandidate.connection_id == connection_id,
+        BeeImportCandidate.status == "pending",
+        BeeImportCandidate.created_at > datetime.now(timezone.utc) - CANDIDATE_TTL,
+    ).with_for_update().execution_options(populate_existing=True)))
+    if len(rows) != len(set(payload.candidate_ids)):
+        raise ResourceNotFoundError("BEE_CANDIDATE_NOT_FOUND", "One or more Bee records are unavailable")
     binding = db.scalar(select(BeeExpectationBinding).where(BeeExpectationBinding.connection_id == connection_id, BeeExpectationBinding.expectation_id == expectation.id))
     if binding is None:
         binding = BeeExpectationBinding(connection_id=connection_id, expectation_id=expectation.id, user_id=user_id)
@@ -230,7 +242,13 @@ def import_candidates(db, user_id, payload):
     now = datetime.now(timezone.utc)
     for row in rows:
         completed = row.fact.get("completed")
-        supports_outcome = row.category == "todo" and completed is True
+        # Completing an arbitrary todo is not proof of an appointment/arrival.
+        # Only the exact supported fact type can supply a boolean outcome.
+        supports_outcome = (
+            row.category == "todo" and completed is True
+            and expectation.type.value == "boolean"
+            and expectation.metric == "todo_completed"
+        )
         evidence_payload = EvidenceCreate(
             external_event_id=f"bee:{row.external_id}:{row.version}",
             source="bee",

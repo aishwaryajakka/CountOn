@@ -8,9 +8,10 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.db.models.evidence import Evidence
-from app.db.models.expectation import Expectation, ExpectationType
+from app.db.models.expectation import ComparisonType, Expectation, ExpectationType
 from app.evaluators.base import EvaluationResult
 from app.evaluators.boolean import evaluate as evaluate_boolean
+from app.evaluators.numeric import evaluate as evaluate_numeric
 from app.integrations.bee.adapter import bee_event_to_evidence
 from app.integrations.bee.simulator import (
     simulate_document_commitment,
@@ -156,6 +157,83 @@ def test_simulator_adapters_never_retain_media_or_transcripts():
         "simulated": True,
         "category": "conversation",
     }
+
+
+def test_utility_bill_within_tolerance_evaluates_to_match():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 148.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MATCH
+    assert output.reasoning["reason"] == "deviation_below_materiality_threshold"
+    assert output.observed["value"] == 148.00
+
+
+def test_utility_bill_exceeding_tolerance_evaluates_to_mismatch():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 162.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MISMATCH
+    assert output.reasoning["reason"] == "observed_value_failed_comparison"
+    assert output.observed["value"] == 162.00
+
+
+def test_utility_bill_below_baseline_evaluates_to_match():
+    expectation = Expectation(
+        id=uuid4(),
+        user_id=uuid4(),
+        claim="My next electric bill should be lower.",
+        type=ExpectationType.numeric_comparison,
+        metric="total_cost",
+        comparison=ComparisonType.less_than,
+        baseline=142.10,
+        materiality_threshold=0.05,
+        evidence_sources=["utility_bill"],
+    )
+    db_evidence = Evidence(
+        id=uuid4(),
+        expectation_id=expectation.id,
+        source="utility_bill",
+        metric="total_cost",
+        value={"amount": 130.00},
+        confidence=1.0,
+    )
+    output = evaluate_numeric(expectation, [db_evidence])
+    assert output.result == EvaluationResult.MATCH
+    assert output.reasoning["reason"] == "comparison_satisfied"
 
 
 if __name__ == "__main__":

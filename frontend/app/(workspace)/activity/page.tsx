@@ -42,6 +42,18 @@ export default function Activity() {
     [expectationFilter, sourceFilter, resultFilter, afterFilter, beforeFilter],
   );
   const auditState = useResource(loadAudit);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'expectations' | 'evidence' | 'evaluations' | 'actions'>('all');
+
+  const filteredAuditData = useMemo(() => {
+    const list = auditState.data ?? [];
+    if (categoryFilter === 'all') return list;
+    if (categoryFilter === 'evidence') return list.filter((e) => !!e.evidence);
+    if (categoryFilter === 'evaluations') return list.filter((e) => !!e.result_status);
+    if (categoryFilter === 'expectations') return list.filter((e) => e.action_taken.toLowerCase().includes('expectation'));
+    if (categoryFilter === 'actions') return list.filter((e) => !e.evidence && !e.result_status);
+    return list;
+  }, [auditState.data, categoryFilter]);
+
 
   const events = rows
     .flatMap((row) => [
@@ -98,6 +110,25 @@ export default function Activity() {
               <h2>Audit History</h2>
               <span className="caption">Persisted, redacted account activity</span>
             </div>
+            <div className="filters" aria-label="Activity categories" style={{ marginBottom: '1rem' }}>
+              {[
+                { value: 'all', label: 'All Activity' },
+                { value: 'expectations', label: 'Expectations' },
+                { value: 'evidence', label: 'Evidence Ingestion' },
+                { value: 'evaluations', label: 'Evaluations' },
+                { value: 'actions', label: 'User Actions' },
+              ].map((cat) => (
+                <button
+                  key={cat.value}
+                  className={`filter ${categoryFilter === cat.value ? 'selected' : ''}`}
+                  onClick={() => setCategoryFilter(cat.value as typeof categoryFilter)}
+                  aria-pressed={categoryFilter === cat.value}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
             <div className="form-grid" aria-label="Audit history filters">
               <label>Expectation<select value={expectationFilter} onChange={(event) => setExpectationFilter(event.target.value)}><option value="">All expectations</option>{rows.map(({ expectation }) => <option key={expectation.id} value={expectation.id}>{displayTitle(expectation)}</option>)}</select></label>
               <label>Source<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">All sources</option>{['GMAIL','OUTLOOK','GOOGLE','MICROSOFT','RING','BEE'].map(source => <option key={source} value={source}>{humanize(source.toLowerCase())}</option>)}</select></label>
@@ -109,7 +140,7 @@ export default function Activity() {
               <Loading label="Loading audit history..." />
             ) : auditState.error ? (
               <ErrorState error={auditState.error} retry={auditState.reload} />
-            ) : auditState.data?.length ? (
+            ) : filteredAuditData.length ? (
               <section className="card" role="table" aria-label="Audit History" style={{ overflowX: 'auto' }}>
                 <div
                   role="row"
@@ -126,7 +157,7 @@ export default function Activity() {
                     <strong role="columnheader" key={label}>{label}</strong>
                   ))}
                 </div>
-                {auditState.data.map((event) => (
+                {filteredAuditData.map((event) => (
                   <div
                     key={event.audit_event_id}
                     role="row"

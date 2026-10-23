@@ -8,14 +8,13 @@ import { TrackingControls } from '@/components/tracking-controls';
 import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui';
-import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline } from '@/components/expectation';
+import { ComparisonCards, EvidenceCard, EvidenceContext, Timeline, RealityDecisionCard } from '@/components/expectation';
+import { ResolutionPanel } from '@/components/resolution-panel';
 import { displayTitle, getExpectationPresentationStatus, humanize } from '@/lib/presentation';
 import { ExpectationActionsModal } from '@/components/expectation-actions-modal';
 import {
   generateRingEvent,
-  ringEventToEvidence,
   generateBeeEvent,
-  beeEventToEvidence,
   createUtilityBillEvidence,
 } from '@/lib/simulators';
 
@@ -44,43 +43,18 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
     const exp = state.data.expectation;
 
     try {
-      let evidencePayload;
-      if (type === 'ring_match') {
-        const raw = generateRingEvent('package_detected', { metric: exp.metric ?? 'package_detected' });
-        evidencePayload = ringEventToEvidence(raw);
-
-      } else if (type === 'ring_mismatch') {
-        const raw = generateRingEvent('package_not_detected', { metric: exp.metric ?? 'package_detected' });
-        evidencePayload = ringEventToEvidence(raw);
-
-      } else if (type === 'bee_confirm') {
-        const raw = generateBeeEvent({
-          speaker: 'Landlord',
-          summary: 'Plumber is confirmed for Friday at 10:00 AM.',
-          metric: exp.metric ?? 'appointment_confirmed',
-          confirmed: true,
-        });
-        evidencePayload = beeEventToEvidence(raw);
-
-      } else if (type === 'bee_cancel') {
-        const raw = generateBeeEvent({
-          speaker: 'Landlord',
-          summary: 'The plumber had an emergency and cannot come on Friday. We need to reschedule.',
-          metric: exp.metric ?? 'appointment_confirmed',
-          confirmed: false,
-        });
-        evidencePayload = beeEventToEvidence(raw);
-
-      } else if (type === 'utility_high') {
-        evidencePayload = createUtilityBillEvidence(162);
-
+      let evaluation;
+      if (type === 'ring_match' || type === 'ring_mismatch') {
+        const raw = generateRingEvent(type === 'ring_match' ? 'package_detected' : 'package_not_detected', { metric: exp.metric ?? 'package_detected' });
+        evaluation = (await api.simulateRing(exp.id, raw)).evaluation;
+      } else if (type === 'bee_confirm' || type === 'bee_cancel') {
+        const raw = generateBeeEvent({ speaker: 'Landlord', summary: type === 'bee_confirm' ? 'SIMULATED: The plumber was promised for Friday.' : 'SIMULATED: The appointment was reported cancelled.', metric: exp.metric ?? 'appointment_confirmed', confirmed: type === 'bee_confirm' });
+        evaluation = (await api.simulateBee(exp.id, raw)).evaluation;
       } else {
-        evidencePayload = createUtilityBillEvidence(130);
-
+        const evidencePayload = createUtilityBillEvidence(type === 'utility_high' ? 162 : 130);
+        await api.addEvidence(exp.id, evidencePayload);
+        evaluation = await api.evaluate(exp.id, `simulation:${evidencePayload.external_event_id}`);
       }
-
-      await api.addEvidence(exp.id, evidencePayload);
-      const evaluation = await api.evaluate(exp.id, `simulation:${evidencePayload.external_event_id}`);
       setSimMessage(`SIMULATED evidence · Backend evaluation: ${evaluation.result}`);
       state.reload();
     } catch (err) {
@@ -146,6 +120,22 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
 
             <div className="detail-layout">
               <div className="detail-main">
+                {/* Core Reality Engine Decision Visualization */}
+                <RealityDecisionCard
+                  expectation={state.data.expectation}
+                  evaluation={state.data.latest}
+                  evidence={state.data.evidence}
+                />
+
+                {/* State-Specific Human Action & Resolution Panel */}
+                <ResolutionPanel
+                  expectation={state.data.expectation}
+                  evaluation={state.data.latest}
+                  evidence={state.data.evidence}
+                  onManage={() => setManageOpen(true)}
+                  onRefresh={() => state.reload()}
+                />
+
                 <ComparisonCards
                   expectation={state.data.expectation}
                   evaluation={state.data.latest}
@@ -232,7 +222,7 @@ export default function ExpectationDetail({ params }: { params: Promise<{ id: st
                   </div>
                 </section>
 
-                <section className="section">
+                <section className="section" id="evidence-section">
                   <div className="section-heading">
                     <h2>Evidence gathered</h2>
                     <span className="caption">{state.data.evidence.length} recorded observations</span>

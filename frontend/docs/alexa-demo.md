@@ -114,3 +114,13 @@ signal count, accepted Bedrock output/fallback and safe trace labels. Evidence I
 provider payloads, tokens and hidden prompts are never rendered. This is backend
 provenance, not browser inference. See the
 [15-step final acceptance runbook](../../docs/trust-orchestrator.md).
+
+### Owned expectation deep links
+
+The result, resolution and notification links can pass `expectationId` and a
+`starter` question to `/alexa`. The authenticated Next.js agent route validates the
+UUID and forwards it as optional `expectation_id` to FastAPI. The existing
+orchestrator treats it as a selection, then calls the original owned MCP
+get/explain path. An ID never grants access or selects a CountOn user. No claim,
+evidence or credentials need to appear in the URL. Existing utterance-only clients
+remain compatible.

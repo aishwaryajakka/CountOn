@@ -357,3 +357,33 @@ def test_bedrock_failure_is_distinct_from_mcp_unreachability(wired, wire_engine)
     assert output["code"] == "INTELLIGENCE_UNAVAILABLE"
     assert not output["captured"]
     assert any(step["layer"] == "MCP" for step in output["traces"])
+
+
+def test_api_deep_link_selection_is_an_owned_mcp_read(wired, db, users):
+    row = expectation_service.create_expectation(db, shared.payload(), users[0].id)
+    response = wired.post(
+        "/api/v1/agent/converse",
+        json={
+            "text": "Why did it fail?",
+            "session_reference": None,
+            "expectation_id": str(row.id),
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "SUCCESS"
+    assert response.json()["traces"][-1]["label"] == "explain_expectation_mismatch"
+    assert not response.json()["captured"]
+
+    app.dependency_overrides[dependencies.get_current_user] = lambda: users[1]
+    denied = wired.post(
+        "/api/v1/agent/converse",
+        json={
+            "text": "Why did it fail?",
+            "session_reference": None,
+            "expectation_id": str(row.id),
+        },
+    )
+    assert denied.status_code == 200
+    assert denied.json()["status"] != "SUCCESS"
+    assert row.claim not in denied.text
+    assert not denied.json()["captured"]

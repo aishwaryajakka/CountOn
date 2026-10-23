@@ -35,10 +35,10 @@ written directly to Supabase.
 
 | Status | Scope |
 | --- | --- |
-| **Done locally** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
+| **🟡 Implemented + local automated validation** | FastAPI; PostgreSQL/Supabase persistence and expectation/evidence/evaluation models; deterministic numeric/boolean evaluation; JWT auth/ownership; real MCP Streamable HTTP and six tools; Bedrock compiler with typed Pydantic output and conservative temporal interpretation; stateful clarification, corrections/cancellation and replay-safe compiled capture; grounded mismatch investigation with safe failure degradation; auth-gated `/alexa` conversational capture/Why flow; FastAPI dashboard sharing persistence; CountOn Agent Skill; durable PostgreSQL monitoring workers, conservative evidence checks, encrypted delegated Outlook connector and in-app inbox; local test/build validation. |
 | **Needs deployment/live verification** | Current MCP intelligence rollout to Lightsail; production Bedrock/model/signing configuration; live Bedrock smoke; live intelligence E2E and production `/alexa` verification. Configured addresses and earlier core-tool demos do not prove the latest code is live. |
 | **Traditional ASK adapter implemented locally** | Signed HTTPS fulfillment and en-US interaction model reuse the same orchestrator/MCP path; linked tokens use existing Supabase JWT verification. Console/OAuth setup, deployed latency and ASK simulator/Echo acceptance remain unverified. |
-| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification; physical Ring ingestion; real Bee CLI account acceptance; broader autonomous orchestration/shared session infrastructure. Metadata records and fixture tests do not prove live provider or device integrations. |
+| **Not complete** | Traditional Alexa account-linking provider/consent setup, Alexa Skills Kit simulator acceptance and real Alexa/Echo testing; Alexa+ onboarding/account linking; live Gmail/Outlook/calendar consent and ingestion verification; physical Ring ingestion; real Bee CLI account acceptance. Durable encrypted shared conversations are implemented; broader autonomous orchestration is intentionally outside scope. Metadata records and fixture tests do not prove live provider or device integrations. |
 
 The core MCP tools are `capture_expectation`, `get_expectation`, and
 `list_expectations`. The intelligence tools are `compile_expectation`,
@@ -51,6 +51,26 @@ legacy manual temporal endpoint remains conservative. The web conversation is no
 
 See [component docs](#component-documentation) for the compiler, canonical
 clarification state/ledger, grounded evidence selection and Agent Skill details.
+
+## Canonical consolidation
+
+The local canonical integration branch is `integration/counton-canonical`, based
+on `feature/alexa-mcp` at `8d4b72f`. Compatible UI from the identical Alexa/Ring
+snapshots is integrated with the existing backend. All six MCP contracts, ASK
+verification, deterministic evaluation, privacy boundaries and the single
+connection/credential system remain canonical. The criteria builder, result and
+resolution panels, source filters and settings integration alias use authenticated
+backend APIs. Explanation links select an untrusted expectation ID; MCP rechecks
+its owner. No generated provider recommendations or fabricated AI results are
+shown.
+
+See the [merge inventory](docs/consolidation-inventory.md),
+[per-file provenance manifest](docs/consolidation-manifest.json) and
+[consolidation report](docs/consolidation-report.md) for source decisions and
+alternative migration histories. The [final engineering audit](docs/final-engineering-audit.md)
+is the current validation and release-gate record; older reports retain dated
+results. Local tests do not prove
+that the consolidated code is deployed or accepted by a real provider/device.
 
 ## Quick local setup
 
@@ -112,7 +132,8 @@ and `/ready`; those paths do not verify optional Bedrock model access.
 
 1. Sign in and open `/alexa`; initialize/discover MCP and list actual expectations.
 2. Ask “I'm counting on my bill being lower.” Answer which bill, the baseline,
-   and timing. Nothing is saved until compilation is complete.
+   and timing, then explicitly approve the completed expectation. Source monitoring
+   also requires separate source approval. Nothing incomplete is saved.
 3. Follow the saved expectation into the normal dashboard and refresh. MCP and
    FastAPI read the same row.
 4. Ask why a prepared, owned electricity expectation failed. Its latest
@@ -149,8 +170,11 @@ live model quality.
 ## Deployment overview
 
 Deploy `frontend/` as Next.js on Vercel and run FastAPI and MCP separately behind
-HTTPS on Lightsail. Apply `alembic upgrade head` to the shared Supabase database
-before rolling out code that needs the compilation ledger and monitoring leases.
+HTTPS on Lightsail. Before any migration, privately inspect the live
+`alembic_version` and follow the [production database gate](docs/final-engineering-audit.md#f-databasemigration-status).
+Use `alembic upgrade head` only after confirming canonical ancestry and approving
+a backup/migration plan. An alternative main-only revision requires a reviewed
+transition; never stamp it to conceal schema differences.
 Run the optional worker as a supervised backend process; see [monitoring setup](docs/monitoring.md). Configure public
 API/Supabase frontend values, server-only `COUNTON_MCP_URL`, explicit API CORS,
 and backend-only database/auth/AWS/signing secrets.
@@ -167,14 +191,15 @@ as current. Never commit credentials or put private keys in `NEXT_PUBLIC_*`.
 Real Alexa+/Echo onboarding and account linking, compatible OAuth discovery,
 live Microsoft Graph consent/ingestion, physical Ring ingestion, real Bee CLI acceptance and external notification
 delivery remain incomplete. PostgreSQL monitoring, encrypted Outlook OAuth and
-in-app delivery are implemented locally; see [worker operation](docs/monitoring.md). Shared rate limiting, durable metrics export, backup/restore,
-and conversation/audit retention need operational work. `/alexa` uses constrained
+in-app delivery are implemented locally; see [worker operation](docs/monitoring.md). Shared rate limiting, durable metrics export, production backup/restore acceptance,
+and deployed retention operations still need review. Local backup/restore tests and
+encrypted durable conversation expiry already exist. `/alexa` uses constrained
 routing and a bounded owned-record search, not an autonomous agent.
 
 ## Next-work priority
 
 1. Review and commit the clean current work (manual next step; this pass does not commit).
-2. Apply existing migrations and deploy MCP intelligence to Lightsail.
+2. Inspect the live database revision, approve the correct migration/backup path, then deploy matching API/MCP/worker code.
 3. Configure secure live Bedrock/model access on the MCP service.
 4. Run live Bedrock smoke on the trusted backend.
 5. Run live `/alexa` intelligence E2E, including clarification, shared persistence and Why.

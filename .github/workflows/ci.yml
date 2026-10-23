@@ -58,7 +58,7 @@ jobs:
           PY
       - run: ruff check app db/scripts tests alembic ../scripts
       - run: mypy app --ignore-missing-imports
-      - run: mypy --strict --follow-imports=silent --ignore-missing-imports app/ai app/agent app/alexa app/mcp/compiler.py app/mcp/intelligence.py app/mcp/conversation_state.py app/mcp/schemas.py app/api/v1/agent.py app/api/v1/alexa.py app/schemas/compiler.py app/schemas/clarification.py app/schemas/investigation.py app/schemas/trust.py app/services/compiler_service.py app/services/investigation_service.py app/services/agent_audit.py db/scripts/bedrock_smoke.py
+      - run: mypy --strict --follow-imports=silent --ignore-missing-imports app/ai app/agent app/alexa app/mcp/compiler.py app/mcp/intelligence.py app/mcp/conversation_state.py app/mcp/schemas.py app/api/v1/agent.py app/api/v1/alexa.py app/schemas/compiler.py app/schemas/clarification.py app/schemas/investigation.py app/schemas/trust.py app/services/compiler_service.py app/services/investigation_service.py app/services/investigator_service.py app/services/agent_audit.py db/scripts/bedrock_smoke.py
       - run: python -m pytest -q --tb=short
       - run: python db/scripts/production_smoke.py
       - name: Synthetic orchestration evaluation (human review remains a release gate)

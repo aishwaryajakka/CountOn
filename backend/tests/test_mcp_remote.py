@@ -156,3 +156,40 @@ async def test_remote_read_only_without_cleanup_api(monkeypatch, capsys):
     await run('https://mcp.example/mcp', None, 'fixture-token')
     assert calls == ['discover', 'list_expectations']
     assert 'NOT RUN capture/get' in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('missing_intelligence,flattened', [(False, False), (True, False), (False, True)])
+async def test_smoke_discovery_requires_six_nested_tool_contracts(monkeypatch, missing_intelligence, flattened):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    from db.scripts import mcp_smoke as module
+
+    names = module.CORE_TOOLS if missing_intelligence else module.REQUIRED_TOOLS
+    tools = [SimpleNamespace(
+        name=name,
+        input_schema={'properties': {'claim': {}} if flattened else {'request': {}},
+                      'required': ['claim'] if flattened else ['request']},
+        output_schema={'type': 'object'},
+    ) for name in names]
+
+    async def list_tools():
+        return SimpleNamespace(tools=tools)
+
+    @asynccontextmanager
+    async def http(**kwargs):
+        yield object()
+
+    @asynccontextmanager
+    async def client(*args, **kwargs):
+        yield SimpleNamespace(list_tools=list_tools)
+
+    monkeypatch.setattr(module.httpx2, 'AsyncClient', http)
+    monkeypatch.setattr(module, 'Client', client)
+    monkeypatch.setattr(module, 'streamable_http_client', lambda *args, **kwargs: object())
+    if missing_intelligence or flattened:
+        with pytest.raises(module.SmokeFailure):
+            await module.discover('http://127.0.0.1:8003/mcp', 'fixture')
+    else:
+        await module.discover('http://127.0.0.1:8003/mcp', 'fixture')

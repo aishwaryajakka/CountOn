@@ -6,7 +6,7 @@ acceptance is unavailable, and the updated working tree has not run in hosted CI
 No production deployment, migration, commit, push, account consent, or real notification
 send was performed. All previous workspace changes were retained.
 
-This is the current release record for `feature/alexa-mcp`, based on HEAD `e7c74ac`
+This is a historical release record for `feature/alexa-mcp`, based on HEAD `e7c74ac`
 plus uncommitted changes. HEAD alone does not identify the tested source. See the
 [full pending-file manifest](release-change-manifest.md). Earlier counts and deployment
 instructions are archived in [historical readiness](production-readiness-history.md).
@@ -21,6 +21,11 @@ The later [resumed-orchestration validation](orchestration-validation.md) record
 latest working-tree test results, source authorization/correlation fixes and evaluation
 gates. It supersedes earlier local counts below. The live observations below are from
 the earlier probe; this resume did not deploy or reaccept the public release.
+
+> Current local validation, dependency fixes, migration head and the mandatory live
+> database gate are recorded in [the final engineering audit](final-engineering-audit.md).
+> All live observations and dependency/test counts below are dated October 12,
+> not a statement of current deployment state.
 
 ## Architecture and authority
 

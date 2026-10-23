@@ -62,7 +62,15 @@ export function evidenceValue(item: Evidence, timeZone?: string): string {
   return 'Observation recorded';
 }
 export const comparisonLabels = { less_than: 'Less than', less_than_or_equal: 'At most', greater_than: 'More than', greater_than_or_equal: 'At least', equal: 'Equal to', not_equal: 'Different from' };
-export function expectedText(expectation: Expectation, unit?: string | null): string {
+export function expectedText(expectation: Expectation, unit?: string | null, evaluation?: Evaluation | null): string {
+  // A saved result describes its own criteria, even after the expectation is edited.
+  if (evaluation && ('target' in evaluation.expected || 'comparison' in evaluation.expected || expectation.type === 'numeric_comparison')) {
+    const { target, comparison } = evaluation.expected;
+    if (typeof target === 'number' && Number.isFinite(target) && typeof comparison === 'string' && Object.hasOwn(comparisonLabels, comparison)) {
+      return `${comparisonLabels[comparison as keyof typeof comparisonLabels]} ${number(target, unit)}`;
+    }
+    return 'Criteria not recorded for this evaluation';
+  }
   const target = expectation.target_value ?? expectation.baseline;
   if (expectation.type === 'numeric_comparison' && target != null && expectation.comparison) return `${comparisonLabels[expectation.comparison]} ${number(target, unit)}`;
   if (expectation.type === 'boolean') return 'Confirmation of this expectation';

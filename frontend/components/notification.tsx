@@ -1,10 +1,10 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Bell, Check, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, Sparkles, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Notification, WatchedExpectation } from '@/lib/types';
-import { formatDate, humanize, notificationTitle } from '@/lib/presentation';
+import { formatDate, getExpectationPresentationStatus, humanize, notificationTitle } from '@/lib/presentation';
 import { useIdentity } from './auth-provider';
 import { IconBox } from './ui';
 export function NotificationCard({ item, refresh, row }: { item: Notification; refresh: () => void; row?: WatchedExpectation }) {
@@ -16,5 +16,6 @@ export function NotificationCard({ item, refresh, row }: { item: Notification; r
     catch { setError('That change didn’t save. Your notification is unchanged; please try again.'); }
     finally { setBusy(false); }
   }
-  return <article className={`card notification-card ${item.status === 'dismissed' ? 'dismissed' : ''}`}><IconBox icon={Bell} tone="orange" /><div className="notification-body"><span className="overline">{humanize(item.status)} · In-app notification</span><h2>{notificationTitle(item, row)}</h2><p>{item.message}</p><time className="caption" dateTime={item.created_at}>{formatDate(item.created_at, timeZone)}</time><div className="actions"><Link className="button primary" href={`/expectations/${item.expectation_id}`}>View expectation <ArrowRight size={16} /></Link>{item.status !== 'read' && item.status !== 'dismissed' && <button className="button ghost" onClick={() => update('read')} disabled={busy}><Check size={15} />Mark as read</button>}{item.status !== 'dismissed' && <button className="button ghost" onClick={() => update('dismissed')} disabled={busy}><X size={15} />Dismiss</button>}</div>{error && <p role="alert" className="inline-error">{error}</p>}</div></article>;
+  const isMismatch = row ? getExpectationPresentationStatus(row.expectation, row.latest) === 'attention' : false;
+  return <article className={`card notification-card ${item.status === 'dismissed' ? 'dismissed' : ''}`}><IconBox icon={Bell} tone="orange" /><div className="notification-body"><span className="overline">{humanize(item.status)} · In-app notification</span><h2>{notificationTitle(item, row)}</h2><p>{item.message}</p><time className="caption" dateTime={item.created_at}>{formatDate(item.created_at, timeZone)}</time><div className="actions"><Link className="button primary" href={`/expectations/${item.expectation_id}`}>View expectation <ArrowRight size={16} /></Link>{isMismatch && <Link className="button ghost" href={`/alexa?expectationId=${item.expectation_id}&starter=${encodeURIComponent("Why did it fail?")}`}><Sparkles size={15} />Ask CountOn Why</Link>}{item.status !== 'read' && item.status !== 'dismissed' && <button className="button ghost" onClick={() => update('read')} disabled={busy}><Check size={15} />Mark as read</button>}{item.status !== 'dismissed' && <button className="button ghost" onClick={() => update('dismissed')} disabled={busy}><X size={15} />Dismiss</button>}</div>{error && <p role="alert" className="inline-error">{error}</p>}</div></article>;
 }

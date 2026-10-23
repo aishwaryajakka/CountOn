@@ -2,6 +2,7 @@
 import { expect, it } from 'vitest';
 import { POST as converse } from '@/app/api/agent/route';
 import { POST } from '@/app/api/mcp/route';
+import { toolNames } from '@/lib/mcp/contracts';
 
 const endpoint = process.env.COUNTON_MCP_URL;
 const token = process.env.COUNTON_MCP_TEST_ACCESS_TOKEN;
@@ -16,7 +17,7 @@ it.skipIf(!endpoint || !token)('live initialize → tools/list → tools/call us
     return result;
   };
   const discovered = await invoke({ action: 'list_tools' });
-  expect(discovered.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining(['capture_expectation', 'get_expectation', 'list_expectations']));
+  expect(discovered.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([...toolNames]));
   const response = await converse(new Request('http://localhost/api/agent', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'What am I counting on?', session_reference: null }) }));
   expect(response.status).toBe(200);
   const listed = await response.json();

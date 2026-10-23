@@ -60,23 +60,34 @@ async def call(url, token, name, request):
 
 
 CORE_TOOLS = {'capture_expectation', 'get_expectation', 'list_expectations'}
+REQUIRED_TOOLS = CORE_TOOLS | {
+    'compile_expectation', 'continue_expectation_compilation',
+    'explain_expectation_mismatch',
+}
 
 
 async def discover(url, token):
     async with httpx2.AsyncClient(headers={'Authorization': f'Bearer {token}'}, timeout=20) as http, Client(streamable_http_client(url, http_client=http), cache=None) as client:
         result = await client.list_tools()
         names = {tool.name for tool in result.tools}
-        if not CORE_TOOLS <= names:
+        if not REQUIRED_TOOLS <= names:
             import re
             safe = lambda name: name if re.fullmatch(r'[A-Za-z0-9_]{1,80}', name) else '<invalid name>'
-            missing = sorted(CORE_TOOLS - names)
-            unexpected = sorted(safe(name) for name in names - CORE_TOOLS)
+            missing = sorted(REQUIRED_TOOLS - names)
+            unexpected = sorted(safe(name) for name in names - REQUIRED_TOOLS)
             raise SmokeFailure(f'Tool discovery mismatch: missing={missing}, unexpected={unexpected}')
         import json
         for tool in result.tools:
+            if tool.name in REQUIRED_TOOLS and (
+                tool.input_schema.get('required') != ['request']
+                or set(tool.input_schema.get('properties', {})) != {'request'}
+                or not tool.output_schema
+                or tool.output_schema.get('type') != 'object'
+            ):
+                raise SmokeFailure('Tool schema mismatch: expected one nested request and an object response')
             json.dumps(tool.input_schema, allow_nan=False)
             json.dumps(tool.output_schema, allow_nan=False)
-    print('PASS MCP initialization and required core tool discovery')
+    print('PASS MCP initialization and all six nested-request tool contracts')
 
 
 async def unauthorized_http(url, token, stage):

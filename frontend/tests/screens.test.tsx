@@ -89,7 +89,8 @@ it('renders detail evidence and an actual timestamp timeline', async () => {
   await act(async () => { render(<Suspense fallback={<span>Loading detail</span>}><Detail params={params} /></Suspense>); await params; });
   expect(await screen.findByRole('heading', { name: 'Evidence gathered' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Timeline' })).toBeInTheDocument();
-  expect(screen.getAllByText('$162.00')).toHaveLength(2);
+  // Comparison, decision and resolution panels all use the same persisted observation.
+  expect(screen.getAllByText('$162.00')).toHaveLength(4);
 });
 it('renders backend connections with an honest demo badge', async () => {
   render(<Integrations />);

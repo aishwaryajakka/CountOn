@@ -1,6 +1,7 @@
 # MCP and orchestrator client boundaries
 
-`/alexa` uses `lib/agent/client.ts` to send only text and an opaque session handle
+`/alexa` uses `lib/agent/client.ts` to send text, an opaque session handle, and an
+optional untrusted expectation UUID for an owned detail/explanation selection
 to `/api/agent`, with the current Supabase bearer token. The trusted Next.js proxy
 forwards to the configured FastAPI `/api/v1/agent/converse`; existing backend JWT
 verification establishes identity before orchestration. No service-role key or AWS

@@ -4,7 +4,7 @@ This checklist describes the **current six-tool implementation** and repeatable
 acceptance. Earlier three-tool production demos do not certify the current
 compiler, clarification ledger or investigator deployment. No new live rollout
 or real Alexa/Echo integration is claimed by this cleanup. Current local command
-results are recorded in the cleanup report; production checks must be run separately.
+results and the ordered live plan are recorded in the [final engineering audit](final-engineering-audit.md); production checks must be run separately.
 
 ## Acceptance scope
 
@@ -49,7 +49,8 @@ verifier is part of this flow.
 
 ## A. Remaining production prerequisites
 
-Apply the existing migrations (including `compilation_sessions`), deploy the
+Inspect the live database revision and approve the canonical migration path first;
+never stamp an incompatible archive revision to head. Then deploy the
 current MCP/frontend code, configure backend Bedrock/model access and a private
 shared clarification signing key, then discover all six tools and run live
 intelligence acceptance. Repository code does not prove these steps were completed.

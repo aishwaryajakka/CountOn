@@ -12,8 +12,9 @@ digests; its state/signature format and decoder remain compatible.
 
 Intent routing, owned record selection, contextual reads and compile/continue/
 capture sequencing live in this package. The former browser router/matching and
-Next.js conversation sequencing were removed. The browser sends only text and an
-opaque handle; `/api/mcp` is discovery-only and rejects browser-selected tools.
+Next.js conversation sequencing were removed. The browser sends text, an optional
+untrusted expectation selection, and an opaque handle; `/api/mcp` is discovery-only
+and rejects browser-selected tools.
 
 The six existing MCP tools remain the capability source of truth. Compiler and
 clarification live in the current AI modules/`compiler_service`; signed state and
@@ -249,11 +250,14 @@ reset = await agent.reset_session(verified_user, turn.session_reference)
 → real MCP Streamable HTTP → existing tools/services → Supabase
 ```
 
-The narrow request schema accepts only `text` and opaque `session_reference`.
+The narrow request schema accepts `text`, opaque `session_reference`, and an
+optional `expectation_id` UUID for a detail/explanation selection. The selection
+is untrusted: existing MCP services recheck ownership; it never supplies identity
+or authorization.
 FastAPI reuses existing Supabase JWT verification/profile ownership. Locale comes
 from the validated Accept-Language header; timezone uses the authenticated saved
 profile, defaulting to UTC if none is configured. No browser plan, tool, user ID,
-evaluator status, expectation UUID or raw compiler state is accepted at this route.
+evaluator status or raw compiler state is accepted at this route.
 Responses explicitly project safe speech, compact owned rows, capture link,
 rotated opaque handle and closed trace labels. No compiler payload/ticket,
 evidence/evaluation provenance, raw model output or credentials are returned.

@@ -78,7 +78,7 @@ production by this work.
 | Physical Ring | unavailable | unavailable | Not implemented. |
 | Ring simulator | `ring_simulator` | raw payload always has `simulated: true` | Positive package detection may support a result. Non-detection lacks a boolean outcome and stays `UNKNOWN`. |
 | Bee simulator | `bee_simulator` | raw payload always has `simulated: true` | Conversation confirmation describes the commitment, not fulfillment; it remains context. |
-| Bee CLI | `bee` | `raw_data.provenance=LIVE_BEE_CLI` plus safe connection/record/category references | Conversation, journal, and fact summaries are context. An explicitly completed Bee todo may support a positive boolean outcome; an incomplete todo is not failure evidence. |
+| Bee CLI | `bee` | `raw_data.provenance=LIVE_BEE_CLI` plus safe connection/record/category references | Conversation, journal, and fact summaries are context. An explicitly completed selected Bee todo supports only the boolean `todo_completed` metric; other expectation metrics retain it as context. An incomplete todo is not failure evidence. |
 
 Every imported event retains an external record/version key, observation time,
 ingestion time, confidence, expectation association, and source binding. Unique
@@ -195,3 +195,5 @@ With an authorized Bee account, record and verify:
 Live Bee CLI, Bee account behavior, and physical Ring hardware remain external
 acceptance gates. Fixture tests and simulators must not be presented as those
 real-account results.
+
+Final audit hardening: import rechecks the connector expiry and seven-day candidate TTL, serializes publication with credential revocation, and reports expired credentials as disconnected. A completed call-plumber todo cannot prove the plumber arrived. These are fixture/local-PostgreSQL tests; real Bee CLI acceptance remains outstanding. See [current audit](final-engineering-audit.md).

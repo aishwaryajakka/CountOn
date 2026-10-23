@@ -34,3 +34,30 @@ it('describes supported time checks without promising an outcome from missing ev
   expect(screen.getByText(/missing evidence remains unknown/)).toBeInTheDocument();
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+it('preserves the approved simulator source in package presets and still requires confirmation', async () => {
+  const user = userEvent.setup(); render(<Create />);
+  await user.click(screen.getByRole('button', { name: 'Package Delivery' }));
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Evidence sources')).toHaveValue('ring_simulator');
+  await user.click(screen.getByRole('button', { name: /Review expectation/ }));
+  expect(mocks.create).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: /Start monitoring/ }));
+  await waitFor(() => expect(mocks.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ evidence_sources: ['ring_simulator'] })));
+});
+
+it('previews today’s package deadline in local wall time without silently moving it to tomorrow', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-23T12:30:00'));
+  try {
+    const user = userEvent.setup(); render(<Create />);
+    await user.click(screen.getByRole('button', { name: 'Package Delivery' }));
+    expect(screen.getByLabelText('Deadline (optional)')).toHaveValue('2026-10-23T23:59');
+    await user.click(screen.getByRole('button', { name: /Review expectation/ }));
+    expect(mocks.create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /Start monitoring/ }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ deadline: new Date('2026-10-23T23:59:00').toISOString() })));
+  } finally {
+    vi.useRealTimers();
+  }
+});

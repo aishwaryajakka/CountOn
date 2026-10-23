@@ -1,4 +1,4 @@
-"""Authenticated utterance-only boundary; no client plans, tools or trusted state."""
+"""Authenticated utterance/selection boundary; no client plans or trusted state."""
 
 import re
 from typing import Annotated
@@ -31,6 +31,8 @@ class ConversationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     text: str = Field(min_length=1, max_length=2000, repr=False)
     session_reference: SecretStr | None = Field(default=None, repr=False, max_length=43)
+    # Untrusted selection only; the existing MCP get/explain services recheck owner.
+    expectation_id: UUID | None = None
 
     @field_validator("text")
     @classmethod
@@ -106,7 +108,12 @@ async def converse(
         timezone = "UTC"
     turn = await agent.handle_session(
         user,
-        AgentInput(text=body.text, timezone=timezone, locale=locale),
+        AgentInput(
+            text=body.text,
+            timezone=timezone,
+            locale=locale,
+            expectation_id=body.expectation_id,
+        ),
         body.session_reference,
     )
     result = turn.result

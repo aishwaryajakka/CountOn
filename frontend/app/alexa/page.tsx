@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowUp, Check, MessageCircle, Radio, Volume2 } from 'lucide-react';
 import { useAuth, useIdentity } from '@/components/auth-provider';
 import { Logo } from '@/components/ui';
@@ -29,12 +29,17 @@ function Provenance({ value, traces }: { value: NonNullable<AgentResponse['prove
 }
 function AlexaConversation() {
   const { session } = useAuth(); const { firstName } = useIdentity();
+  const searchParams = useSearchParams();
+  const queryStarter = searchParams?.get('starter') ?? null;
+  const queryExpectationId = searchParams?.get('expectationId') ?? searchParams?.get('expectation_id') ?? null;
+  const [activeExpectationId] = useState<string | null>(queryExpectationId);
   const [connection, setConnection] = useState<'checking' | 'connected' | 'unavailable'>('checking');
-  const [messages, setMessages] = useState<Message[]>([]); const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]); const [input, setInput] = useState(queryStarter ?? '');
   const sessionReference = useRef<string | null>(null);
   const [busy, setBusy] = useState(false); const [expired, setExpired] = useState(false);
   const [voice, setVoice] = useState(false); const [canSpeak] = useState(() => typeof window !== 'undefined' && 'speechSynthesis' in window);
   const nextId = useRef(0); const bottom = useRef<HTMLDivElement>(null); const inFlight = useRef(false);
+  const autoSentRef = useRef(false);
   const token = session?.access_token;
   useEffect(() => () => { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); }, []);
   useEffect(() => {
@@ -45,13 +50,19 @@ function AlexaConversation() {
     return () => { active = false; };
   }, [token]);
   useEffect(() => { bottom.current?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' }); }, [messages, busy]);
-  async function send(text: string) {
+  async function send(text: string, overrideExpId?: string | null) {
     if (!text.trim() || inFlight.current || expired) return;
     inFlight.current = true; setBusy(true); setInput('');
     setMessages(previous => [...previous, { id: nextId.current++, role: 'user', text: text.trim() }]);
     let reply: Omit<Message, 'id' | 'role'>;
+    const expId = overrideExpId !== undefined ? overrideExpId : activeExpectationId;
     try {
-      const result = await requestAgent(token, { text: text.trim(), session_reference: sessionReference.current });
+      const payload = {
+        text: text.trim(),
+        session_reference: sessionReference.current,
+        ...(expId ? { expectation_id: expId } : {}),
+      };
+      const result = await requestAgent(token, payload);
       sessionReference.current = result.session_reference;
       if (result.traces.some(event => event.layer === 'MCP')) setConnection('connected');
       if (result.code === 'UNAVAILABLE') setConnection('unavailable');
@@ -78,6 +89,13 @@ function AlexaConversation() {
     }
     setBusy(false); inFlight.current = false;
   }
+  useEffect(() => {
+    if (queryStarter && !autoSentRef.current && token && connection === 'connected') {
+      autoSentRef.current = true;
+      void send(queryStarter, queryExpectationId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryStarter, queryExpectationId, token, connection]);
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
   return <div className="alexa-page"><header className="alexa-top"><Link href="/dashboard" aria-label="CountOn home"><Logo /></Link><Link className="text-link" href="/dashboard"><ArrowLeft size={16} />Back to CountOn</Link></header>
     <main id="main-content" className="alexa-main"><div className="alexa-heading"><div><span className="eyebrow">A quieter way to check in</span><h1>Alexa+ MCP Demo</h1><p>Your expectations. A conversation. The live CountOn MCP server.</p></div><span role="status" className={`alexa-connection ${connection}`}><Radio size={15} />{connection === 'checking' ? 'Connecting to CountOn MCP' : connection === 'connected' ? 'Connected to CountOn MCP' : 'CountOn MCP unavailable'}</span></div>
@@ -94,5 +112,9 @@ export default function AlexaPage() {
   const { loading, session } = useAuth(); const router = useRouter();
   useEffect(() => { if (!loading && !session) router.replace('/login'); }, [loading, session, router]);
   if (loading || !session) return <div className="auth-loading"><Logo /><p role="status">Restoring your CountOn session…</p></div>;
-  return <AlexaConversation key={session.user.id} />;
+  return (
+    <Suspense fallback={<div className="auth-loading"><Logo /><p role="status">Restoring your CountOn session…</p></div>}>
+      <AlexaConversation key={session.user.id} />
+    </Suspense>
+  );
 }

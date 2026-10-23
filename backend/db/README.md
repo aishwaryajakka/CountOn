@@ -42,6 +42,12 @@ are the durable dead-letter queue. See [monitoring operation](../../docs/monitor
 | `5d201f68ac90` | Connected accounts, expanded notifications/audits, provider IDs and demo tag |
 | `6e302a79bd01` | Durable compilation lifecycle and capture replay protection |
 | `7f413b80ce12` | Durable worker leases, evaluation/inbox deduplication and encrypted Microsoft OAuth |
+| `8a524c91df23` | Encrypted durable conversations and OAuth-client SQL restrictions |
+| `9b635da2e034` | Provider synchronization, source bindings and watches |
+| `ac746eb3f145` | Automatic tracking coverage, notification preferences and delivery outbox |
+| `b4819ac72e30` | Bee connector pairing, credentials, candidates and bindings |
+| `c592d04e8f41` | Connected-account lifecycle metadata |
+| `d6a71c9e24f0` | Linked, filterable, minimal audit history (canonical head) |
 
 The ownership migration locks expectations and aborts if legacy rows require
 backfill; it never invents identities or deletes those rows. The operational
@@ -49,15 +55,20 @@ migration is additive and does not retroactively invent jobs for older claims.
 Supabase-specific SQL detects actual `auth.users`/`auth.uid()` independently of
 the selector. Local migrations do not fabricate Auth tables or roles.
 
-Upgrade both targets with `alembic upgrade head`. Run `alembic check` to compare
+Before deployment, inspect the actual live revision and confirm canonical ancestry.
+Only after backup/plan approval upgrade a canonical target with `alembic upgrade head`.
+An incompatible archived-main revision requires a reviewed transition migration/data
+plan; never use `alembic stamp head` to hide drift. See the
+[release gate](../../docs/final-engineering-audit.md#f-databasemigration-status). Run `alembic check` to compare
 schema/metadata. Use disposable local databases for downgrade/re-upgrade tests;
 downgrades remove operational/profile history. Never downgrade important Supabase
 data. Plan backups, migration lock windows and restores before production changes.
 
 ## RLS
 
-The eight domain tables have RLS on Supabase; the additional
-`compilation_sessions` ledger enables RLS with no browser policies. `PUBLIC`/`anon` have no table
+The domain tables have owner RLS on Supabase. Internal credentials, provider state,
+source bindings, compilation/conversation ledgers, notification preferences/outbox,
+and Bee connector tables have no browser grants; access goes through owned backend services. `PUBLIC`/`anon` have no table
 grants. Authenticated clients can access only their own rows:
 
 | Table | Client permissions |
@@ -66,9 +77,10 @@ grants. Authenticated clients can access only their own rows:
 | expectations | SELECT, INSERT, UPDATE, DELETE |
 | evidence | SELECT, INSERT |
 | evaluations, notifications, monitoring_jobs, audit_events, integration_connections | SELECT |
-| compilation_sessions | None; trusted backend role only |
+| compilation_sessions, conversation_records, internal provider/OAuth/source/watch tables, notification_preferences/deliveries, Bee connector tables | None; trusted backend role only |
 
-Child policies check parent ownership. Backend-only writes produce evaluations,
+Child policies check parent ownership. Supabase OAuth-client tokens are restricted
+from direct domain SQL by the security migration; Alexa acts through owned API/MCP services. Backend-only writes produce evaluations,
 notifications, jobs, audit events and integration writes. Read-only integration
 client grants ensure metadata validation and audits cannot be bypassed through
 PostgREST. FastAPI provides authenticated account CRUD and notification status

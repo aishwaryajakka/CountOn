@@ -37,8 +37,8 @@ flow CountOn has not implemented. Never paste tokens into skill files/chat.
 
 ## Complement to the simulator
 
-The skill guides compatible agents; `/alexa` provides deterministic browser
-intent routing and trusted compiler/clarification orchestration. Both use the
+The skill guides compatible agents; `/alexa` provides a browser conversation
+backed by trusted server-side routing and compiler/clarification orchestration. Both use the
 same six existing tools:
 
 | Intent | Mapping |
