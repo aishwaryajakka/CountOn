@@ -10,7 +10,12 @@ __all__ = [
     "Evidence", "Evaluation", "EvaluationResult",
 ]
 
-from app.db.models.operations import AuditEvent, MonitoringJob, Notification
+from app.db.models.operations import (
+    AuditEvent,
+    MonitoringJob,
+    Notification,
+    NotificationDelivery,
+)
 
 from app.db.models.integration import IntegrationConnection
 from app.db.models.oauth_credential import OAuthCredential
